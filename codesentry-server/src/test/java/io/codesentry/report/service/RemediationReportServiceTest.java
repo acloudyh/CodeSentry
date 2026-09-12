@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -70,7 +71,35 @@ class RemediationReportServiceTest {
         assertTrue(html.contains("AI_DISAGREEMENT_VISIBLE"));
         assertTrue(html.contains("OLD_AI_PROTOCOL_VISIBLE"));
         assertTrue(html.contains("DIFFERENT_AI_EVIDENCE_VISIBLE"));
-        assertTrue(html.contains("复核状态标记 1 条，AI 双轮一致且高可信自动排除 1 条"));
+        assertFalse(html.contains("误报已排除"));
+        assertFalse(html.contains("默认报告已排除"));
+    }
+
+    @Test
+    void reportListUsesTheSameFilteredCountsAsTheExport() {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService aiReviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, aiReviews);
+        ScanRun run = new ScanRun();
+        run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("review-target");
+        when(runs.recent(100)).thenReturn(List.of(run));
+        when(runs.requireById(8L)).thenReturn(run);
+        when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(
+                finding(101L, "VISIBLE", null), finding(102L, "EXCLUDED", "FALSE_POSITIVE")));
+        when(aiReviews.latestForRun(8L)).thenReturn(List.of());
+
+        io.codesentry.report.dto.RemediationReportSummary summary = service.recent(100).get(0);
+        String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+
+        assertEquals(1, summary.getTotalFindings());
+        assertEquals(1, summary.getNewFindings());
+        assertTrue(html.contains("VISIBLE"));
+        assertFalse(html.contains("EXCLUDED"));
     }
 
     private FindingView finding(Long id, String title, String triageStatus) {

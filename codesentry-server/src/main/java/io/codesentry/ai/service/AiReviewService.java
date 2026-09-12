@@ -236,12 +236,17 @@ public class AiReviewService {
                 .filter(item -> "PRIMARY".equals(item.getReviewRound())).findFirst().orElse(null);
         AiReviewRecord verify = records.stream().filter(item -> Objects.equals(latestJobId, item.getReviewJobId()))
                 .filter(item -> "VERIFY".equals(item.getReviewRound())).findFirst().orElse(null);
+        AiReviewRecord error = records.stream().filter(item -> Objects.equals(latestJobId, item.getReviewJobId()))
+                .filter(item -> "ERROR".equals(item.getReviewRound())).findFirst().orElse(null);
         if (primary == null || verify == null) {
             AiReviewSummary failed = new AiReviewSummary();
             failed.setFindingId(records.get(0).getFindingId());
             failed.setScanRunId(records.get(0).getScanRunId());
+            failed.setPrimaryReview(primary);
+            failed.setVerificationReview(verify);
             failed.setConsolidatedVerdict("AI_ERROR");
             failed.setStatus("FAILED");
+            failed.setErrorMessage(error == null ? "AI 双轮审核未完整执行" : error.getErrorMessage());
             return failed;
         }
         return summarize(primary, verify);
@@ -259,6 +264,7 @@ public class AiReviewService {
                 || "INSUFFICIENT_EVIDENCE".equals(verify.getVerdict());
         summary.setDisagreement(disagreement);
         summary.setConfidence(confidence);
+        summary.setConfidenceAvailable(true);
         summary.setHighConfidence(!disagreement && !insufficient
                 && confidence * 100 >= properties.getAi().getHighConfidencePercent());
         summary.setConsolidatedVerdict(disagreement ? "NEEDS_HUMAN"

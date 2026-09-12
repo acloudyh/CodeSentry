@@ -28,6 +28,23 @@ class OpenAiCompatibleReviewProviderTest {
     }
 
     @Test
+    void extractsJsonObjectFromExplanatoryText() {
+        AiReviewDecision decision = provider.parseDecision("审核结果如下：\n{\"verdict\":\"CONFIRMED\","
+                + "\"confidence\":0.9,\"reason\":\"证据成立\",\"evidenceLines\":[],"
+                + "\"missingEvidence\":[],\"recommendation\":\"整改\"}\n以上为复核结果");
+
+        assertEquals("CONFIRMED", decision.getVerdict());
+        assertEquals(0.9, decision.getConfidence());
+    }
+
+    @Test
+    void identifiesTruncatedJson() {
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> provider.parseDecision("{\"verdict\":\"CONFIRMED\""));
+        assertTrue(error.getMessage().contains("JSON 对象不完整"));
+    }
+
+    @Test
     void rejectsUnknownVerdict() {
         assertThrows(IllegalStateException.class, () -> provider.parseDecision(
                 "{\"verdict\":\"SAFE\",\"confidence\":1,\"reason\":\"x\"}"));

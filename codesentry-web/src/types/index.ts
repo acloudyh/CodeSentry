@@ -122,9 +122,20 @@ export interface AiReviewSummary {
   verificationReview?: AiReviewRecord
   consolidatedVerdict: 'CONFIRMED' | 'FALSE_POSITIVE' | 'CONDITIONAL' | 'INSUFFICIENT_EVIDENCE' | 'NEEDS_HUMAN' | 'AI_ERROR'
   confidence: number
+  confidenceAvailable: boolean
   disagreement: boolean
   highConfidence: boolean
   status: 'COMPLETED' | 'NEEDS_HUMAN' | 'FAILED'
+  errorMessage?: string
+}
+
+export interface RemediationReportSummary {
+  id: number
+  projectId: number
+  scanMode: ScanMode
+  status: ScanStatus
+  totalFindings: number
+  newFindings: number
 }
 
 export interface AiReviewJob {

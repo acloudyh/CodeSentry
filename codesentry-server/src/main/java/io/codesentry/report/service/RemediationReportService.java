@@ -9,6 +9,7 @@ import io.codesentry.finding.model.FindingView;
 import io.codesentry.finding.service.FindingPersistenceService;
 import io.codesentry.project.model.ScanProject;
 import io.codesentry.project.service.ScanProjectService;
+import io.codesentry.report.dto.RemediationReportSummary;
 import io.codesentry.scan.model.ScanRun;
 import io.codesentry.scan.service.ScanRunService;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
@@ -65,6 +66,18 @@ public class RemediationReportService {
         return buildHtml(load(runId)).getBytes(StandardCharsets.UTF_8);
     }
 
+    public List<RemediationReportSummary> recent(int limit) {
+        List<RemediationReportSummary> reports = new ArrayList<>();
+        for (ScanRun run : scanRunService.recent(limit)) {
+            if (run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
+                    && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
+            ReportData data = load(run.getId());
+            reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
+                    run.getStatus(), data.findings.size(), data.newFindingCount));
+        }
+        return reports;
+    }
+
     public byte[] exportPdf(Long runId) {
         ReportData data = load(runId);
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
@@ -92,15 +105,14 @@ public class RemediationReportService {
                     + "    项目 " + data.project.getProjectName()
                     + "    生成时间 " + TIME.format(LocalDateTime.now()), 10, "66796E", false);
 
-            XWPFTable summary = document.createTable(2, 5);
+            XWPFTable summary = document.createTable(2, 4);
             summary.setWidth(9026);
-            String[] labels = {"扫描模式", "当前问题", "新增问题", "已修复", "误报已排除"};
+            String[] labels = {"扫描模式", "当前问题", "新增问题", "已修复"};
             String[] values = {scanModeLabel(data.run), String.valueOf(data.findings.size()),
-                    String.valueOf(data.newFindingCount), String.valueOf(data.fixedFindingCount),
-                    String.valueOf(data.excludedFalsePositiveCount)};
-            for (int column = 0; column < 5; column++) {
-                styleCell(summary.getRow(0).getCell(column), labels[column], true, "E9EFE9", 1805);
-                styleCell(summary.getRow(1).getCell(column), values[column], false, "FFFFFF", 1805);
+                    String.valueOf(data.newFindingCount), String.valueOf(data.fixedFindingCount)};
+            for (int column = 0; column < 4; column++) {
+                styleCell(summary.getRow(0).getCell(column), labels[column], true, "E9EFE9", 2256);
+                styleCell(summary.getRow(1).getCell(column), values[column], false, "FFFFFF", 2256);
             }
 
             addHeading(document, "扫描基线", 1);
@@ -150,8 +162,6 @@ public class RemediationReportService {
             }
 
             addText(document, "人工复核状态：" + data.reviewStatus()
-                    + "；默认报告已排除 " + data.excludedFalsePositiveCount + " 条误报。"
-                    + data.exclusionDescription()
                     + (data.aiReviews.isEmpty() ? "" : "其他 AI 结论仅供辅助，冲突或证据不足的问题仍保留。")
                     + "本报告由 CodeSentry 本地节点生成。",
                     8, "7B8B82", false);
@@ -169,13 +179,11 @@ public class RemediationReportService {
         List<FindingView> raw = findingService.findByRunId(runId);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
-        int manuallyExcluded = (int) raw.stream().filter(this::isManuallyExcluded).count();
-        int aiExcluded = (int) raw.stream().filter(finding -> isAiExcluded(finding, aiReviews)).count();
         List<FindingView> visible = raw.stream()
                 .filter(finding -> !isManuallyExcluded(finding))
                 .filter(finding -> !isAiExcluded(finding, aiReviews))
                 .collect(java.util.stream.Collectors.toList());
-        return new ReportData(run, project, deduplicateFindings(visible), manuallyExcluded, aiExcluded, aiReviews);
+        return new ReportData(run, project, deduplicateFindings(visible), aiReviews);
     }
 
     private boolean isManuallyExcluded(FindingView finding) {
@@ -241,7 +249,7 @@ public class RemediationReportService {
                 "body{font-family:'CodeSentryCJK','Microsoft YaHei',sans-serif;margin:0;color:#14201b;background:#f4f7f3;font-size:12px}" +
                 ".cover{padding:32px 38px;background:#0b1714;color:#eef4ec;border-bottom:6px solid #adf33f}.brand{letter-spacing:.12em;color:#adf33f;font-weight:800}" +
                 "h1{margin:14px 0 8px;font-size:28px}.meta{color:#aec0b6}.wrap{padding:24px 38px 0}.summary-table{width:100%;margin-bottom:22px;border-collapse:separate;border-spacing:10px 0}" +
-                ".summary-table td{width:20%;background:white;border:1px solid #d9e2dc;padding:14px}.summary-table span{color:#66796e;font-size:11px}.summary-table b{display:block;font-size:24px;margin-top:7px}" +
+                ".summary-table td{width:25%;background:white;border:1px solid #d9e2dc;padding:14px}.summary-table span{color:#66796e;font-size:11px}.summary-table b{display:block;font-size:24px;margin-top:7px}" +
                 ".card{background:white;border:1px solid #d9e2dc;padding:16px;margin-bottom:20px}.data{width:100%;border-collapse:collapse;background:white;font-size:10px;table-layout:fixed}" +
                 ".data th,.data td{padding:9px 7px;border:1px solid #dfe6e1;text-align:left;vertical-align:top;word-wrap:break-word}.data th{background:#e9efe9;color:#44574c}" +
                 "small{display:block;color:#718077;margin-top:5px}code{word-break:break-all}pre{white-space:pre-wrap;word-wrap:break-word;margin:8px 0 0;padding:8px;background:#f0f3ef;border-left:3px solid #78a921;font:8px/1.45 monospace}" +
@@ -251,12 +259,11 @@ public class RemediationReportService {
                 " · 项目 " + escape(project.getProjectName()) + " · 生成时间 " + TIME.format(LocalDateTime.now()) + "</div></header><main class=\"wrap\">" +
                 "<table class=\"summary-table\"><tr>" + summaryCell("扫描模式", scanModeLabel(run)) + summaryCell("当前问题", String.valueOf(data.findings.size())) +
                 summaryCell("新增问题", String.valueOf(data.newFindingCount)) + summaryCell("已修复", String.valueOf(data.fixedFindingCount)) +
-                summaryCell("误报已排除", String.valueOf(data.excludedFalsePositiveCount)) + "</tr></table>" +
+                "</tr></table>" +
                 "<section class=\"card\"><b>扫描基线</b><p>规则集：" + escape(ruleProfileLabel(run.getRuleProfile())) + "</p><p>扫描分支：" +
                 escape(value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
                 "；扫描提交：" + escape(value(run.getScanCommit(), "-")) + "；merge-base：" + escape(value(run.getMergeBaseCommit(), "-")) +
                 "</p></section><p class=\"foot\">人工复核状态：" + escape(data.reviewStatus()) +
-                "。报告不展示已确认的误报。" + escape(data.exclusionDescription()) +
                 (data.aiReviews.isEmpty() ? "" : "其他 AI 结论仅供辅助，冲突或证据不足的问题仍保留。") +
                 "本报告由 CodeSentry 本地节点生成。</p><h2>问题明细与整改建议</h2><table class=\"data\"><thead><tr><th style=\"width:3%\">#</th><th style=\"width:6%\">等级</th>" +
                 "<th style=\"width:18%\">问题 / 规则 / 代码片段</th><th style=\"width:14%\">位置</th><th style=\"width:6%\">变化</th><th style=\"width:8%\">人工结论</th><th style=\"width:15%\">利用条件 / 复核证据</th><th style=\"width:16%\">AI 双轮复核</th><th style=\"width:14%\">整改建议</th>" +
@@ -519,6 +526,11 @@ public class RemediationReportService {
     private void addAiReviewToDocx(XWPFDocument document, AiReviewSummary summary) {
         addAiRoundToDocx(document, "AI 初审", summary.getPrimaryReview());
         addAiRoundToDocx(document, "AI 复审", summary.getVerificationReview());
+        if ("FAILED".equals(summary.getStatus())) {
+            addText(document, "AI 审核失败：" + value(summary.getErrorMessage(), "AI 双轮审核未完整执行"),
+                    9, "A46400", true);
+            return;
+        }
         addText(document, "AI 综合建议（未经人工确认）：" + aiReviewLabel(summary)
                 + "    综合可信度：" + confidenceLabel(summary.getConfidence()), 9, "A46400", true);
     }
@@ -537,6 +549,11 @@ public class RemediationReportService {
         }
         appendAiRoundHtml(html, "AI 初审", summary.getPrimaryReview());
         appendAiRoundHtml(html, "AI 复审", summary.getVerificationReview());
+        if ("FAILED".equals(summary.getStatus())) {
+            html.append("<b class=\"ai-review\">AI 审核失败：</b><span>")
+                    .append(escape(value(summary.getErrorMessage(), "AI 双轮审核未完整执行"))).append("</span>");
+            return;
+        }
         html.append("<b class=\"ai-review\">综合建议：")
                 .append(escape(aiReviewLabel(summary))).append("</b><span>综合可信度 ")
                 .append(escape(confidenceLabel(summary.getConfidence()))).append("</span>");
@@ -574,13 +591,9 @@ public class RemediationReportService {
         private final List<FindingView> findings;
         private final int newFindingCount;
         private final int fixedFindingCount;
-        private final int excludedFalsePositiveCount;
-        private final int manuallyExcludedFalsePositiveCount;
-        private final int aiExcludedFalsePositiveCount;
         private final Map<Long, AiReviewSummary> aiReviews;
 
         private ReportData(ScanRun run, ScanProject project, List<FindingView> findings,
-                           int manuallyExcludedFalsePositiveCount, int aiExcludedFalsePositiveCount,
                            Map<Long, AiReviewSummary> aiReviews) {
             this.run = run;
             this.project = project;
@@ -588,16 +601,7 @@ public class RemediationReportService {
             this.newFindingCount = (int) findings.stream().filter(finding ->
                     "NEW".equals(finding.getResultStatus()) || "REOPENED".equals(finding.getResultStatus())).count();
             this.fixedFindingCount = (int) findings.stream().filter(finding -> "FIXED".equals(finding.getResultStatus())).count();
-            this.manuallyExcludedFalsePositiveCount = manuallyExcludedFalsePositiveCount;
-            this.aiExcludedFalsePositiveCount = aiExcludedFalsePositiveCount;
-            this.excludedFalsePositiveCount = manuallyExcludedFalsePositiveCount + aiExcludedFalsePositiveCount;
             this.aiReviews = aiReviews;
-        }
-
-        private String exclusionDescription() {
-            if (excludedFalsePositiveCount == 0) return "";
-            return "其中复核状态标记 " + manuallyExcludedFalsePositiveCount + " 条，AI 双轮一致且高可信自动排除 "
-                    + aiExcludedFalsePositiveCount + " 条。";
         }
 
         private String reviewStatus() {

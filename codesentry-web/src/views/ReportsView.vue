@@ -3,9 +3,9 @@ import { onMounted, ref } from 'vue'
 import { api } from '@/api/codesentry'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
-import type { ScanProject, ScanRun } from '@/types'
+import type { RemediationReportSummary, ScanProject } from '@/types'
 
-const runs = ref<ScanRun[]>([])
+const runs = ref<RemediationReportSummary[]>([])
 const projects = ref<ScanProject[]>([])
 const error = ref('')
 const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `PROJECT-${id}`
@@ -22,8 +22,8 @@ function exportReport(runId: number, format: 'html' | 'docx' | 'pdf') {
 
 onMounted(async () => {
   try {
-    const [allRuns, allProjects] = await Promise.all([api.scanRuns(100), api.projects()])
-    runs.value = allRuns.filter((item) => item.status === 'COMPLETED' || item.status === 'PARTIAL')
+    const [allRuns, allProjects] = await Promise.all([api.reports(100), api.projects()])
+    runs.value = allRuns
     projects.value = allProjects
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '报告列表加载失败' }
 })

@@ -1,5 +1,5 @@
 import { request } from './http'
-import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, BranchView, DashboardSummary, FindingView, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
+import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
 
 export interface CreateProjectPayload {
   projectName: string
@@ -54,6 +54,7 @@ export const api = {
   aiReviewJob: (jobId: number) => request<AiReviewJob>(`/api/v1/ai-reviews/jobs/${jobId}`),
   aiReviewJobRecords: (jobId: number) => request<AiReviewRecord[]>(`/api/v1/ai-reviews/jobs/${jobId}/records`),
   latestAiReviewJob: (runId: number) => request<AiReviewJob | null>(`/api/v1/ai-reviews/scan-runs/${runId}/jobs/latest`),
+  reports: (limit = 100) => request<RemediationReportSummary[]>(`/api/v1/reports?limit=${limit}`),
   ruleProfiles: () => request<RuleProfile[]>('/api/v1/rule-profiles'),
   reportUrl: (runId: number, format: 'html' | 'docx' | 'pdf') => `/api/v1/reports/scan-runs/${runId}/${format}`,
 }

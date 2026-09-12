@@ -7,16 +7,23 @@ import io.codesentry.finding.dto.BatchTriageResult;
 import io.codesentry.finding.mapper.ScanFindingMapper;
 import io.codesentry.finding.model.FindingView;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 class FindingPersistenceServiceTest {
+
+    @TempDir
+    Path storageRoot;
 
     @Test
     void triagePersistsManualConclusionAndReturnsLatestView() {
@@ -102,5 +109,29 @@ class FindingPersistenceServiceTest {
         List<FindingView> visible = service.findVisibleByRunId(8L);
 
         assertEquals(List.of(31L, 33L), visible.stream().map(FindingView::getId).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    void restoresLocalSourceEvidenceForSecretScannerFindings() throws Exception {
+        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+        CodeSentryProperties properties = new CodeSentryProperties();
+        properties.getStorage().setRoot(storageRoot.toString());
+        Path source = storageRoot.resolve("snapshots/11/current/config.properties");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, "mode=prod\nreal.value=local-evidence\ntimeout=5\n");
+        FindingView finding = new FindingView();
+        finding.setId(41L);
+        finding.setScanner("Gitleaks");
+        finding.setFilePath(source.toString());
+        finding.setStartLine(2);
+        finding.setEndLine(2);
+        finding.setCodeSnippet("[REDACTED]");
+        when(mapper.findByRunId(11L)).thenReturn(List.of(finding));
+
+        FindingPersistenceService service = new FindingPersistenceService(mapper, properties);
+        FindingView result = service.findByRunId(11L).get(0);
+
+        assertTrue(result.getCodeSnippet().contains("real.value=local-evidence"));
+        org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
     }
 }

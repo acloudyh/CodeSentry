@@ -1,5 +1,7 @@
 package io.codesentry.report.controller;
 
+import io.codesentry.common.api.ApiResponse;
+import io.codesentry.report.dto.RemediationReportSummary;
 import io.codesentry.report.service.RemediationReportService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -9,8 +11,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/reports")
@@ -19,6 +23,11 @@ public class ReportController {
 
     public ReportController(RemediationReportService service) {
         this.service = service;
+    }
+
+    @GetMapping
+    public ApiResponse<List<RemediationReportSummary>> recent(@RequestParam(defaultValue = "100") int limit) {
+        return ApiResponse.success(service.recent(limit));
     }
 
     @GetMapping(value = "/scan-runs/{runId}/html", produces = "text/html;charset=UTF-8")

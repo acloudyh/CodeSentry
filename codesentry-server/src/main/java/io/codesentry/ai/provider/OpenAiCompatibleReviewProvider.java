@@ -52,6 +52,9 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
             String responseBody = httpClient.postJson(endpoint(), properties.getAi().getApiKey(),
                     objectMapper.writeValueAsString(body), properties.getAi().getReadTimeoutSeconds());
             JsonNode root = objectMapper.readTree(responseBody);
+            if ("length".equals(root.path("choices").path(0).path("finish_reason").asText())) {
+                throw new IllegalStateException("AI 返回内容因输出长度限制被截断");
+            }
             JsonNode content = root.path("choices").path(0).path("message").path("content");
             if (content == null || !content.isTextual()) {
                 throw new IllegalStateException("AI 服务未返回可解析的审核结果");
@@ -106,19 +109,15 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
 
     AiReviewDecision parseDecision(String raw) {
         try {
-            String json = raw.trim();
-            if (json.startsWith("```")) {
-                int firstLine = json.indexOf('\n');
-                int lastFence = json.lastIndexOf("```");
-                json = json.substring(firstLine + 1, lastFence).trim();
-            }
+            String json = extractJsonObject(raw);
             JsonNode node = objectMapper.readTree(json);
+            if (!node.isObject()) throw new IllegalStateException("AI 返回内容不是 JSON 对象");
             String verdict = node.path("verdict").asText();
-            if (!VERDICTS.contains(verdict)) throw new IllegalArgumentException("AI 返回了无效 verdict");
+            if (!VERDICTS.contains(verdict)) throw new IllegalStateException("AI 返回了无效 verdict");
             double confidence = node.path("confidence").asDouble(-1);
-            if (confidence < 0 || confidence > 1) throw new IllegalArgumentException("AI 返回了无效 confidence");
+            if (confidence < 0 || confidence > 1) throw new IllegalStateException("AI 返回了无效 confidence");
             String reason = node.path("reason").asText();
-            if (!StringUtils.hasText(reason)) throw new IllegalArgumentException("AI 未返回审核依据");
+            if (!StringUtils.hasText(reason)) throw new IllegalStateException("AI 未返回审核依据");
             AiReviewDecision decision = new AiReviewDecision();
             decision.setVerdict(verdict);
             decision.setConfidence(confidence);
@@ -127,9 +126,33 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
             decision.setMissingEvidence(stringList(node.path("missingEvidence")));
             decision.setRecommendation(node.path("recommendation").asText(""));
             return decision;
+        } catch (IllegalStateException exception) {
+            throw exception;
         } catch (Exception exception) {
-            throw new IllegalStateException("AI 返回结果不符合审核协议", exception);
+            throw new IllegalStateException("AI 返回的内容不是完整 JSON，可能被截断", exception);
         }
+    }
+
+    private String extractJsonObject(String raw) {
+        if (!StringUtils.hasText(raw)) throw new IllegalStateException("AI 未返回审核内容");
+        int start = raw.indexOf('{');
+        if (start < 0) throw new IllegalStateException("AI 返回内容中没有 JSON 对象");
+        boolean quoted = false;
+        boolean escaped = false;
+        int depth = 0;
+        for (int index = start; index < raw.length(); index++) {
+            char current = raw.charAt(index);
+            if (quoted) {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == '"') quoted = false;
+                continue;
+            }
+            if (current == '"') quoted = true;
+            else if (current == '{') depth++;
+            else if (current == '}' && --depth == 0) return raw.substring(start, index + 1);
+        }
+        throw new IllegalStateException("AI 返回的 JSON 对象不完整，可能被截断");
     }
 
     private List<Integer> integerList(JsonNode node) {

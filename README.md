@@ -72,12 +72,13 @@ npm run dev
 - 当前工作区扫描可以包含未提交内容。
 - 指定分支扫描通过 `git archive` 导出 Commit 快照，不创建 Git worktree。
 - 远程仓库只使用标准 `git clone/fetch`，不调用 GitLab API、CI 或安全功能。
-- 密钥、访问令牌和私钥不得写入项目配置或扫描报告。
+- 密钥、访问令牌和私钥不得写入项目配置；本地报告如包含真实代码证据，必须限制访问，并在对外交付前按约定处理敏感值。
 
 ## 误报复核与报告过滤
 
 人工复核记录写入 `scan_triage`，不会删除扫描证据。问题台账、首页问题信号和
-HTML、Word、PDF 报告均不展示 `FALSE_POSITIVE`；原始扫描证据仍保留在数据库中。
+HTML、Word、PDF 报告均不展示人工确认的 `FALSE_POSITIVE`；报告还会排除满足严格条件的
+AI 双轮高可信误报。报告列表和三种导出格式共用同一套筛选、去重与统计逻辑，导出过程不修改原始记录。
 批量复核使用精确的扫描器、规则、路径和起始行选择器：
 
 ```bash
@@ -124,5 +125,6 @@ Keychain 读取密钥，并可通过 `CODESENTRY_MAVEN_SETTINGS` 指定 Maven se
 - `POST /api/v1/ai-reviews/scan-runs/{scanRunId}`：异步批量审核未人工复核的问题。
 - `GET /api/v1/ai-reviews/scan-runs/{scanRunId}`：读取批次最新 AI 建议。
 - `GET /api/v1/ai-reviews/jobs/{jobId}`：读取批量审核进度。
+- `GET /api/v1/ai-reviews/jobs/{jobId}/records`：读取逐问题的初审、复审和失败记录。
 
-报告会自动显示已有的 AI 初审、AI 复审、各轮可信度和综合建议，并明确标注“未经人工确认”；正式问题状态仍以 `scan_triage` 为准。
+问题台账可查看批量审核执行详情。调用或响应解析失败时会显示真实原因、不显示虚假的 `0%` 可信度，并允许重新审核。报告会自动显示已有的 AI 初审、AI 复审、各轮可信度和综合建议；正式问题状态仍以 `scan_triage` 为准。

@@ -128,7 +128,7 @@ public class FindingPersistenceService {
     }
 
     private FindingView enrichSnippet(FindingView finding) {
-        if (finding != null && "Semgrep".equals(finding.getScanner())) {
+        if (finding != null) {
             finding.setCodeSnippet(SourceSnippetExtractor.extract(properties.getStorage().rootPath(),
                     finding.getFilePath(), finding.getStartLine(), finding.getEndLine(), finding.getCodeSnippet()));
         }

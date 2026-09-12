@@ -87,6 +87,7 @@ class AiReviewServiceTest {
 
         assertEquals("CONFIRMED", summary.getConsolidatedVerdict());
         assertTrue(summary.isHighConfidence());
+        assertTrue(summary.isConfidenceAvailable());
         verify(mapper).finishJob(eq(21L), eq("COMPLETED"), isNull(), any());
         verify(findings, never()).triage(any(), any());
     }

@@ -69,7 +69,7 @@ const aiVerdictLabel = (value?: string) => ({
   CONFIRMED: '确认风险', FALSE_POSITIVE: '疑似误报', CONDITIONAL: '条件风险',
   INSUFFICIENT_EVIDENCE: '证据不足', NEEDS_HUMAN: '两轮结论冲突', AI_ERROR: '审核失败',
 }[value ?? ''] ?? '尚未审核')
-const aiConfidence = (value?: number) => value === undefined ? '-' : `${Math.round(value * 100)}%`
+const aiConfidence = (value?: number) => value == null ? '-' : `${Math.round(value * 100)}%`
 const aiJobStatusLabel = (value?: AiReviewJob['status']) => ({
   PENDING: '等待执行', RUNNING: '正在审核', COMPLETED: '审核完成', PARTIAL: '部分完成', FAILED: '审核失败',
 } as Record<string, string>)[value ?? ''] ?? '未知状态'
@@ -235,7 +235,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
               <td><span class="mono">{{ item.filePath }}:{{ item.startLine ?? '-' }}</span></td>
               <td><div>{{ scannerLabel(item.scanner) }}</div><div class="mono" style="margin-top:4px">{{ item.ruleId }}</div></td>
               <td><StatusBadge :value="item.resultStatus" /></td>
-              <td><div v-if="aiReviews[item.id]" class="ai-review-cell"><strong>{{ aiVerdictLabel(aiReviews[item.id].consolidatedVerdict) }}</strong><span>置信度 {{ aiConfidence(aiReviews[item.id].confidence) }}</span><small v-if="aiReviews[item.id].disagreement">两轮结论不一致，必须人工处理</small><button type="button" class="snippet-trigger" @click="applyAiSuggestion(item)">带入人工复核</button></div><button v-else-if="aiConfig.enabled" class="button secondary compact" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '审核中…' : 'AI 初审' }}</button><span v-else class="muted">未启用</span></td>
+              <td><div v-if="aiReviews[item.id]" class="ai-review-cell"><strong>{{ aiVerdictLabel(aiReviews[item.id].consolidatedVerdict) }}</strong><span v-if="aiReviews[item.id].confidenceAvailable">置信度 {{ aiConfidence(aiReviews[item.id].confidence) }}</span><small v-if="aiReviews[item.id].errorMessage">{{ aiReviews[item.id].errorMessage }}</small><small v-if="aiReviews[item.id].disagreement">两轮结论不一致，必须人工处理</small><button v-if="aiReviews[item.id].status !== 'FAILED'" type="button" class="snippet-trigger" @click="applyAiSuggestion(item)">带入人工复核</button><button v-else type="button" class="snippet-trigger" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '重试中…' : '重新审核' }}</button></div><button v-else-if="aiConfig.enabled" class="button secondary compact" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '审核中…' : 'AI 初审' }}</button><span v-else class="muted">未启用</span></td>
               <td><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else class="muted">等待复核</span><div v-if="item.reviewer" class="mono finding-reviewer">复核人：{{ item.reviewer }}</div></td>
               <td><button class="button secondary compact" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button></td>
             </tr>
