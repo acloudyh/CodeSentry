@@ -1,0 +1,29 @@
+{
+  "name": "codesentry-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test:ui": "node scripts/ui-smoke.mjs",
+    "test:features": "node scripts/feature-smoke.mjs"
+  },
+  "dependencies": {
+    "pinia": "^4.0.3",
+    "vue": "^3.5.41",
+    "vue-router": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "playwright": "^1.62.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  }
+}
