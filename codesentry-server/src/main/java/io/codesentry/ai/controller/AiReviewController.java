@@ -21,6 +21,11 @@ public class AiReviewController {
 
     public AiReviewController(AiReviewService service) { this.service = service; }
 
+    @PostMapping("/jobs/{jobId}/cancel")
+    public ApiResponse<AiReviewJob> cancel(@PathVariable Long jobId) {
+        return ApiResponse.success(service.cancelJob(jobId));
+    }
+
     @GetMapping("/config")
     public ApiResponse<AiReviewConfigurationView> configuration() {
         return ApiResponse.success(service.configuration());
@@ -46,6 +51,11 @@ public class AiReviewController {
         return ApiResponse.success(service.latestForRun(scanRunId));
     }
 
+    @PostMapping("/scan-runs/{scanRunId}/retry-failed")
+    public ApiResponse<AiReviewJob> retryFailedRun(@PathVariable Long scanRunId) {
+        return ApiResponse.success(service.retryFailedRunReview(scanRunId));
+    }
+
     @GetMapping("/scan-runs/{scanRunId}/jobs/latest")
     public ApiResponse<AiReviewJob> latestJob(@PathVariable Long scanRunId) {
         return ApiResponse.success(service.latestJobForRun(scanRunId));
@@ -59,5 +69,10 @@ public class AiReviewController {
     @GetMapping("/jobs/{jobId}/records")
     public ApiResponse<List<AiReviewRecord>> jobRecords(@PathVariable Long jobId) {
         return ApiResponse.success(service.recordsForJob(jobId));
+    }
+
+    @GetMapping("/jobs/{jobId}/findings")
+    public ApiResponse<List<io.codesentry.finding.model.FindingView>> jobFindings(@PathVariable Long jobId) {
+        return ApiResponse.success(service.findingsForJob(jobId));
     }
 }

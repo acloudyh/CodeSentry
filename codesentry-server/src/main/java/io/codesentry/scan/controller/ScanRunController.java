@@ -22,6 +22,11 @@ import java.util.List;
 @RequestMapping("/api/v1/scan-runs")
 public class ScanRunController {
 
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<ScanRun> cancel(@PathVariable Long id) {
+        return ApiResponse.success(service.cancel(id));
+    }
+
     private final ScanRunService service;
 
     public ScanRunController(ScanRunService service) {

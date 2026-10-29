@@ -29,15 +29,38 @@ public class CommandExecutor {
         String workingDirectoryText = workingDirectory == null ? null : workingDirectory.toAbsolutePath().toString();
         Consumer<CommandTrace> listener = CommandTraceHolder.listener();
 
+        Process runningProcess = null;
         try {
+            CancellableTasks.check();
             Process process = builder.start();
+            runningProcess = process;
             StringBuilder output = new StringBuilder();
             CompletableFuture<Void> outputFuture = CompletableFuture.runAsync(() ->
                     readOutput(process, command, workingDirectoryText, startedAt, listener, output));
 
-            boolean completed = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            long executionStarted = System.nanoTime();
+            long deadline = executionStarted + timeout.toNanos();
+            long lastHeartbeat = executionStarted;
+            boolean completed = false;
+            while (System.nanoTime() < deadline) {
+                long remainingMs = Math.max(1, TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
+                if (process.waitFor(Math.min(1000, remainingMs), TimeUnit.MILLISECONDS)) {
+                    completed = true; break;
+                }
+                CancellableTasks.check();
+                long now = System.nanoTime();
+                if (listener != null && now - lastHeartbeat >= TimeUnit.SECONDS.toNanos(10)) {
+                    String captured;
+                    synchronized (output) { captured = output.toString().trim(); }
+                    long elapsed = TimeUnit.NANOSECONDS.toSeconds(now - executionStarted);
+                    listener.accept(new CommandTrace(command, workingDirectoryText, null,
+                            captured + "\n[CodeSentry] 命令仍在执行，已用时 " + elapsed + " 秒，上限 "
+                                    + timeout.getSeconds() + " 秒。", startedAt, LocalDateTime.now()));
+                    lastHeartbeat = now;
+                }
+            }
             if (!completed) {
-                process.destroy();
+                terminate(process);
                 if (!process.waitFor(3, TimeUnit.SECONDS)) {
                     process.destroyForcibly();
                 }
@@ -52,16 +75,26 @@ public class CommandExecutor {
             CommandTraceHolder.set(new CommandTrace(command, workingDirectoryText, process.exitValue(),
                     outputText, startedAt, LocalDateTime.now()));
             return new CommandResult(process.exitValue(), outputText);
+        } catch (java.util.concurrent.CancellationException exception) {
+            if (runningProcess != null) terminate(runningProcess);
+            throw exception;
         } catch (IOException exception) {
             CommandTraceHolder.set(new CommandTrace(command, workingDirectoryText, null,
                     exception.getMessage(), startedAt, LocalDateTime.now()));
             throw new BusinessException(HttpStatus.BAD_REQUEST, "无法启动本地命令，请检查工具是否已安装");
         } catch (InterruptedException exception) {
+            if (runningProcess != null) terminate(runningProcess);
             Thread.currentThread().interrupt();
             CommandTraceHolder.set(new CommandTrace(command, workingDirectoryText, null,
                     "本地命令执行被中断", startedAt, LocalDateTime.now()));
-            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "本地命令执行被中断");
+            throw new java.util.concurrent.CancellationException("本地命令已停止");
         }
+    }
+
+    private void terminate(Process process) {
+        // Kill descendants before the parent so inherited output pipes do not remain open.
+        process.descendants().forEach(child -> child.destroyForcibly());
+        process.destroyForcibly();
     }
 
     private void readOutput(Process process,

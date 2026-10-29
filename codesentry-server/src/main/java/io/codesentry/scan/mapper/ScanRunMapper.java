@@ -25,18 +25,23 @@ public interface ScanRunMapper {
     @Select("SELECT * FROM scan_run ORDER BY created_at DESC LIMIT #{limit}")
     List<ScanRun> findRecent(@Param("limit") int limit);
 
-    @Update("UPDATE scan_run SET status = #{status}, started_at = #{startedAt} WHERE id = #{id}")
+    @Update("UPDATE scan_run SET status = #{status}, started_at = #{startedAt} WHERE id = #{id} AND status = 'PENDING'")
     int markStarted(@Param("id") Long id,
                     @Param("status") String status,
                     @Param("startedAt") LocalDateTime startedAt);
 
     @Update("UPDATE scan_run SET scan_commit = #{scanCommit}, baseline_head_commit = #{baselineHeadCommit}, " +
             "merge_base_commit = #{mergeBaseCommit}, repository_dirty = #{repositoryDirty}, " +
-            "status = #{status} WHERE id = #{id}")
+            "status = #{status} WHERE id = #{id} AND status = 'PREPARING'")
     int updatePrepared(ScanRun scanRun);
 
     @Update("UPDATE scan_run SET status = #{status}, total_findings = #{totalFindings}, " +
             "new_findings = #{newFindings}, fixed_findings = #{fixedFindings}, " +
-            "error_message = #{errorMessage}, finished_at = #{finishedAt} WHERE id = #{id}")
+            "error_message = #{errorMessage}, finished_at = #{finishedAt} WHERE id = #{id} AND status IN ('PENDING','PREPARING','RUNNING')")
     int finish(ScanRun scanRun);
+
+    @Update("UPDATE scan_run SET status = 'CANCELLED', error_message = '用户停止扫描，结果不完整', " +
+            "finished_at = #{time} WHERE id = #{id} AND (status IN ('PENDING','PREPARING','RUNNING') " +
+            "OR (status IN ('COMPLETED','PARTIAL') AND finished_at >= DATE_SUB(#{time}, INTERVAL 10 SECOND)))")
+    int cancel(@Param("id") Long id, @Param("time") LocalDateTime time);
 }

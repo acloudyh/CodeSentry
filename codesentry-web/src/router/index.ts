@@ -4,7 +4,7 @@ import DashboardView from '@/views/DashboardView.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'dashboard', component: DashboardView, meta: { title: '态势总览' } },
+    { path: '/', name: 'dashboard', component: DashboardView, meta: { title: '仪表盘' } },
     { path: '/projects', name: 'projects', component: () => import('@/views/ProjectsView.vue'), meta: { title: '代码仓库' } },
     { path: '/scans/new', name: 'new-scan', component: () => import('@/views/NewScanView.vue'), meta: { title: '发起扫描' } },
     { path: '/scans', name: 'scan-runs', component: () => import('@/views/ScanRunsView.vue'), meta: { title: '扫描记录' } },

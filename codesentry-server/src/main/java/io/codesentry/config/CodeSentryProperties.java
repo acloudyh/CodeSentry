@@ -141,6 +141,13 @@ public class CodeSentryProperties {
         private String executable;
         private boolean enabled;
         private String config;
+        private int timeoutSeconds = 180;
+        private boolean offlineScan = true;
+
+        public int getTimeoutSeconds() { return timeoutSeconds; }
+        public void setTimeoutSeconds(int value) { timeoutSeconds = value; }
+        public boolean isOfflineScan() { return offlineScan; }
+        public void setOfflineScan(boolean value) { offlineScan = value; }
 
         public Tool() {
         }
@@ -186,6 +193,10 @@ public class CodeSentryProperties {
         private int maxContextCharacters = 12000;
         private int maxConcurrency = 2;
         private int highConfidencePercent = 85;
+        private int maxOutputTokens = 4096;
+
+        public int getMaxOutputTokens() { return maxOutputTokens; }
+        public void setMaxOutputTokens(int value) { this.maxOutputTokens = value; }
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }

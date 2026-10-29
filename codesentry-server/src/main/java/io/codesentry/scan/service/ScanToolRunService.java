@@ -61,10 +61,11 @@ public class ScanToolRunService {
 
     public void finishFailure(ScanToolRun toolRun, CommandTrace trace, Path report, String message) {
         fillFromTrace(toolRun, trace);
-        toolRun.setStatus("FAILED");
+        toolRun.setStatus(Thread.currentThread().isInterrupted() ? "CANCELLED" : "FAILED");
         toolRun.setRawReportPath(report == null ? null : report.toAbsolutePath().toString());
         toolRun.setErrorMessage(message);
-        toolRun.setOutputLog(appendSummary(toolRun.getOutputLog(), "扫描失败：" + message));
+        toolRun.setOutputLog(appendSummary(toolRun.getOutputLog(),
+                (Thread.currentThread().isInterrupted() ? "扫描已停止：" : "扫描失败：") + message));
         toolRun.setFinishedAt(LocalDateTime.now());
         mapper.finish(toolRun);
     }
@@ -72,6 +73,8 @@ public class ScanToolRunService {
     public List<ScanToolRun> listByScanRun(Long scanRunId) {
         return mapper.findByScanRunId(scanRunId);
     }
+
+    public void cancelRunning(Long runId) { mapper.cancelRunning(runId); }
 
     private void fillFromTrace(ScanToolRun toolRun, CommandTrace trace) {
         if (trace == null) {

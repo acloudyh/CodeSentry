@@ -124,7 +124,7 @@ public class RemediationReportService {
 
             addHeading(document, "问题明细与整改建议", 1);
             if (data.findings.isEmpty()) {
-                addText(document, "本次扫描未记录问题。", 10, "66796E", false);
+                addText(document, "当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。", 10, "66796E", false);
             }
             int index = 1;
             for (FindingView finding : data.findings) {
@@ -162,7 +162,7 @@ public class RemediationReportService {
             }
 
             addText(document, "人工复核状态：" + data.reviewStatus()
-                    + (data.aiReviews.isEmpty() ? "" : "其他 AI 结论仅供辅助，冲突或证据不足的问题仍保留。")
+                    + "报告保留人工已确认的风险，以及工具复核完成、通过可信度门槛且未判为误报的问题；人工判为误报的不纳入报告，可信度不代表漏洞可利用性。"
                     + "本报告由 CodeSentry 本地节点生成。",
                     8, "7B8B82", false);
             document.write(output);
@@ -179,37 +179,10 @@ public class RemediationReportService {
         List<FindingView> raw = findingService.findByRunId(runId);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
-        List<FindingView> visible = raw.stream()
-                .filter(finding -> !isManuallyExcluded(finding))
-                .filter(finding -> !isAiExcluded(finding, aiReviews))
-                .collect(java.util.stream.Collectors.toList());
-        return new ReportData(run, project, deduplicateFindings(visible), aiReviews);
+        List<FindingView> visible = io.codesentry.finding.service.ReviewedFindingPolicy.select(raw, aiReviews);
+        return new ReportData(run, project, visible, aiReviews);
     }
 
-    private boolean isManuallyExcluded(FindingView finding) {
-        return "FALSE_POSITIVE".equals(finding.getTriageStatus());
-    }
-
-    private boolean isAiExcluded(FindingView finding, Map<Long, AiReviewSummary> aiReviews) {
-        // Explicit human dispositions always override AI suggestions.
-        if (hasText(finding.getTriageStatus())) return false;
-        AiReviewSummary summary = aiReviews.get(finding.getId());
-        AiReviewRecord primary = summary == null ? null : summary.getPrimaryReview();
-        AiReviewRecord verification = summary == null ? null : summary.getVerificationReview();
-        return summary != null
-                && "COMPLETED".equals(summary.getStatus())
-                && "FALSE_POSITIVE".equals(summary.getConsolidatedVerdict())
-                && summary.isHighConfidence()
-                && !summary.isDisagreement()
-                && primary != null
-                && verification != null
-                && "COMPLETED".equals(primary.getStatus())
-                && "COMPLETED".equals(verification.getStatus())
-                && AiReviewService.PROMPT_VERSION.equals(primary.getPromptVersion())
-                && AiReviewService.PROMPT_VERSION.equals(verification.getPromptVersion())
-                && hasText(primary.getInputHash())
-                && primary.getInputHash().equals(verification.getInputHash());
-    }
 
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
@@ -264,68 +237,13 @@ public class RemediationReportService {
                 escape(value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
                 "；扫描提交：" + escape(value(run.getScanCommit(), "-")) + "；merge-base：" + escape(value(run.getMergeBaseCommit(), "-")) +
                 "</p></section><p class=\"foot\">人工复核状态：" + escape(data.reviewStatus()) +
-                (data.aiReviews.isEmpty() ? "" : "其他 AI 结论仅供辅助，冲突或证据不足的问题仍保留。") +
+                "报告保留人工已确认的风险，以及工具复核完成、通过可信度门槛且未判为误报的问题；人工判为误报的不纳入报告，可信度不代表漏洞可利用性。" +
                 "本报告由 CodeSentry 本地节点生成。</p><h2>问题明细与整改建议</h2><table class=\"data\"><thead><tr><th style=\"width:3%\">#</th><th style=\"width:6%\">等级</th>" +
-                "<th style=\"width:18%\">问题 / 规则 / 代码片段</th><th style=\"width:14%\">位置</th><th style=\"width:6%\">变化</th><th style=\"width:8%\">人工结论</th><th style=\"width:15%\">利用条件 / 复核证据</th><th style=\"width:16%\">AI 双轮复核</th><th style=\"width:14%\">整改建议</th>" +
-                "</tr></thead><tbody>" + (rows.length() == 0 ? "<tr><td colspan=\"9\">本次扫描未记录问题。</td></tr>" : rows) +
+                "<th style=\"width:18%\">问题 / 规则 / 代码片段</th><th style=\"width:14%\">位置</th><th style=\"width:6%\">变化</th><th style=\"width:8%\">人工结论</th><th style=\"width:15%\">利用条件 / 复核证据</th><th style=\"width:16%\">工具复核</th><th style=\"width:14%\">整改建议</th>" +
+                "</tr></thead><tbody>" + (rows.length() == 0 ? "<tr><td colspan=\"9\">当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。</td></tr>" : rows) +
                 "</tbody></table></main></body></html>";
     }
 
-    private List<FindingView> deduplicateFindings(List<FindingView> rawFindings) {
-        Map<String, FindingView> unique = new LinkedHashMap<>();
-        for (FindingView finding : rawFindings) {
-            String key = dedupKey(finding);
-            FindingView existing = unique.get(key);
-            if (existing == null && isCookieRule(finding.getRuleId())) {
-                existing = findNearbyCookieFinding(unique.values(), finding);
-            }
-            if (existing == null) {
-                unique.put(key, finding);
-            }
-            // Duplicate scanner hits are intentionally discarded. The raw scanner output
-            // remains available for diagnostics, but duplicates never enter the report view.
-        }
-        return new ArrayList<>(unique.values());
-    }
-
-    private FindingView findNearbyCookieFinding(Iterable<FindingView> findings, FindingView candidate) {
-        String scanner = value(candidate.getScanner(), "unknown");
-        String path = value(candidate.getFilePath(), "unknown").replace('\\', '/').replaceAll("^\\./", "");
-        Integer line = candidate.getStartLine();
-        if (line == null) return null;
-        for (FindingView existing : findings) {
-            if (!isCookieRule(existing.getRuleId())
-                    || !scanner.equalsIgnoreCase(value(existing.getScanner(), "unknown"))
-                    || !path.equals(value(existing.getFilePath(), "unknown").replace('\\', '/').replaceAll("^\\./", ""))
-                    || existing.getStartLine() == null
-                    || Math.abs(existing.getStartLine() - line) > 4) {
-                continue;
-            }
-            return existing;
-        }
-        return null;
-    }
-
-    private boolean isCookieRule(String ruleId) {
-        String rule = value(ruleId, "unknown").toLowerCase(Locale.ROOT);
-        return rule.contains("cookie-missing-httponly") || rule.contains("cookie-missing-secure")
-                || rule.contains("cookie-issecure-false");
-    }
-
-    private String dedupKey(FindingView finding) {
-        String scanner = value(finding.getScanner(), "unknown").toLowerCase(Locale.ROOT);
-        String path = value(finding.getFilePath(), "unknown").replace('\\', '/').replaceAll("^\\./", "");
-        String line = String.valueOf(finding.getStartLine()) + "-" + String.valueOf(finding.getEndLine());
-        return scanner + "|" + path + "|" + line + "|" + ruleFamily(finding.getRuleId());
-    }
-
-    private String ruleFamily(String ruleId) {
-        String rule = value(ruleId, "unknown").toLowerCase(Locale.ROOT);
-        if (rule.contains("cookie-missing-httponly") || rule.contains("cookie-missing-secure")
-                || rule.contains("cookie-issecure-false")) return "cookie-security-attributes";
-        if (rule.contains("use-of-md5") || rule.contains("weak-message-digest")) return "weak-message-digest";
-        return rule;
-    }
 
     private File resolvePdfFont() {
         String configured = System.getenv("CODESENTRY_REPORT_FONT");
@@ -513,7 +431,7 @@ public class RemediationReportService {
     }
 
     private String reviewEvidence(FindingView finding) {
-        if (hasText(finding.getTriageComment())) return finding.getTriageComment();
+        if (hasText(finding.getTriageComment())) return publicReviewText(finding.getTriageComment());
         return "尚未人工复核；当前证据为 " + value(finding.getScanner(), "unknown") + " / "
                 + value(finding.getRuleId(), "unknown") + " 命中代码位置 " + value(finding.getFilePath(), "unknown") + ":"
                 + (finding.getStartLine() == null ? "-" : finding.getStartLine()) + "。";
@@ -524,14 +442,14 @@ public class RemediationReportService {
     }
 
     private void addAiReviewToDocx(XWPFDocument document, AiReviewSummary summary) {
-        addAiRoundToDocx(document, "AI 初审", summary.getPrimaryReview());
-        addAiRoundToDocx(document, "AI 复审", summary.getVerificationReview());
+        addAiRoundToDocx(document, "工具初审", summary.getPrimaryReview());
+        addAiRoundToDocx(document, "工具复审", summary.getVerificationReview());
         if ("FAILED".equals(summary.getStatus())) {
-            addText(document, "AI 审核失败：" + value(summary.getErrorMessage(), "AI 双轮审核未完整执行"),
+            addText(document, "工具审核失败：" + publicReviewText(value(summary.getErrorMessage(), "工具复核未完整执行")),
                     9, "A46400", true);
             return;
         }
-        addText(document, "AI 综合建议（未经人工确认）：" + aiReviewLabel(summary)
+        addText(document, "工具综合建议（未经人工确认）：" + aiReviewLabel(summary)
                 + "    综合可信度：" + confidenceLabel(summary.getConfidence()), 9, "A46400", true);
     }
 
@@ -544,14 +462,14 @@ public class RemediationReportService {
 
     private void appendAiReviewHtml(StringBuilder html, AiReviewSummary summary) {
         if (summary == null) {
-            html.append("<span>暂无 AI 审核结果</span>");
+            html.append("<span>暂无工具审核结果</span>");
             return;
         }
-        appendAiRoundHtml(html, "AI 初审", summary.getPrimaryReview());
-        appendAiRoundHtml(html, "AI 复审", summary.getVerificationReview());
+        appendAiRoundHtml(html, "工具初审", summary.getPrimaryReview());
+        appendAiRoundHtml(html, "工具复审", summary.getVerificationReview());
         if ("FAILED".equals(summary.getStatus())) {
-            html.append("<b class=\"ai-review\">AI 审核失败：</b><span>")
-                    .append(escape(value(summary.getErrorMessage(), "AI 双轮审核未完整执行"))).append("</span>");
+            html.append("<b class=\"ai-review\">工具审核失败：</b><span>")
+                    .append(escape(publicReviewText(value(summary.getErrorMessage(), "工具复核未完整执行")))).append("</span>");
             return;
         }
         html.append("<b class=\"ai-review\">综合建议：")
@@ -567,6 +485,14 @@ public class RemediationReportService {
                 .append(escape(confidenceLabel(confidence))).append("</span>");
     }
 
+    private String publicReviewText(String text) {
+        return text == null ? "" : text
+                .replaceAll("(?i)OpenAI|DeepSeek(?:[- ]?v[0-9]+[- ]?(?:pro|chat)?)?", "工具服务")
+                .replaceAll("(?i)(?<![A-Za-z0-9_])AI(?![A-Za-z0-9_])", "工具")
+                .replace("双轮", "工具").replace("两轮", "工具")
+                .replaceAll("工具\\s+工具", "工具");
+    }
+
     private String aiVerdictLabel(String verdict) {
         if ("CONFIRMED".equals(verdict)) return "确认风险";
         if ("FALSE_POSITIVE".equals(verdict)) return "疑似误报";
@@ -577,12 +503,13 @@ public class RemediationReportService {
 
     private String aiReviewLabel(AiReviewSummary summary) {
         if (summary == null) return "未审核";
-        if (summary.isDisagreement()) return "两轮结论冲突，必须人工复核";
+        if (summary.isDisagreement()) return "工具结论待确认，必须人工复核";
         return aiVerdictLabel(summary.getConsolidatedVerdict());
     }
 
     private String confidenceLabel(double confidence) {
-        return Math.round(confidence * 100) + "%";
+        return java.math.BigDecimal.valueOf(confidence).multiply(java.math.BigDecimal.valueOf(100))
+                .setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + "%";
     }
 
     private static class ReportData {

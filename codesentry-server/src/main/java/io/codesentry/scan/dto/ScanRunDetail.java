@@ -32,7 +32,7 @@ public class ScanRunDetail {
 
     private int calculateProgress(ScanRun run, List<ScanToolRun> toolRuns) {
         if (run.getStatus() == ScanRunStatus.COMPLETED || run.getStatus() == ScanRunStatus.PARTIAL
-                || run.getStatus() == ScanRunStatus.FAILED || run.getStatus() == ScanRunStatus.CANCELLED) {
+                || run.getStatus() == ScanRunStatus.FAILED) {
             return 100;
         }
         if (toolRuns == null || toolRuns.isEmpty()) {

@@ -55,7 +55,7 @@ export interface ScanToolRun {
   toolName: string
   phase: string
   toolVersion?: string
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED'
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'CANCELLED'
   exitCode?: number
   commandLine?: string
   workingDirectory?: string
@@ -125,7 +125,7 @@ export interface AiReviewSummary {
   confidenceAvailable: boolean
   disagreement: boolean
   highConfidence: boolean
-  status: 'COMPLETED' | 'NEEDS_HUMAN' | 'FAILED'
+  status: 'COMPLETED' | 'NEEDS_HUMAN' | 'FAILED' | 'CANCELLED'
   errorMessage?: string
 }
 
@@ -143,7 +143,7 @@ export interface AiReviewJob {
   scanRunId: number
   provider: string
   model: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
   totalFindings: number
   completedFindings: number
   failedFindings: number

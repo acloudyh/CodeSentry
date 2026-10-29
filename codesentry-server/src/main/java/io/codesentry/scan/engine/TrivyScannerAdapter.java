@@ -52,12 +52,18 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
         if (scanners == null || scanners.isBlank()) {
             scanners = "secret";
         }
-        List<String> command = List.of(executable(), "filesystem", "--format", "json", "--output",
-                report.toString(), "--scanners", scanners, context.getWorkspace().toString());
+        int timeoutSeconds = Math.max(1, properties.getScanners().getTrivy().getTimeoutSeconds());
+        List<String> command = new ArrayList<>(List.of(executable(), "filesystem", "--format", "json", "--output",
+                report.toString(), "--scanners", scanners, "--timeout", timeoutSeconds + "s"));
+        if (properties.getScanners().getTrivy().isOfflineScan()) command.add("--offline-scan");
+        command.add(context.getWorkspace().toString());
         CommandResult result = execute(context.getWorkspace(), command,
-                Duration.ofMinutes(properties.getScanning().getTaskTimeoutMinutes()));
+                Duration.ofSeconds(timeoutSeconds + 15L));
         if (!result.isSuccess()) {
-            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "Trivy 扫描执行失败");
+            boolean timeout = result.getOutput() != null && result.getOutput().contains("context deadline exceeded");
+            throw new BusinessException(timeout ? HttpStatus.REQUEST_TIMEOUT : HttpStatus.INTERNAL_SERVER_ERROR,
+                    timeout ? "Trivy 扫描超过 " + timeoutSeconds + " 秒，请检查目录规模或调整 CODESENTRY_TRIVY_TIMEOUT_SECONDS"
+                            : "Trivy 扫描执行失败（退出码 " + result.getExitCode() + "），请查看执行日志");
         }
 
         JsonNode root = readJson(report);

@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 class RemediationReportServiceTest {
 
     @Test
-    void reportExcludesOnlyHighConfidenceAiFalsePositivesWithoutHumanDisposition() {
+    void reportUsesAiGateButHumanConfirmationOverridesAiFalsePositive() {
         ScanRunService runs = mock(ScanRunService.class);
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
@@ -69,8 +69,8 @@ class RemediationReportServiceTest {
         assertFalse(html.contains("MANUAL_FALSE_POSITIVE"));
         assertTrue(html.contains("HUMAN_CONFIRMED_VISIBLE"));
         assertTrue(html.contains("AI_DISAGREEMENT_VISIBLE"));
-        assertTrue(html.contains("OLD_AI_PROTOCOL_VISIBLE"));
-        assertTrue(html.contains("DIFFERENT_AI_EVIDENCE_VISIBLE"));
+        assertFalse(html.contains("OLD_AI_PROTOCOL_VISIBLE"));
+        assertFalse(html.contains("DIFFERENT_AI_EVIDENCE_VISIBLE"));
         assertFalse(html.contains("误报已排除"));
         assertFalse(html.contains("默认报告已排除"));
     }
@@ -91,7 +91,7 @@ class RemediationReportServiceTest {
         when(projects.requireById(1L)).thenReturn(project);
         when(findings.findByRunId(8L)).thenReturn(List.of(
                 finding(101L, "VISIBLE", null), finding(102L, "EXCLUDED", "FALSE_POSITIVE")));
-        when(aiReviews.latestForRun(8L)).thenReturn(List.of());
+        when(aiReviews.latestForRun(8L)).thenReturn(List.of(aiSummary(101L, "CONFIRMED", true, false, "COMPLETED")));
 
         io.codesentry.report.dto.RemediationReportSummary summary = service.recent(100).get(0);
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
@@ -117,6 +117,42 @@ class RemediationReportServiceTest {
         return finding;
     }
 
+    @Test
+    void allReportFormatsUseToolTerminologyIncludingHistoricalCommentsAndFailures() throws Exception {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
+        ScanRun run = new ScanRun(); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
+        FindingView candidate = finding(101L, "测试风险", "CONFIRMED");
+        candidate.setTriageComment("AI 双轮复核建议：DeepSeek 提供风险线索，人工已确认。");
+        AiReviewSummary failed = aiSummary(101L, "CONFIRMED", false, false, "FAILED");
+        failed.setErrorMessage("AI返回内容因输出长度限制被截断");
+        when(runs.requireById(8L)).thenReturn(run);
+        when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(candidate));
+        when(reviews.latestForRun(8L)).thenReturn(List.of(failed));
+        String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument doc = new org.apache.poi.xwpf.usermodel.XWPFDocument(
+                new java.io.ByteArrayInputStream(service.exportDocx(8L)));
+             org.apache.pdfbox.pdmodel.PDDocument pdf = org.apache.pdfbox.pdmodel.PDDocument.load(service.exportPdf(8L))) {
+            String word = doc.getParagraphs().stream().map(org.apache.poi.xwpf.usermodel.XWPFParagraph::getText)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            String pdfText = new org.apache.pdfbox.text.PDFTextStripper().getText(pdf);
+            for (String text : List.of(html, word, pdfText)) {
+                assertTrue(text.contains("工具"));
+                assertFalse(text.contains("AI"));
+                assertFalse(text.contains("DeepSeek"));
+                assertFalse(text.contains("双轮"));
+                assertFalse(text.contains("两轮"));
+            }
+        }
+        assertEquals("AI 双轮复核建议：DeepSeek 提供风险线索，人工已确认。", candidate.getTriageComment());
+        assertEquals("AI返回内容因输出长度限制被截断", failed.getErrorMessage());
+    }
+
     private AiReviewSummary aiSummary(Long findingId, String verdict, boolean highConfidence,
                                       boolean disagreement, String status) {
         AiReviewSummary summary = new AiReviewSummary();
@@ -129,6 +165,11 @@ class RemediationReportServiceTest {
         summary.setStatus(status);
         summary.setPrimaryReview(aiRecord("PRIMARY"));
         summary.setVerificationReview(aiRecord("VERIFY"));
+        for (AiReviewRecord record : List.of(summary.getPrimaryReview(), summary.getVerificationReview())) {
+            record.setFindingId(findingId); record.setScanRunId(8L); record.setReviewJobId(1L);
+            record.setVerdict("NEEDS_HUMAN".equals(verdict) ? "CONDITIONAL" : verdict);
+            record.setConfidence(new java.math.BigDecimal(highConfidence ? "0.91" : "0.70"));
+        }
         return summary;
     }
 

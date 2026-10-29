@@ -31,12 +31,12 @@ public class FindingController {
 
     @GetMapping
     public ApiResponse<List<FindingView>> recent(@RequestParam(defaultValue = "100") int limit) {
-        return ApiResponse.success(service.findVisibleRecent(limit));
+        return ApiResponse.success(service.findRecent(limit));
     }
 
     @GetMapping("/scan-runs/{scanRunId}")
     public ApiResponse<List<FindingView>> byScanRun(@PathVariable Long scanRunId) {
-        return ApiResponse.success(service.findVisibleByRunId(scanRunId));
+        return ApiResponse.success(service.findByRunId(scanRunId));
     }
 
     @PutMapping("/{findingId}/triage")

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { currentTheme, setTheme, themes } from '@/utils/theme'
 
 const route = useRoute()
 const pageTitle = computed(() => String(route.meta.title ?? 'CodeSentry'))
 
 const navigation = [
-  { label: '态势总览', to: '/', glyph: '⌁' },
+  { label: '仪表盘', to: '/', glyph: '⌁' },
   { label: '代码仓库', to: '/projects', glyph: '◇' },
   { label: '发起扫描', to: '/scans/new', glyph: '↗' },
   { label: '扫描记录', to: '/scans', glyph: '▤' },
@@ -23,11 +24,11 @@ const navigation = [
         <span class="brand-mark"><i></i><b></b></span>
         <span>
           <strong>CODE<span>SENTRY</span></strong>
-          <small>LOCAL REVIEW SYSTEM</small>
+          <small>本地代码审核系统</small>
         </span>
       </RouterLink>
 
-      <div class="rail-caption">OPERATIONS</div>
+      <div class="rail-caption">功能导航</div>
       <nav class="primary-nav" aria-label="主导航">
         <RouterLink v-for="item in navigation" :key="item.to" :to="item.to">
           <span class="nav-glyph">{{ item.glyph }}</span>
@@ -42,7 +43,7 @@ const navigation = [
         </RouterLink>
         <div class="system-state">
           <span class="pulse-dot"></span>
-          <div><strong>LOCAL NODE</strong><small>监听 127.0.0.1</small></div>
+          <div><strong>本地节点</strong><small>监听 127.0.0.1</small></div>
         </div>
       </div>
     </aside>
@@ -50,10 +51,11 @@ const navigation = [
     <section class="app-stage">
       <header class="command-bar">
         <div>
-          <span class="eyebrow">CODE SECURITY / {{ String(route.name ?? '').toUpperCase() }}</span>
+          <span class="eyebrow">代码安全 / {{ pageTitle }}</span>
           <h1>{{ pageTitle }}</h1>
         </div>
         <div class="command-actions">
+          <label class="theme-switch"><span>页面主题</span><select :value="currentTheme" aria-label="页面主题" @change="setTheme(($event.target as HTMLSelectElement).value)"><option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.name }}</option></select></label>
           <div class="time-chip"><span>本地时间</span><b>{{ new Date().toLocaleDateString('zh-CN') }}</b></div>
         </div>
       </header>

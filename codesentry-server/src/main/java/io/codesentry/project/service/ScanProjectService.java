@@ -72,6 +72,39 @@ public class ScanProjectService {
     }
 
     @Transactional
+    public ScanProject update(Long id, CreateProjectRequest request) {
+        ScanProject project = requireById(id);
+        if (!Boolean.TRUE.equals(project.getEnabled())) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "已移除的仓库不能编辑");
+        }
+        if (mapper.countActiveTasks(id) > 0) {
+            throw new BusinessException(HttpStatus.CONFLICT, "该仓库有扫描或 AI 审核正在执行，请结束后再编辑");
+        }
+        if (project.getSourceType() != request.getSourceType()) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "编辑时不能切换仓库来源，请另行登记");
+        }
+        if (project.getSourceType() == ProjectSourceType.LOCAL) {
+            project.setLocalPath(repositoryService.validateLocalRepository(request.getLocalPath()).toString());
+        } else {
+            if (!StringUtils.hasText(request.getRemoteUrl())) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "Git 仓库地址不能为空");
+            }
+            String remote = request.getRemoteUrl().trim();
+            if (!remote.equals(project.getRemoteUrl())) {
+                project.setManagedPath(repositoryService.cloneMirror(remote).toString());
+                project.setRemoteUrl(remote);
+            }
+        }
+        project.setProjectName(request.getProjectName().trim());
+        project.setDefaultBranch(StringUtils.hasText(request.getDefaultBranch())
+                ? request.getDefaultBranch().trim() : project.getDefaultBranch());
+        repositoryService.resolveCommit(project, project.getDefaultBranch());
+        project.setUpdatedAt(LocalDateTime.now());
+        mapper.update(project);
+        return project;
+    }
+
+    @Transactional
     public void delete(Long id) {
         requireById(id);
         mapper.disableById(id);

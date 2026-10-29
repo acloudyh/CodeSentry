@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Locale;
 import java.util.regex.Pattern;
 
 @Component
@@ -43,7 +42,7 @@ public class AiReviewEvidenceBuilder {
         evidence.setFilePath(normalizePath(finding.getFilePath()));
         evidence.setStartLine(finding.getStartLine());
         evidence.setEndLine(finding.getEndLine());
-        evidence.setCodeSnippet(isSecretFinding(finding) ? REDACTED : limit(sanitize(finding.getCodeSnippet()),
+        evidence.setCodeSnippet(limit(finding.getCodeSnippet(),
                 Math.max(1000, properties.getAi().getMaxContextCharacters())));
         return evidence;
     }
@@ -52,7 +51,7 @@ public class AiReviewEvidenceBuilder {
         try {
             return objectMapper.writeValueAsString(evidence);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("无法生成 AI 脱敏审核包", exception);
+            throw new IllegalStateException("无法生成 AI 源码审核包", exception);
         }
     }
 
@@ -84,13 +83,6 @@ public class AiReviewEvidenceBuilder {
         if (baseline >= 0) return path.substring(baseline + "/baseline/".length());
         if (path.startsWith("/")) return "<PROJECT>/" + path.substring(path.lastIndexOf('/') + 1);
         return path;
-    }
-
-    private boolean isSecretFinding(FindingView finding) {
-        String text = (safe(finding.getScanner()) + " " + safe(finding.getRuleId()) + " "
-                + safe(finding.getCategory())).toLowerCase(Locale.ROOT);
-        return text.contains("gitleaks") || text.contains("secret") || text.contains("api-key")
-                || text.contains("private-key") || text.contains("credential") || text.contains("trivy");
     }
 
     private String safe(String value) { return value == null ? "" : value; }

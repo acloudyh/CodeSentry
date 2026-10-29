@@ -32,8 +32,14 @@ public class ReportController {
 
     @GetMapping(value = "/scan-runs/{runId}/html", produces = "text/html;charset=UTF-8")
     public ResponseEntity<byte[]> exportHtml(@PathVariable Long runId) {
-        return download(service.exportHtml(runId), "codesentry-report-" + runId + ".html",
-                new MediaType("text", "html", StandardCharsets.UTF_8));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(new MediaType("text", "html", StandardCharsets.UTF_8));
+        headers.setContentDisposition(ContentDisposition.inline().filename("codesentry-report-" + runId + ".html").build());
+        // Source snippets are untrusted input; the report is view-only even if escaping regresses.
+        headers.set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.setCacheControl("no-store");
+        return ResponseEntity.ok().headers(headers).body(service.exportHtml(runId));
     }
 
     @GetMapping(value = "/scan-runs/{runId}/docx",

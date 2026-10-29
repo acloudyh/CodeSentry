@@ -74,15 +74,16 @@ public class ScanOrchestrator {
             return;
         }
         run.setStartedAt(LocalDateTime.now());
-        scanRunMapper.markStarted(runId, ScanRunStatus.PREPARING.name(), run.getStartedAt());
+        if (scanRunMapper.markStarted(runId, ScanRunStatus.PREPARING.name(), run.getStartedAt()) == 0) return;
 
         try {
+            io.codesentry.process.CancellableTasks.check();
             ScanProject project = projectService.requireById(run.getProjectId());
             if (refreshRemote && project.getSourceType() == ProjectSourceType.GIT) {
                 gitRepositoryService.refresh(project);
             }
             prepareRun(project, run);
-            scanRunMapper.updatePrepared(run);
+            if (scanRunMapper.updatePrepared(run) == 0) return;
 
             Path repository = gitRepositoryService.repositoryPath(project);
             Path currentWorkspace = resolveCurrentWorkspace(project, run);
@@ -116,7 +117,10 @@ public class ScanOrchestrator {
                 }
                 assignFingerprints(batch.current);
                 Map<String, NormalizedFinding> currentMap = unique(batch.current);
-                currentMap.values().forEach(finding -> findingService.save(project.getId(), runId, finding, "NEW"));
+                currentMap.values().forEach(finding -> {
+                    io.codesentry.process.CancellableTasks.check();
+                    findingService.save(project.getId(), runId, finding, "NEW");
+                });
                 ScanRunStatus status = unavailableTools > 0 || batch.failedTools > 0
                         ? ScanRunStatus.PARTIAL : ScanRunStatus.COMPLETED;
                 finish(run, status, currentMap.size(), currentMap.size(), 0,
@@ -146,6 +150,7 @@ public class ScanOrchestrator {
             finish(run, status, currentMap.size(), newCount, fixedCount,
                     warningMessage(unavailableTools, batch.failedTools));
         } catch (Exception exception) {
+            if (Thread.currentThread().isInterrupted() || exception instanceof java.util.concurrent.CancellationException) return;
             LOGGER.error("Scan run {} failed", runId, exception);
             finish(run, ScanRunStatus.FAILED, 0, 0, 0, safeMessage(exception));
         }
@@ -189,10 +194,12 @@ public class ScanOrchestrator {
     private ScanBatch executeAdapters(List<ScannerAdapter> adapters, ScanContext context) {
         ScanBatch batch = new ScanBatch();
         for (ScannerAdapter adapter : adapters) {
+            io.codesentry.process.CancellableTasks.check();
             try {
                 batch.current.addAll(scanWithLog(adapter, context));
                 batch.successfulTools++;
             } catch (RuntimeException exception) {
+                io.codesentry.process.CancellableTasks.check();
                 batch.failedTools++;
                 LOGGER.warn("Scanner {} failed for run {}: {}", adapter.name(), context.getRunId(),
                         safeMessage(exception));
@@ -206,6 +213,7 @@ public class ScanOrchestrator {
                                             ScanContext baselineContext) {
         ScanBatch batch = new ScanBatch();
         for (ScannerAdapter adapter : adapters) {
+            io.codesentry.process.CancellableTasks.check();
             try {
                 List<NormalizedFinding> current = scanWithLog(adapter, currentContext);
                 List<NormalizedFinding> baseline = scanWithLog(adapter, baselineContext);
@@ -213,6 +221,7 @@ public class ScanOrchestrator {
                 batch.baseline.addAll(baseline);
                 batch.successfulTools++;
             } catch (RuntimeException exception) {
+                io.codesentry.process.CancellableTasks.check();
                 batch.failedTools++;
                 LOGGER.warn("Scanner {} failed during paired scan for run {}: {}", adapter.name(),
                         currentContext.getRunId(), safeMessage(exception));
@@ -222,6 +231,7 @@ public class ScanOrchestrator {
     }
 
     private List<NormalizedFinding> scanWithLog(ScannerAdapter adapter, ScanContext context) {
+        io.codesentry.process.CancellableTasks.check();
         ScanToolRun toolRun = toolRunService.start(context.getRunId(), adapter.name(), context.getLabel());
         Path reportPath = reportPath(context, adapter);
         CommandTraceHolder.clear();
@@ -258,9 +268,12 @@ public class ScanOrchestrator {
         Map<String, NormalizedFinding> currentMap = unique(current);
         Map<String, NormalizedFinding> baselineMap = unique(baseline);
 
-        currentMap.forEach((fingerprint, finding) -> findingService.save(projectId, runId, finding,
-                baselineMap.containsKey(fingerprint) ? "EXISTING" : "NEW"));
+        currentMap.forEach((fingerprint, finding) -> {
+            io.codesentry.process.CancellableTasks.check();
+            findingService.save(projectId, runId, finding, baselineMap.containsKey(fingerprint) ? "EXISTING" : "NEW");
+        });
         baselineMap.forEach((fingerprint, finding) -> {
+            io.codesentry.process.CancellableTasks.check();
             if (!currentMap.containsKey(fingerprint)) {
                 findingService.save(projectId, runId, finding, "FIXED");
             }

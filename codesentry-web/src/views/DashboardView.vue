@@ -4,6 +4,7 @@ import MetricCard from '@/components/ui/MetricCard.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { api } from '@/api/codesentry'
+import { findingTitle } from '@/utils/labels'
 import type { DashboardSummary, FindingView, ScanProject, ScanRun } from '@/types'
 
 const summary = ref<DashboardSummary>({ projects: 0, scans: 0, runningScans: 0, newFindings: 0 })
@@ -12,7 +13,7 @@ const findings = ref<FindingView[]>([])
 const projects = ref<ScanProject[]>([])
 const error = ref('')
 
-const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `PROJECT-${id}`
+const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `项目-${id}`
 const shortCommit = (value?: string) => value?.slice(0, 8) ?? '待解析'
 const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false })
 
@@ -36,7 +37,7 @@ onMounted(async () => {
     <div v-if="error" class="error-banner">{{ error }}。页面已进入只读空状态，请确认后端和 MySQL 已启动。</div>
 
     <section class="metric-grid">
-      <MetricCard index="01" label="受管仓库" :value="summary.projects" note="本地与远程镜像" tone="calm" />
+      <MetricCard index="01" label="已登记仓库" :value="summary.projects" note="本地与远程镜像" tone="calm" />
       <MetricCard index="02" label="扫描批次" :value="summary.scans" note="最近 200 次统计" tone="neutral" />
       <MetricCard index="03" label="执行中的任务" :value="summary.runningScans" note="本地节点实时状态" tone="signal" />
       <MetricCard index="04" label="累计新增问题" :value="summary.newFindings" note="等待复核与整改" tone="danger" />
@@ -44,7 +45,7 @@ onMounted(async () => {
 
     <section class="split-grid">
       <article class="panel">
-        <header class="panel-header"><h3>最近扫描活动</h3><small>LIVE EXECUTION FEED</small></header>
+        <header class="panel-header"><h3>最近扫描记录</h3><small>扫描执行记录</small></header>
         <div v-if="runs.length" class="table-scroll">
           <table class="data-table">
             <thead><tr><th>任务 / 仓库</th><th>模式</th><th>提交</th><th>发现</th><th>状态</th><th>开始时间</th></tr></thead>
@@ -64,21 +65,21 @@ onMounted(async () => {
       </article>
 
       <article class="panel">
-        <header class="panel-header"><h3>高优先级信号</h3><small>MANUAL TRIAGE QUEUE</small></header>
+        <header class="panel-header"><h3>高优先级问题</h3><small>待人工复核</small></header>
         <div v-if="findings.length" class="risk-list">
           <div v-for="(finding, index) in findings" :key="finding.instanceId ?? finding.id" class="risk-item">
             <span class="risk-rank">{{ String(index + 1).padStart(2, '0') }}</span>
-            <div><h4>{{ finding.title }}</h4><p :title="`${finding.filePath}:${finding.startLine ?? '-'}`">{{ finding.filePath }}:{{ finding.startLine ?? '-' }}</p></div>
+            <div><h4 :title="finding.title">{{ findingTitle(finding) }}</h4><p :title="`${finding.filePath}:${finding.startLine ?? '-'}`">{{ finding.filePath }}:{{ finding.startLine ?? '-' }}</p></div>
             <StatusBadge :value="finding.severity" />
           </div>
         </div>
-        <EmptyState v-else title="暂无问题信号" description="完成扫描后，新增和存量问题会在这里按风险等级排列。" />
+        <EmptyState v-else title="暂无待复核问题" description="完成扫描后，新增和存量问题会在这里按风险等级排列。" />
       </article>
     </section>
 
     <section class="section-heading">
       <div><h2>执行原则</h2><p>CodeSentry 始终把自动扫描结论交给人工复核，不会直接修改业务代码。</p></div>
-      <span class="section-code">HUMAN-IN-THE-LOOP / 001</span>
+      <span class="section-code">人工参与审核</span>
     </section>
   </div>
 </template>

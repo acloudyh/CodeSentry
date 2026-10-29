@@ -6,7 +6,7 @@ spring:
   application:
     name: codesentry-server
   datasource:
-    url: ${CODESENTRY_DB_URL:jdbc:mysql://127.0.0.1:3306/codesentry?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true}
+    url: ${CODESENTRY_DB_URL:jdbc:mysql://127.0.0.1:3306/codesentry?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true}
     username: ${CODESENTRY_DB_USERNAME:root}
     password: ${CODESENTRY_DB_PASSWORD:6yhn^YHN}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -55,6 +55,8 @@ codesentry:
       enabled: ${CODESENTRY_TRIVY_ENABLED:true}
       executable: ${CODESENTRY_TRIVY_EXECUTABLE:trivy}
       config: ${CODESENTRY_TRIVY_SCANNERS:secret}
+      timeout-seconds: ${CODESENTRY_TRIVY_TIMEOUT_SECONDS:180}
+      offline-scan: ${CODESENTRY_TRIVY_OFFLINE_SCAN:true}
   ai:
     enabled: ${CODESENTRY_AI_ENABLED:false}
     base-url: ${CODESENTRY_AI_BASE_URL:}
@@ -64,5 +66,6 @@ codesentry:
     connect-timeout-seconds: ${CODESENTRY_AI_CONNECT_TIMEOUT_SECONDS:10}
     read-timeout-seconds: ${CODESENTRY_AI_READ_TIMEOUT_SECONDS:90}
     max-context-characters: ${CODESENTRY_AI_MAX_CONTEXT_CHARACTERS:12000}
+    max-output-tokens: ${CODESENTRY_AI_MAX_OUTPUT_TOKENS:4096}
     max-concurrency: ${CODESENTRY_AI_MAX_CONCURRENCY:2}
     high-confidence-percent: ${CODESENTRY_AI_HIGH_CONFIDENCE_PERCENT:85}

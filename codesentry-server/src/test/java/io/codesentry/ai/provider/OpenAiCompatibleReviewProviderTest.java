@@ -13,6 +13,45 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class OpenAiCompatibleReviewProviderTest {
+    @Test
+    void retriesTruncationWithLargerBudgetAndDisablesDeepseekThinkingByDefault() throws Exception {
+        CodeSentryProperties properties = configured();
+        java.util.List<Integer> budgets = new java.util.ArrayList<>();
+        ObjectMapper json = new ObjectMapper();
+        OpenAiCompatibleReviewProvider actual = new OpenAiCompatibleReviewProvider(properties, json,
+                (endpoint, key, body, timeout) -> {
+                    try {
+                        com.fasterxml.jackson.databind.JsonNode request = json.readTree(body);
+                        budgets.add(request.path("max_tokens").asInt());
+                        assertEquals("disabled", request.path("thinking").path("type").asText());
+                        if (budgets.size() == 1) return "{\"choices\":[{\"finish_reason\":\"length\"}]}";
+                        return json.writeValueAsString(java.util.Map.of("choices", java.util.List.of(
+                                java.util.Map.of("finish_reason", "stop", "message", java.util.Map.of("content",
+                                        "{\"verdict\":\"CONDITIONAL\",\"confidence\":0.9,\"reason\":\"需要核查\"}")))));
+                    } catch (java.io.IOException error) { throw new IllegalStateException(error); }
+                });
+        assertEquals("CONDITIONAL", actual.review(new AiReviewEvidence(), "VERIFY", null).getVerdict());
+        assertEquals(java.util.List.of(4096, 8192), budgets);
+    }
+
+    @Test void repeatedTruncationIsNeverAcceptedAsFalsePositive() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        OpenAiCompatibleReviewProvider actual = new OpenAiCompatibleReviewProvider(configured(), new ObjectMapper(),
+                (endpoint, key, body, timeout) -> {
+                    calls.incrementAndGet();
+                    return "{\"choices\":[{\"finish_reason\":\"length\"}]}";
+                });
+        assertThrows(IllegalStateException.class, () -> actual.review(new AiReviewEvidence(), "PRIMARY", null));
+        assertEquals(2, calls.get());
+    }
+
+    private CodeSentryProperties configured() {
+        CodeSentryProperties properties = new CodeSentryProperties();
+        properties.getAi().setEnabled(true);
+        properties.getAi().setBaseUrl("http://mock/v1");
+        properties.getAi().setModel("deepseek-v4-pro");
+        return properties;
+    }
     private final OpenAiCompatibleReviewProvider provider = new OpenAiCompatibleReviewProvider(
             new CodeSentryProperties(), new ObjectMapper(), (endpoint, key, body, timeout) -> "{}");
 

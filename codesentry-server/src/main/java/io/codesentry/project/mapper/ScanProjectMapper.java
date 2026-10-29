@@ -27,6 +27,17 @@ public interface ScanProjectMapper {
             "updated_at = #{updatedAt} WHERE id = #{id}")
     int updateRepositoryState(ScanProject project);
 
+    @Update("UPDATE scan_project SET project_name = #{projectName}, local_path = #{localPath}, " +
+            "remote_url = #{remoteUrl}, managed_path = #{managedPath}, default_branch = #{defaultBranch}, " +
+            "updated_at = #{updatedAt} WHERE id = #{id} AND enabled = 1")
+    int update(ScanProject project);
+
+    @Select("SELECT (SELECT COUNT(*) FROM scan_run WHERE project_id = #{id} " +
+            "AND status IN ('PENDING','PREPARING','RUNNING')) + " +
+            "(SELECT COUNT(*) FROM scan_ai_review_job j JOIN scan_run r ON r.id = j.scan_run_id " +
+            "WHERE r.project_id = #{id} AND j.status IN ('PENDING','RUNNING'))")
+    int countActiveTasks(@Param("id") Long id);
+
     @Update("UPDATE scan_project SET enabled = 0, updated_at = NOW(3) WHERE id = #{id}")
     int disableById(@Param("id") Long id);
 }

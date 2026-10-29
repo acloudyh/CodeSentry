@@ -1,4 +1,5 @@
 import type { ApiResponse } from '@/types'
+import { presentToolData, toolText } from '@/utils/toolPresentation'
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -31,7 +32,7 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
     const fallback = response.status >= 500
       ? `CodeSentry 服务暂不可用（HTTP ${response.status}）`
       : `请求处理失败（HTTP ${response.status}）`
-    throw new ApiError(payload?.message ?? fallback, response.status)
+    throw new ApiError(toolText(payload?.message ?? fallback), response.status)
   }
-  return payload.data
+  return presentToolData(payload.data)
 }

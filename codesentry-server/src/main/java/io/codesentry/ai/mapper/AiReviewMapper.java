@@ -19,20 +19,24 @@ public interface AiReviewMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insertJob(AiReviewJob job);
 
-    @Update("UPDATE scan_ai_review_job SET status = 'RUNNING', started_at = #{startedAt} WHERE id = #{id}")
+    @Update("UPDATE scan_ai_review_job SET status = 'RUNNING', started_at = #{startedAt} WHERE id = #{id} AND status = 'PENDING'")
     int markJobRunning(@Param("id") Long id, @Param("startedAt") LocalDateTime startedAt);
 
     @Update("UPDATE scan_ai_review_job SET completed_findings = #{completed}, failed_findings = #{failed} " +
-            "WHERE id = #{id}")
+            "WHERE id = #{id} AND status = 'RUNNING'")
     int updateJobProgress(@Param("id") Long id, @Param("completed") int completed, @Param("failed") int failed);
 
     @Update("UPDATE scan_ai_review_job SET status = #{status}, error_message = #{errorMessage}, " +
-            "finished_at = #{finishedAt} WHERE id = #{id}")
+            "finished_at = #{finishedAt} WHERE id = #{id} AND status IN ('PENDING','RUNNING')")
     int finishJob(@Param("id") Long id, @Param("status") String status,
                   @Param("errorMessage") String errorMessage, @Param("finishedAt") LocalDateTime finishedAt);
 
     @Select("SELECT * FROM scan_ai_review_job WHERE id = #{id}")
     AiReviewJob findJobById(@Param("id") Long id);
+
+    @Update("UPDATE scan_ai_review_job SET status = 'CANCELLED', error_message = '用户停止 AI 审核', " +
+            "finished_at = #{time} WHERE id = #{id} AND status IN ('PENDING','RUNNING')")
+    int cancelJob(@Param("id") Long id, @Param("time") LocalDateTime time);
 
     @Select("SELECT * FROM scan_ai_review_job WHERE scan_run_id = #{scanRunId} " +
             "ORDER BY created_at DESC, id DESC LIMIT 1")

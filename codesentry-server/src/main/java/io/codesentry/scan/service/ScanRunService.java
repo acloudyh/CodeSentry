@@ -23,6 +23,7 @@ import java.util.List;
 
 @Service
 public class ScanRunService {
+    private final io.codesentry.process.CancellableTasks tasks = new io.codesentry.process.CancellableTasks();
 
     private final ScanRunMapper mapper;
     private final ScanProjectService projectService;
@@ -65,8 +66,28 @@ public class ScanRunService {
         run.setCreatedAt(LocalDateTime.now());
         mapper.insert(run);
 
-        taskExecutor.execute(() -> orchestrator.execute(run.getId(), request.isRefreshRemote()));
+        try {
+            tasks.submit(run.getId(), taskExecutor, () -> orchestrator.execute(run.getId(), request.isRefreshRemote()));
+        } catch (RuntimeException error) {
+            run.setStatus(ScanRunStatus.FAILED);
+            run.setErrorMessage("扫描任务队列已满");
+            run.setFinishedAt(LocalDateTime.now());
+            mapper.finish(run);
+            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "扫描任务队列已满，请稍后重试");
+        }
         return run;
+    }
+
+    public ScanRun cancel(Long id) {
+        requireById(id);
+        // A short completion grace handles the five-second UI polling race atomically.
+        if (mapper.cancel(id, LocalDateTime.now()) == 0
+                && requireById(id).getStatus() != ScanRunStatus.CANCELLED) {
+            throw new BusinessException(HttpStatus.CONFLICT, "扫描已结束，无法停止，请刷新扫描记录");
+        }
+        tasks.cancel(id);
+        toolRunService.cancelRunning(id);
+        return requireById(id);
     }
 
     public ScanRun requireById(Long id) {
