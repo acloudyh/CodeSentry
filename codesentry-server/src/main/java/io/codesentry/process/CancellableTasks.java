@@ -29,6 +29,10 @@ public class CancellableTasks {
         if (thread != null) thread.interrupt();
     }
 
+    public boolean isActive(Long id) {
+        return tasks.containsKey(id) || synchronous.containsKey(id);
+    }
+
     public static void check() {
         if (Thread.currentThread().isInterrupted()) throw new CancellationException("任务已停止");
     }

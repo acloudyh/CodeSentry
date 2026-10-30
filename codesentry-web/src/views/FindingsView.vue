@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '@/api/codesentry'
 import { categoryLabel, findingTitle, scannerLabel, statusLabel } from '@/utils/labels'
+import { formatChinaTime } from '@/utils/datetime'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, FindingView, ScanProject, ScanRun, TriageStatus } from '@/types'
 
 const findings = ref<FindingView[]>([])
+const route = useRoute()
 const runs = ref<ScanRun[]>([])
 const projects = ref<ScanProject[]>([])
 const selectedProjectId = ref<number | null>(null)
@@ -53,6 +56,11 @@ const review = reactive({ triageStatus: 'CONFIRMED' as TriageStatus, comment: ''
 const batchReview = reactive({ triageStatus: 'CONFIRMED' as TriageStatus, comment: '', reviewer: '本地复核人', expiresAt: '' })
 
 const isRedacted = (item: FindingView) => item.codeSnippet?.trim() === '[REDACTED]'
+const isDependencyVulnerability = (item: FindingView) => item.scanner === 'Trivy' && item.category === 'VULNERABILITY'
+const findingLocation = (item: FindingView) => isDependencyVulnerability(item)
+  ? item.filePath
+  : `${item.filePath}:${item.startLine ?? '-'}`
+const findingLocationLabel = (item: FindingView) => isDependencyVulnerability(item) ? '依赖文件' : '代码位置'
 const projectRuns = computed(() => selectedProjectId.value === null
   ? runs.value : runs.value.filter((item) => item.projectId === selectedProjectId.value))
 const selectedProject = computed(() => projects.value.find((item) => item.id === selectedProjectId.value))
@@ -60,7 +68,7 @@ const selectedRun = computed(() => runs.value.find((item) => item.id === selecte
 const batchNewCount = computed(() => findings.value.filter((item) => item.resultStatus === 'NEW' || item.resultStatus === 'REOPENED').length)
 const batchFixedCount = computed(() => findings.value.filter((item) => item.resultStatus === 'FIXED').length)
 const batchNumber = (id: number) => `#${String(id).padStart(5, '0')}`
-const formatTime = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
+const formatTime = formatChinaTime
 const modeLabel = (run: ScanRun) => run.scanMode === 'FULL' ? '全量扫描' : '增量扫描'
 const runOptionLabel = (run: ScanRun) => `${batchNumber(run.id)} · ${modeLabel(run)} · ${formatTime(run.createdAt)}`
 
@@ -268,8 +276,14 @@ onMounted(async () => {
     runs.value = allRuns
     projects.value = allProjects
     aiConfig.value = config
-    selectedProjectId.value = runs.value[0]?.projectId ?? projects.value[0]?.id ?? null
-    selectedRunId.value = projectRuns.value[0]?.id ?? null
+    const requestedRunId = Number(route.query.runId)
+    const requestedProjectId = Number(route.query.projectId)
+    const requestedRun = Number.isFinite(requestedRunId)
+      ? runs.value.find((item) => item.id === requestedRunId
+        && (!Number.isFinite(requestedProjectId) || item.projectId === requestedProjectId))
+      : undefined
+    selectedProjectId.value = requestedRun?.projectId ?? runs.value[0]?.projectId ?? projects.value[0]?.id ?? null
+    selectedRunId.value = requestedRun?.id ?? projectRuns.value[0]?.id ?? null
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '扫描批次加载失败' }
 })
 onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
@@ -291,13 +305,13 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       <div v-if="aiConfig.enabled && selectedRun" class="ai-batch-bar">
         <div><span class="eyebrow">工具辅助复核</span><p>工具根据规则命中位置与源码证据提供复核建议，之后由审核人员结合业务和调用链确认；工具建议不会覆盖人工结论。</p></div>
         <div v-if="aiJob" class="ai-job-progress"><strong>{{ aiJob.completedFindings + aiJob.failedFindings }} / {{ aiJob.totalFindings }}</strong><span>{{ aiJobStatusLabel(aiJob.status) }}<template v-if="aiJob.failedFindings"> · {{ aiJob.failedFindings }} 失败</template></span></div>
-        <div class="ai-batch-actions"><button v-if="aiJob" class="button secondary" @click="openAiDetails">执行详情</button><button v-if="aiJob && ['PARTIAL','FAILED'].includes(aiJob.status) && aiJob.failedFindings" class="button secondary" :disabled="startingAiBatch" @click="startBatchAiReview(true)">重试失败项</button><button v-if="aiJob && ['PENDING','RUNNING'].includes(aiJob.status)" class="button danger" :disabled="stoppingAi" @click="stopAiReview">{{ stoppingAi ? '停止中…' : '停止工具审核' }}</button><button class="button primary" :disabled="startingAiBatch || aiJob?.status === 'RUNNING' || aiJob?.status === 'PENDING'" @click="startBatchAiReview(false)">{{ startingAiBatch ? '正在启动…' : '批量工具审核' }}</button></div>
+        <div v-if="aiJob" class="ai-batch-actions"><button class="button secondary" @click="openAiDetails">执行详情</button><button v-if="['PARTIAL','FAILED'].includes(aiJob.status) && aiJob.failedFindings" class="button secondary" :disabled="startingAiBatch" @click="startBatchAiReview(true)">重试失败项</button><button v-if="['PENDING','RUNNING'].includes(aiJob.status)" class="button danger" :disabled="stoppingAi" @click="stopAiReview">{{ stoppingAi ? '停止中…' : '停止工具审核' }}</button></div>
       </div>
     </section>
     <section class="panel">
       <div v-if="!loading && filtered.length" class="batch-review-toolbar">
         <div class="batch-review-selection"><label><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /><span>选择当前页</span></label><strong>{{ selectedFindingIds.length }} 条已选</strong><button v-if="selectedFindingIds.length" type="button" class="text-button" @click="selectedFindingIds = []">清空</button></div>
-        <div><span>可对当前批次选中的问题统一填写人工结论</span><button class="button primary compact" :disabled="!selectedFindingIds.length" @click="openBatchReview">批量人工复核</button></div>
+        <div class="batch-review-actions"><span>工具审核处理当前批次；人工复核仅处理已选问题</span><button v-if="aiConfig.enabled && selectedRun" class="button secondary compact" :disabled="startingAiBatch || aiJob?.status === 'RUNNING' || aiJob?.status === 'PENDING'" @click="startBatchAiReview(false)">{{ startingAiBatch ? '正在启动…' : '批量工具审核' }}</button><button class="button primary compact" :disabled="!selectedFindingIds.length" @click="openBatchReview">批量人工复核</button></div>
       </div>
       <div v-if="loading" class="empty-state compact-empty"><h3>正在加载扫描批次</h3><p>正在读取 {{ selectedRunId ? batchNumber(selectedRunId) : '' }} 的问题明细。</p></div>
       <div v-else-if="filtered.length" class="table-scroll findings-table">
@@ -308,9 +322,9 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
               <td class="selection-column"><input type="checkbox" :aria-label="`选择问题 ${findingTitle(item)}`" :checked="selectedFindingIds.includes(item.id)" @change="toggleFindingSelection(item.id)" /></td>
               <td><RouterLink :to="`/scans/${item.scanRunId}`" class="batch-link">{{ batchNumber(item.scanRunId) }}</RouterLink></td>
               <td><StatusBadge :value="item.severity" /></td>
-              <td><strong>{{ findingTitle(item) }}</strong><div v-if="findingTitle(item) !== item.title" class="muted finding-original" :title="item.title">原始描述：{{ item.title }}</div><div class="finding-tags"><span>{{ categoryLabel(item.category) }}</span><span v-if="item.cwe">弱点编号 {{ item.cwe }}</span></div><button v-if="item.codeSnippet" type="button" class="snippet-trigger" @click="snippetFinding = item"><span>{{ isRedacted(item) ? '◈' : '⌁' }}</span> {{ isRedacted(item) ? '查看文件说明' : '查看原始内容' }}</button></td>
-              <td><span class="mono">{{ item.filePath }}:{{ item.startLine ?? '-' }}</span></td>
-              <td><div>{{ scannerLabel(item.scanner) }}</div><div class="mono" style="margin-top:4px">{{ item.ruleId }}</div></td>
+              <td><strong class="finding-title-clamp" :title="item.title">{{ findingTitle(item) }}</strong><div class="finding-tags"><span>{{ categoryLabel(item.category) }}</span><span v-if="item.cwe">弱点编号 {{ item.cwe }}</span></div><button type="button" class="snippet-trigger" @click="snippetFinding = item"><span>{{ isRedacted(item) ? '◈' : '⌁' }}</span> {{ isRedacted(item) ? '查看文件说明' : '查看原始内容' }}</button></td>
+              <td><span class="mono finding-location" :title="findingLocation(item)">{{ findingLocation(item) }}</span><small v-if="isDependencyVulnerability(item)" class="muted">依赖组件漏洞，无源码行号</small></td>
+              <td><div>{{ scannerLabel(item.scanner) }}</div><div class="mono finding-rule" :title="item.ruleId">{{ item.ruleId }}</div></td>
               <td><StatusBadge :value="item.resultStatus" /></td>
               <td><div v-if="aiReviews[item.id]" class="ai-review-cell"><strong>{{ aiVerdictLabel(aiReviews[item.id].consolidatedVerdict) }}</strong><span v-if="aiReviews[item.id].confidenceAvailable">可信度 {{ aiConfidence(aiReviews[item.id].confidence) }}</span><small v-if="aiReviews[item.id].errorMessage">{{ aiReviews[item.id].errorMessage }}</small><small v-if="aiReviews[item.id].disagreement">工具结果存在分歧，必须人工处理</small><button v-if="aiReviews[item.id].status !== 'FAILED'" type="button" class="snippet-trigger" @click="applyAiSuggestion(item)">带入人工复核</button><button v-else type="button" class="snippet-trigger" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '重试中…' : '重新审核' }}</button></div><button v-else-if="aiConfig.enabled" class="button secondary compact" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '审核中…' : '工具初审' }}</button><span v-else class="muted">未启用</span></td>
               <td><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else class="muted">等待复核</span><div v-if="item.reviewer" class="mono finding-reviewer">复核人：{{ item.reviewer }}</div></td>
@@ -324,10 +338,11 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
           <header><label class="mobile-select"><input type="checkbox" :checked="selectedFindingIds.includes(item.id)" @change="toggleFindingSelection(item.id)" />选择</label><StatusBadge :value="item.severity" /><StatusBadge :value="item.resultStatus" /></header>
           <h3>{{ findingTitle(item) }}</h3>
           <p v-if="findingTitle(item) !== item.title" class="muted">{{ item.title }}</p>
-          <code>{{ item.filePath }}:{{ item.startLine ?? '-' }}</code>
+          <code>{{ findingLocation(item) }}</code>
           <dl><div><dt>扫描器</dt><dd>{{ scannerLabel(item.scanner) }}</dd></div><div><dt>规则编号</dt><dd>{{ item.ruleId }}</dd></div><div><dt>工具建议</dt><dd>{{ aiVerdictLabel(aiReviews[item.id]?.consolidatedVerdict) }} / {{ aiConfidence(aiReviews[item.id]?.confidence) }}</dd></div><div><dt>人工结论</dt><dd><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else>等待复核</span></dd></div></dl>
           <button v-if="aiConfig.enabled && !aiReviews[item.id]" class="button secondary" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '工具审核中…' : '工具初审' }}</button>
           <button v-if="aiReviews[item.id]" class="button secondary" @click="applyAiSuggestion(item)">将工具建议带入人工复核</button>
+          <button class="button secondary" @click="snippetFinding = item">查看原始内容</button>
           <button class="button secondary" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button>
         </article>
       </div>
@@ -357,7 +372,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
               <thead><tr><th>问题</th><th>执行状态</th><th>工具初审</th><th>工具复审</th><th>失败信息</th></tr></thead>
               <tbody>
                 <tr v-for="row in aiExecutionRows" :key="`ai-detail-${row.finding.id}`">
-                  <td><strong>{{ findingTitle(row.finding) }}</strong><code>{{ row.finding.filePath }}:{{ row.finding.startLine ?? '-' }}</code></td>
+                  <td><strong>{{ findingTitle(row.finding) }}</strong><code>{{ findingLocation(row.finding) }}</code></td>
                   <td><span class="ai-stage" :class="`is-${row.stage.toLowerCase()}`">{{ aiStageLabel(row.stage) }}</span></td>
                   <td><template v-if="row.primary"><b>{{ aiVerdictLabel(row.primary.verdict) }}</b><span>可信度 {{ aiConfidence(row.primary.confidence) }}</span><small v-if="row.primary.reason">{{ row.primary.reason }}</small></template><span v-else class="muted">等待执行</span></td>
                   <td><template v-if="row.verification"><b>{{ aiVerdictLabel(row.verification.verdict) }}</b><span>可信度 {{ aiConfidence(row.verification.confidence) }}</span><small v-if="row.verification.reason">{{ row.verification.reason }}</small></template><span v-else class="muted">—</span></td>
@@ -394,7 +409,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
             <div><span>扫描批次</span><RouterLink :to="`/scans/${selected.scanRunId}`" class="batch-link">{{ batchNumber(selected.scanRunId) }}</RouterLink></div>
             <div><span>风险等级</span><StatusBadge :value="selected.severity" /></div>
             <div><span>扫描规则</span><b>{{ scannerLabel(selected.scanner) }} / {{ selected.ruleId }}</b></div>
-            <div><span>代码位置</span><code>{{ selected.filePath }}:{{ selected.startLine ?? '-' }}</code></div>
+            <div><span>{{ findingLocationLabel(selected) }}</span><code>{{ findingLocation(selected) }}</code><small v-if="isDependencyVulnerability(selected)">依赖组件漏洞不对应源码行号</small></div>
             <div v-if="selected.codeSnippet" class="review-code"><span>{{ isRedacted(selected) ? '二进制凭据文件' : '代码片段' }}</span><button type="button" class="snippet-trigger" @click="snippetFinding = selected"><span>{{ isRedacted(selected) ? '◈' : '⌁' }}</span> {{ isRedacted(selected) ? '查看文件说明' : '查看原始内容' }}</button></div>
             <div v-if="selected.description"><span>问题说明</span><p>{{ selected.description }}</p></div>
             <div v-if="selected.recommendation"><span>整改建议</span><p>{{ selected.recommendation }}</p></div>
@@ -412,15 +427,15 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
 
     <Teleport to="body">
       <div v-if="snippetFinding" class="modal-backdrop snippet-backdrop" @click.self="snippetFinding = null">
-        <section class="snippet-dialog" role="dialog" aria-modal="true" aria-label="代码片段查看器">
+        <section class="snippet-dialog" role="dialog" aria-modal="true" aria-label="问题原始内容查看器">
           <header class="snippet-head">
             <div><span class="eyebrow">{{ isRedacted(snippetFinding) ? '二进制文件' : '本机原始内容' }}</span><h2>{{ findingTitle(snippetFinding) }}</h2></div>
-            <button class="icon-button" aria-label="关闭代码片段" @click="snippetFinding = null">×</button>
+            <button class="icon-button" aria-label="关闭原始内容" @click="snippetFinding = null">×</button>
           </header>
           <div class="snippet-meta">
             <div><span>扫描批次</span><RouterLink :to="`/scans/${snippetFinding.scanRunId}`" class="batch-link">{{ batchNumber(snippetFinding.scanRunId) }}</RouterLink></div>
             <div><span>扫描器 / 规则</span><strong>{{ scannerLabel(snippetFinding.scanner) }} / {{ snippetFinding.ruleId }}</strong></div>
-            <div class="snippet-path"><span>文件位置</span><code>{{ snippetFinding.filePath }}:{{ snippetFinding.startLine ?? '-' }}</code></div>
+            <div class="snippet-path"><span>{{ findingLocationLabel(snippetFinding) }}</span><code>{{ findingLocation(snippetFinding) }}</code><small v-if="isDependencyVulnerability(snippetFinding)">依赖组件漏洞不对应源码行号</small></div>
           </div>
           <template v-if="isRedacted(snippetFinding)">
             <div class="redacted-view">
@@ -430,8 +445,14 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
             </div>
           </template>
           <template v-else>
-            <div class="code-viewer-head"><span>原始内容</span><span>仅在本机页面展示 · 正式报告与工具复核仍会脱敏</span></div>
-            <pre class="code-viewer"><code>{{ snippetFinding.codeSnippet }}</code></pre>
+            <div class="original-finding-copy">
+              <div><span>原始标题</span><p>{{ snippetFinding.title }}</p></div>
+              <div v-if="snippetFinding.description"><span>原始描述</span><p>{{ snippetFinding.description }}</p></div>
+              <div v-if="snippetFinding.recommendation"><span>整改建议</span><p>{{ snippetFinding.recommendation }}</p></div>
+            </div>
+            <div class="code-viewer-head"><span>原始代码或扫描证据</span><span>仅在本机页面展示 · 正式报告与工具复核仍会脱敏</span></div>
+            <pre v-if="snippetFinding.codeSnippet" class="code-viewer"><code>{{ snippetFinding.codeSnippet }}</code></pre>
+            <div v-else class="source-empty"><strong>扫描器未提供代码片段</strong><span>上方已完整展示扫描器返回的原始标题和描述，可根据文件位置继续核验。</span></div>
           </template>
         </section>
       </div>

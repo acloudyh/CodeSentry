@@ -82,6 +82,29 @@ class AiReviewRetryTest {
         verify(provider, never()).review(argThat(e -> "source1".equals(e.getCodeSnippet())), anyString(), any());
     }
 
+    @Test void regularBatchRetriesFindingWhenLatestAttemptFailedEvenIfAnOlderAttemptCompleted() {
+        AiReviewService service = service();
+        when(mapper.findByRunId(1L)).thenReturn(List.of(record(1L, 6L, "ERROR"),
+                record(1L, 5L, "VERIFY"), record(1L, 4L, "PRIMARY")));
+        when(provider.review(any(), anyString(), any())).thenReturn(decision());
+        AiReviewJob job = service.startRunReview(1L);
+        assertEquals(2, job.getTotalFindings());
+        verify(provider, times(2)).review(argThat(e -> "source1".equals(e.getCodeSnippet())), anyString(), any());
+        verify(provider, times(2)).review(argThat(e -> "source2".equals(e.getCodeSnippet())), anyString(), any());
+    }
+
+    @Test void interruptedPersistedJobIsClosedAndUnreviewedFindingsCanRestart() {
+        AiReviewService service = service();
+        AiReviewJob interrupted = new AiReviewJob();
+        interrupted.setId(19L); interrupted.setStatus("RUNNING");
+        when(mapper.findLatestJobByRunId(1L)).thenReturn(interrupted);
+        when(provider.review(any(), anyString(), any())).thenReturn(decision());
+        AiReviewJob job = service.startRunReview(1L);
+        assertEquals(2, job.getTotalFindings());
+        verify(mapper).finishJob(eq(19L), eq("FAILED"), eq("服务中断，任务未完整执行"), any());
+        verify(provider, times(4)).review(any(), anyString(), any());
+    }
+
     @Test void successfulRetryIgnoresEarlierErrorInSameJob() {
         AiReviewService service = service();
         when(mapper.findByFindingId(1L)).thenReturn(List.of(record(1L, 4L, "VERIFY"),

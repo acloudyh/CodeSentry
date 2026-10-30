@@ -183,6 +183,6 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
         return values;
     }
 
-    @Override public String providerName() { return "OPENAI_COMPATIBLE"; }
+    @Override public String providerName() { return properties.getAi().getProvider(); }
     @Override public String modelName() { return properties.getAi().getModel(); }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { api } from '@/api/codesentry'
+import { formatChinaDate } from '@/utils/datetime'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import type { ScanProject, SourceType } from '@/types'
 
@@ -100,7 +101,7 @@ onMounted(load)
               <td><span class="status-badge"><i></i>{{ project.sourceType === 'LOCAL' ? '本地目录' : '远程镜像' }}</span></td>
               <td class="mono">{{ project.localPath ?? project.remoteUrl }}</td>
               <td class="mono">{{ project.defaultBranch ?? '-' }}</td>
-              <td class="mono">{{ new Date(project.createdAt).toLocaleDateString('zh-CN') }}</td>
+              <td class="mono">{{ formatChinaDate(project.createdAt) }}</td>
               <td><div class="report-actions"><button class="button secondary compact" :disabled="saving" @click="edit(project)">编辑</button><button class="button danger compact" :disabled="saving" @click="remove(project)">移除</button></div></td>
             </tr>
           </tbody>

@@ -222,10 +222,13 @@ public class CodeSentryProperties {
     }
 
     public static class Ai {
+        private String provider = "OPENAI_COMPATIBLE";
         private boolean enabled;
         private String baseUrl;
         private String model;
         private String apiKey;
+        private String keychainService = "CodeSentry-DeepSeek";
+        private String keychainAccount = System.getProperty("user.name");
         private String thinkingMode;
         private int connectTimeoutSeconds = 10;
         private int readTimeoutSeconds = 90;
@@ -234,6 +237,8 @@ public class CodeSentryProperties {
         private int highConfidencePercent = 85;
         private int maxOutputTokens = 4096;
 
+        public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
         public int getMaxOutputTokens() { return maxOutputTokens; }
         public void setMaxOutputTokens(int value) { this.maxOutputTokens = value; }
 
@@ -245,6 +250,10 @@ public class CodeSentryProperties {
         public void setModel(String model) { this.model = model; }
         public String getApiKey() { return apiKey; }
         public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+        public String getKeychainService() { return keychainService; }
+        public void setKeychainService(String keychainService) { this.keychainService = keychainService; }
+        public String getKeychainAccount() { return keychainAccount; }
+        public void setKeychainAccount(String keychainAccount) { this.keychainAccount = keychainAccount; }
         public String getThinkingMode() { return thinkingMode; }
         public void setThinkingMode(String thinkingMode) { this.thinkingMode = thinkingMode; }
         public int getConnectTimeoutSeconds() { return connectTimeoutSeconds; }

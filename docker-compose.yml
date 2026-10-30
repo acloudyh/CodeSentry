@@ -1,0 +1,45 @@
+services:
+  server:
+    build:
+      context: ./codesentry-server
+    image: codesentry-server:local
+    container_name: codesentry-server
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai
+      CODESENTRY_SERVER_ADDRESS: 0.0.0.0
+      CODESENTRY_DB_URL: jdbc:mysql://host.docker.internal:3306/codesentry?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      CODESENTRY_DB_USERNAME: ${CODESENTRY_DB_USERNAME:-root}
+      CODESENTRY_DB_PASSWORD: ${CODESENTRY_DB_PASSWORD:?请设置 CODESENTRY_DB_PASSWORD}
+      CODESENTRY_STORAGE_ROOT: /Users/neo/.codesentry
+      CODESENTRY_REPORT_SONG_FONT: /opt/codesentry/fonts/simsun.ttf
+      CODESENTRY_REPORT_HEI_FONT: /opt/codesentry/fonts/simhei.ttf
+      CODESENTRY_AI_API_KEY: ${CODESENTRY_AI_API_KEY:-}
+      CODESENTRY_FINDSECBUGS_PLUGIN: /opt/codesentry/tools/findsecbugs-plugin-1.14.0.jar
+      CODESENTRY_P3C_JAR: /opt/codesentry/tools/p3c-pmd-2.1.1-jar-with-dependencies.jar
+      CODESENTRY_TRIVY_OFFLINE_SCAN: "false"
+      TRIVY_CACHE_DIR: /Users/neo/.codesentry/trivy-cache
+      HTTP_PROXY: ${CODESENTRY_HTTP_PROXY:-}
+      HTTPS_PROXY: ${CODESENTRY_HTTPS_PROXY:-}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - /Users/neo/.codesentry:/Users/neo/.codesentry
+      - /Users/neo/code:/Users/neo/code:ro
+      - /Users/neo/harmonycloud/code:/Users/neo/harmonycloud/code:ro
+    ports:
+      - "18080:18080"
+
+  web:
+    build:
+      context: ./codesentry-web
+    image: codesentry-web:local
+    container_name: codesentry-web
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - server
+    ports:
+      - "5173:80"

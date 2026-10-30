@@ -66,4 +66,28 @@ class TrivyScannerAdapterTest {
         assertEquals("legacy.jar37", aliases.get(alias));
         assertTrue(Files.isRegularFile(temp.resolve("trivy-archive-aliases-current").resolve(alias)));
     }
+
+    @Test void dependencyVulnerabilityUsesPackagePathInsteadOfGenericJavaTarget() throws Exception {
+        JsonNode report = new ObjectMapper().readTree("{\"Results\":[{\"Target\":\"Java\","
+                + "\"Vulnerabilities\":[{\"VulnerabilityID\":\"CVE-2020-10683\","
+                + "\"PkgName\":\"dom4j:dom4j\",\"PkgPath\":\"src/main/webapp/WEB-INF/lib/dom4j-1.6.1.jar\","
+                + "\"InstalledVersion\":\"1.6.1\",\"Severity\":\"HIGH\",\"Title\":\"XXE\"}]}]}");
+
+        List<NormalizedFinding> findings = adapter().findings(report);
+
+        assertEquals(1, findings.size());
+        assertEquals("src/main/webapp/WEB-INF/lib/dom4j-1.6.1.jar", findings.get(0).getFilePath());
+        assertNull(findings.get(0).getStartLine());
+        assertEquals("dom4j:dom4j@1.6.1", findings.get(0).getCodeSnippet());
+    }
+
+    @Test void dependencyVulnerabilityFallsBackToResultTargetWhenPackagePathIsMissing() throws Exception {
+        JsonNode report = new ObjectMapper().readTree("{\"Results\":[{\"Target\":\"pom.xml\","
+                + "\"Vulnerabilities\":[{\"VulnerabilityID\":\"CVE-1\",\"PkgName\":\"a:b\","
+                + "\"InstalledVersion\":\"1\",\"Severity\":\"LOW\",\"Title\":\"test\"}]}]}");
+
+        List<NormalizedFinding> findings = adapter().findings(report);
+
+        assertEquals("pom.xml", findings.get(0).getFilePath());
+    }
 }

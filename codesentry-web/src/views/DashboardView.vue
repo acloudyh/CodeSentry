@@ -5,6 +5,7 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { api } from '@/api/codesentry'
 import { findingTitle } from '@/utils/labels'
+import { formatChinaTime } from '@/utils/datetime'
 import type { DashboardSummary, FindingView, ScanProject, ScanRun } from '@/types'
 
 const summary = ref<DashboardSummary>({ projects: 0, scans: 0, runningScans: 0, newFindings: 0 })
@@ -15,7 +16,7 @@ const error = ref('')
 
 const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `项目-${id}`
 const shortCommit = (value?: string) => value?.slice(0, 8) ?? '待解析'
-const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false })
+const formatTime = formatChinaTime
 
 onMounted(async () => {
   try {

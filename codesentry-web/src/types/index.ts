@@ -169,6 +169,19 @@ export interface AiReviewConfiguration {
   apiKeyConfigured: boolean
 }
 
+export interface AiToolConfiguration {
+  id: number
+  name: string
+  provider: string
+  baseUrl: string
+  model: string
+  apiKeyConfigured: boolean
+  enabled: boolean
+  defaultTool: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface RuleProfile {
   id: string
   name: string

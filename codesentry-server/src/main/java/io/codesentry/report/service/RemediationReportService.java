@@ -18,6 +18,12 @@ import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+import org.apache.poi.openxml4j.opc.OPCPackage;
+import org.apache.poi.openxml4j.opc.PackagePart;
+import org.apache.poi.openxml4j.opc.PackagePartName;
+import org.apache.poi.openxml4j.opc.PackageRelationship;
+import org.apache.poi.openxml4j.opc.PackagingURIHelper;
+import org.apache.poi.openxml4j.opc.TargetMode;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageMar;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageSz;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
@@ -27,7 +33,9 @@ import org.springframework.web.util.HtmlUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.OutputStream;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,6 +48,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class RemediationReportService {
@@ -47,7 +56,8 @@ public class RemediationReportService {
     private static final int REPORT_CODE_MAX_CHARS = 600;
     private static final String REPORT_CODE_TRUNCATED = "\n...（代码片段过长，报告中已截断）";
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String WORD_FONT = resolveWordFont();
+    private static final String WORD_BODY_FONT = "宋体";
+    private static final String WORD_HEADING_FONT = "黑体";
 
     private final ScanRunService scanRunService;
     private final ScanProjectService projectService;
@@ -84,7 +94,8 @@ public class RemediationReportService {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFastMode();
             builder.withHtmlContent(buildHtml(data), null);
-            builder.useFont(resolvePdfFont(), "CodeSentryCJK");
+            builder.useFont(resolvePdfSongFont(), "CodeSentrySong");
+            builder.useFont(resolvePdfHeiFont(), "CodeSentryHei");
             builder.toStream(output);
             builder.run();
             return output.toByteArray();
@@ -138,8 +149,7 @@ public class RemediationReportService {
 
                 addText(document, "扫描器 / 规则：" + finding.getScanner() + " / " + finding.getRuleId(),
                         9, "66796E", false);
-                addText(document, "代码位置：" + finding.getFilePath() + ":"
-                        + (finding.getStartLine() == null ? "-" : finding.getStartLine()), 9, "66796E", false);
+                addText(document, reportLocationLabel(finding), 9, "66796E", false);
                 addText(document, "变化状态：" + resultLabel(finding.getResultStatus())
                         + "    人工结论：" + triageLabel(finding.getTriageStatus()), 9, "66796E", false);
                 addText(document, "利用条件：" + exploitCondition(finding), 9, "38483F", false);
@@ -165,6 +175,7 @@ public class RemediationReportService {
                     + "报告保留人工已确认的风险，以及工具复核完成、通过可信度门槛且未判为误报的问题；人工判为误报的不纳入报告，可信度不代表漏洞可利用性。"
                     + "本报告由 CodeSentry 本地节点生成。",
                     8, "7B8B82", false);
+            embedWordFonts(document);
             document.write(output);
             return output.toByteArray();
         } catch (Exception exception) {
@@ -197,8 +208,8 @@ public class RemediationReportService {
             if (hasText(finding.getCodeSnippet())) {
                 rows.append("<pre>").append(escape(reportCodeSnippet(finding.getCodeSnippet()))).append("</pre>");
             }
-            rows.append("</td><td><code>").append(escape(finding.getFilePath())).append(":")
-                    .append(finding.getStartLine() == null ? "-" : finding.getStartLine()).append("</code></td><td>")
+            rows.append("</td><td><code>").append(escape(reportLocationValue(finding)))
+                    .append("</code></td><td>")
                     .append(resultLabel(finding.getResultStatus())).append("</td><td>")
                     .append(triageLabel(finding.getTriageStatus())).append("</td><td>")
                     .append("<b>利用条件：</b>").append(escape(exploitCondition(finding)))
@@ -219,9 +230,9 @@ public class RemediationReportService {
         ScanProject project = data.project;
         return "<!DOCTYPE html><html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"zh-CN\"><head><meta charset=\"utf-8\" />" +
                 "<title>CodeSentry 整改报告</title><style>@page{size:A4 landscape;margin:14mm}*{box-sizing:border-box}" +
-                "body{font-family:'CodeSentryCJK','Microsoft YaHei',sans-serif;margin:0;color:#14201b;background:#f4f7f3;font-size:12px}" +
+                "body{font-family:'CodeSentrySong','SimSun',serif;margin:0;color:#14201b;background:#f4f7f3;font-size:12px}" +
                 ".cover{padding:32px 38px;background:#0b1714;color:#eef4ec;border-bottom:6px solid #adf33f}.brand{letter-spacing:.12em;color:#adf33f;font-weight:800}" +
-                "h1{margin:14px 0 8px;font-size:28px}.meta{color:#aec0b6}.wrap{padding:24px 38px 0}.summary-table{width:100%;margin-bottom:22px;border-collapse:separate;border-spacing:10px 0}" +
+                "h1{margin:14px 0 8px;font-size:28px}.meta{color:#aec0b6}.wrap{padding:24px 38px 0}.brand,h1,h2,th,b{font-family:'CodeSentryHei','SimHei',sans-serif}.summary-table{width:100%;margin-bottom:22px;border-collapse:separate;border-spacing:10px 0}" +
                 ".summary-table td{width:25%;background:white;border:1px solid #d9e2dc;padding:14px}.summary-table span{color:#66796e;font-size:11px}.summary-table b{display:block;font-size:24px;margin-top:7px}" +
                 ".card{background:white;border:1px solid #d9e2dc;padding:16px;margin-bottom:20px}.data{width:100%;border-collapse:collapse;background:white;font-size:10px;table-layout:fixed}" +
                 ".data th,.data td{padding:9px 7px;border:1px solid #dfe6e1;text-align:left;vertical-align:top;word-wrap:break-word}.data th{background:#e9efe9;color:#44574c}" +
@@ -245,14 +256,28 @@ public class RemediationReportService {
     }
 
 
-    private File resolvePdfFont() {
-        String configured = System.getenv("CODESENTRY_REPORT_FONT");
+    private File resolvePdfSongFont() {
+        String configured = System.getenv("CODESENTRY_REPORT_SONG_FONT");
         List<String> candidates = Arrays.asList(configured,
-                "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-                "/System/Library/Fonts/Supplemental/NISC18030.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttf",
-                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf",
-                "C:/Windows/Fonts/msyh.ttf", "C:/Windows/Fonts/simhei.ttf");
+                "/opt/codesentry/fonts/simsun.ttf",
+                "docker/fonts/simsun.ttf",
+                "/System/Library/Fonts/Supplemental/Songti.ttc",
+                "C:/Windows/Fonts/simsun.ttc");
+        return firstAvailableFont(candidates, "宋体");
+    }
+
+    private File resolvePdfHeiFont() {
+        String configured = System.getenv("CODESENTRY_REPORT_HEI_FONT");
+        List<String> candidates = Arrays.asList(configured,
+                "/opt/codesentry/fonts/simhei.ttf",
+                "docker/fonts/simhei.ttf",
+                "/System/Library/Fonts/STHeiti Medium.ttc",
+                "/System/Library/Fonts/STHeiti Light.ttc",
+                "C:/Windows/Fonts/simhei.ttf");
+        return firstAvailableFont(candidates, "黑体");
+    }
+
+    private File firstAvailableFont(List<String> candidates, String fontName) {
         for (String candidate : candidates) {
             if (candidate != null && !candidate.isBlank()) {
                 Path path = Paths.get(candidate);
@@ -260,7 +285,8 @@ public class RemediationReportService {
             }
         }
         throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
-                "未找到 PDF 中文字体，请通过 CODESENTRY_REPORT_FONT 指定 TTF/OTF 字体文件");
+                "未找到 PDF " + fontName + "字体，请通过 CODESENTRY_REPORT_"
+                        + ("宋体".equals(fontName) ? "SONG" : "HEI") + "_FONT 指定字体文件");
     }
 
     private void configureA4(XWPFDocument document) {
@@ -300,7 +326,7 @@ public class RemediationReportService {
         XWPFTableCell cell = table.getRow(0).getCell(0);
         cell.setColor("F0F3EF");
         XWPFRun run = cell.getParagraphs().get(0).createRun();
-        setFontFamily(run, "Courier New", WORD_FONT);
+        setFontFamily(run, WORD_BODY_FONT, WORD_BODY_FONT);
         run.setFontSize(8); run.setColor("33433A");
         String[] lines = code.split("\\R", -1);
         for (int index = 0; index < lines.length; index++) {
@@ -343,7 +369,8 @@ public class RemediationReportService {
 
     private void styleRun(XWPFRun run, String text, int size, String color, boolean bold) {
         run.setText(text == null ? "" : text);
-        setFontFamily(run, WORD_FONT, WORD_FONT);
+        String font = bold ? WORD_HEADING_FONT : WORD_BODY_FONT;
+        setFontFamily(run, font, font);
         run.setFontSize(size); run.setColor(color); run.setBold(bold);
     }
 
@@ -355,18 +382,84 @@ public class RemediationReportService {
         run.setFontFamily(eastAsiaFont, XWPFRun.FontCharRange.cs);
     }
 
-    private static String resolveWordFont() {
-        String configured = System.getenv("CODESENTRY_WORD_FONT");
-        if (configured != null && !configured.isBlank()) {
-            return configured;
+    private void embedWordFonts(XWPFDocument document) throws Exception {
+        Path song = resolveWordFontFile("CODESENTRY_REPORT_SONG_FONT", "docker/fonts/simsun.ttf",
+                "/opt/codesentry/fonts/simsun.ttf", "宋体");
+        Path hei = resolveWordFontFile("CODESENTRY_REPORT_HEI_FONT", "docker/fonts/simhei.ttf",
+                "/opt/codesentry/fonts/simhei.ttf", "黑体");
+        OPCPackage pkg = document.getPackage();
+        PackagePartName fontTableName = PackagingURIHelper.createPartName("/word/fontTable.xml");
+        PackagePart fontTable = pkg.createPart(fontTableName,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml");
+        document.getPackagePart().addRelationship(fontTableName, TargetMode.INTERNAL,
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable");
+
+        EmbeddedWordFont songFont = addEmbeddedWordFont(pkg, fontTable, song, "simsun");
+        EmbeddedWordFont heiFont = addEmbeddedWordFont(pkg, fontTable, hei, "simhei");
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<w:fonts xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" "
+                + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                + wordFontXml(WORD_BODY_FONT, "SimSun", "roman", songFont)
+                + wordFontXml(WORD_HEADING_FONT, "SimHei", "swiss", heiFont)
+                + "</w:fonts>";
+        try (OutputStream output = fontTable.getOutputStream()) {
+            output.write(xml.getBytes(StandardCharsets.UTF_8));
         }
-        String osName = System.getProperty("os.name", "").toLowerCase();
-        if (osName.contains("mac")) return "Arial Unicode MS";
-        if (osName.contains("win")) return "Microsoft YaHei";
-        return "Noto Sans CJK SC";
+    }
+
+    private Path resolveWordFontFile(String environmentName, String localPath, String containerPath,
+                                     String fontName) {
+        for (String candidate : Arrays.asList(System.getenv(environmentName), localPath, containerPath)) {
+            if (candidate != null && !candidate.isBlank()) {
+                Path path = Paths.get(candidate);
+                if (Files.isRegularFile(path)) return path;
+            }
+        }
+        throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "未找到 Word " + fontName + "字体文件");
+    }
+
+    private EmbeddedWordFont addEmbeddedWordFont(OPCPackage pkg, PackagePart fontTable, Path fontFile,
+                                                  String partBaseName) throws Exception {
+        UUID key = UUID.randomUUID();
+        byte[] content = Files.readAllBytes(fontFile);
+        byte[] keyBytes = ByteBuffer.allocate(16).putLong(key.getMostSignificantBits())
+                .putLong(key.getLeastSignificantBits()).array();
+        for (int index = 0; index < Math.min(32, content.length); index++) {
+            content[index] ^= keyBytes[15 - (index % 16)];
+        }
+        PackagePartName partName = PackagingURIHelper.createPartName("/word/fonts/" + partBaseName + ".odttf");
+        PackagePart fontPart = pkg.createPart(partName,
+                "application/vnd.openxmlformats-officedocument.obfuscatedFont");
+        try (OutputStream output = fontPart.getOutputStream()) {
+            output.write(content);
+        }
+        PackageRelationship relationship = fontTable.addRelationship(partName, TargetMode.INTERNAL,
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font");
+        return new EmbeddedWordFont(relationship.getId(), "{" + key.toString().toUpperCase(Locale.ROOT) + "}");
+    }
+
+    private String wordFontXml(String name, String alternateName, String family, EmbeddedWordFont embedded) {
+        return "<w:font w:name=\"" + name + "\"><w:altName w:val=\"" + alternateName
+                + "\"/><w:family w:val=\"" + family + "\"/><w:embedRegular r:id=\""
+                + embedded.relationshipId + "\" w:fontKey=\"" + embedded.fontKey + "\"/></w:font>";
     }
 
     private String summaryCell(String label, String value) { return "<td><span>" + escape(label) + "</span><b>" + escape(value) + "</b></td>"; }
+    private boolean isDependencyVulnerability(FindingView finding) {
+        return "Trivy".equals(finding.getScanner()) && "VULNERABILITY".equals(finding.getCategory());
+    }
+    private String reportLocationValue(FindingView finding) {
+        if (isDependencyVulnerability(finding)) {
+            return value(finding.getFilePath(), "未记录依赖文件") + "（依赖组件漏洞，无源码行号）";
+        }
+        return value(finding.getFilePath(), "unknown") + ":"
+                + (finding.getStartLine() == null ? "-" : finding.getStartLine());
+    }
+    private String reportLocationLabel(FindingView finding) {
+        return (isDependencyVulnerability(finding) ? "依赖文件：" : "代码位置：")
+                + reportLocationValue(finding);
+    }
     private String escape(String value) { return HtmlUtils.htmlEscape(value == null ? "" : value); }
     private boolean hasText(String value) { return value != null && !value.isBlank(); }
     private String value(String value, String fallback) { return hasText(value) ? value : fallback; }
@@ -536,6 +629,16 @@ public class RemediationReportService {
             if (reviewed == 0) return "自动扫描完成，人工复核未完成";
             if (reviewed < findings.size()) return "人工复核进行中（" + reviewed + "/" + findings.size() + "）";
             return "人工复核已完成";
+        }
+    }
+
+    private static final class EmbeddedWordFont {
+        private final String relationshipId;
+        private final String fontKey;
+
+        private EmbeddedWordFont(String relationshipId, String fontKey) {
+            this.relationshipId = relationshipId;
+            this.fontKey = fontKey;
         }
     }
 }

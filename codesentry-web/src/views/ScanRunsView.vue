@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/codesentry'
+import { formatChinaTime } from '@/utils/datetime'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import type { ScanProject, ScanRun } from '@/types'
@@ -27,7 +28,7 @@ async function stopScan(id: number) {
 let timer: number | undefined
 
 const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `项目-${id}`
-const formatTime = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
+const formatTime = formatChinaTime
 const modeLabel = (run: ScanRun) => run.scanMode === 'FULL' ? '全量扫描' : '增量扫描'
 const workspaceLabel = (run: ScanRun) => run.workspaceMode === 'CURRENT' ? '当前工作区' : '分支快照'
 
@@ -57,7 +58,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
     <div v-if="error" class="error-banner">{{ error }}</div>
     <section class="panel">
       <div v-if="runs.length" class="table-scroll">
-        <table class="data-table">
+        <table class="data-table scan-runs-table">
           <thead><tr><th>任务</th><th>项目</th><th>模式 / 工作区</th><th>分支 → 基线</th><th>结果统计</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="run in pagedRuns" :key="run.id">
@@ -68,7 +69,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
               <td><b class="danger-text">+{{ run.newFindings }}</b><span class="muted"> 新增</span> · <b class="signal-text">-{{ run.fixedFindings }}</b><span class="muted"> 修复</span><div class="mono" style="margin-top:4px">合计 {{ run.totalFindings }}</div></td>
               <td><StatusBadge :value="run.status" /><div v-if="run.errorMessage" class="danger-text clamp-error" style="font-size:10px;margin-top:6px" :title="run.errorMessage">{{ run.errorMessage }}</div></td>
               <td class="mono">{{ formatTime(run.createdAt) }}</td>
-              <td><RouterLink :to="`/scans/${run.id}`" class="button secondary compact">查看详情</RouterLink><button v-if="['PENDING','PREPARING','RUNNING'].includes(run.status)" class="button danger compact" :disabled="stopping === run.id" @click="stopScan(run.id)">{{ stopping === run.id ? '停止中…' : '停止扫描' }}</button></td>
+              <td><div class="scan-row-actions"><RouterLink :to="`/scans/${run.id}`" class="table-action"><span aria-hidden="true">⌕</span>详情</RouterLink><RouterLink :to="{ path: '/findings', query: { projectId: run.projectId, runId: run.id } }" class="table-action"><span aria-hidden="true">☷</span>问题台账</RouterLink><button v-if="['PENDING','PREPARING','RUNNING'].includes(run.status)" class="table-action danger" :disabled="stopping === run.id" @click="stopScan(run.id)"><span aria-hidden="true">■</span>{{ stopping === run.id ? '停止中…' : '停止扫描' }}</button></div></td>
             </tr>
           </tbody>
         </table>

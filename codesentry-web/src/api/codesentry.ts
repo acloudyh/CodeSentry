@@ -1,5 +1,5 @@
 import { request } from './http'
-import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
+import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, AiToolConfiguration, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
 
 export interface CreateProjectPayload {
   projectName: string
@@ -35,6 +35,16 @@ export interface AiReviewConfigurationPayload {
   baseUrl?: string
   model?: string
   apiKey?: string
+}
+
+export interface AiToolConfigurationPayload {
+  name: string
+  provider: string
+  baseUrl: string
+  model: string
+  apiKey?: string
+  enabled: boolean
+  defaultTool: boolean
 }
 
 export const api = {
@@ -78,6 +88,14 @@ export const api = {
   aiReviewJobRecords: (jobId: number) => request<AiReviewRecord[]>(`/api/v1/ai-reviews/jobs/${jobId}/records`),
   aiReviewJobFindings: (jobId: number) => request<FindingView[]>(`/api/v1/ai-reviews/jobs/${jobId}/findings`),
   latestAiReviewJob: (runId: number) => request<AiReviewJob | null>(`/api/v1/ai-reviews/scan-runs/${runId}/jobs/latest`),
+  aiTools: () => request<AiToolConfiguration[]>('/api/v1/ai-tools'),
+  createAiTool: (payload: AiToolConfigurationPayload) => request<AiToolConfiguration>('/api/v1/ai-tools', {
+    method: 'POST', body: JSON.stringify(payload),
+  }),
+  updateAiTool: (id: number, payload: AiToolConfigurationPayload) => request<AiToolConfiguration>(`/api/v1/ai-tools/${id}`, {
+    method: 'PUT', body: JSON.stringify(payload),
+  }),
+  deleteAiTool: (id: number) => request<void>(`/api/v1/ai-tools/${id}`, { method: 'DELETE' }),
   reports: (limit = 100) => request<RemediationReportSummary[]>(`/api/v1/reports?limit=${limit}`),
   ruleProfiles: () => request<RuleProfile[]>('/api/v1/rule-profiles'),
   reportUrl: (runId: number, format: 'html' | 'docx' | 'pdf') => `/api/v1/reports/scan-runs/${runId}/${format}`,

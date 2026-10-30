@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/codesentry'
 import { ruleProfileLabel, scannerLabel } from '@/utils/labels'
+import { formatChinaTime } from '@/utils/datetime'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import type { FindingView, ScanProject, ScanRunDetail, ScanToolRun } from '@/types'
 
@@ -33,7 +34,7 @@ const projectName = computed(() => {
   return projects.value.find((item) => item.id === projectId)?.projectName ?? (projectId ? `项目-${projectId}` : '-')
 })
 const active = computed(() => ['PENDING', 'PREPARING', 'RUNNING'].includes(run.value?.status ?? ''))
-const formatTime = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
+const formatTime = formatChinaTime
 const shortCommit = (value?: string) => value ? value.slice(0, 12) : '-'
 const phaseLabel = (phase: string) => phase === 'baseline' ? '基线快照' : phase === 'availability' ? '可用性检查' : '扫描快照'
 const logText = (item: ScanToolRun) => item.outputLog || item.errorMessage || '暂无命令输出。'

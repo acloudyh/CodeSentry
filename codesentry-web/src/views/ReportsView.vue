@@ -10,18 +10,29 @@ const projects = ref<ScanProject[]>([])
 const error = ref('')
 const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `项目-${id}`
 const exporting = ref('')
-function exportReport(runId: number, format: 'html' | 'docx' | 'pdf') {
+async function exportReport(runId: number, format: 'html' | 'docx' | 'pdf') {
   if (format === 'html') {
     window.open(api.reportUrl(runId, format), '_blank', 'noopener,noreferrer')
     return
   }
   const key = `${runId}-${format}`
-  exporting.value = key
-  const link = document.createElement('a')
-  link.href = api.reportUrl(runId, format)
-  link.download = `codesentry-report-${runId}.${format}`
-  document.body.appendChild(link); link.click(); link.remove()
-  window.setTimeout(() => { exporting.value = '' }, 1200)
+  exporting.value = key; error.value = ''
+  try {
+    const response = await fetch(api.reportUrl(runId, format))
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { message?: string } | null
+      throw new Error(payload?.message ?? `${format.toUpperCase()} 报告生成失败`)
+    }
+    const objectUrl = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a')
+    link.href = objectUrl; link.download = `codesentry-report-${runId}.${format}`
+    document.body.appendChild(link); link.click(); link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : '报告下载失败'
+  } finally {
+    exporting.value = ''
+  }
 }
 
 onMounted(async () => {

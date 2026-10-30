@@ -98,7 +98,7 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
 
     }
 
-    private List<NormalizedFinding> findings(JsonNode root) {
+    List<NormalizedFinding> findings(JsonNode root) {
         List<NormalizedFinding> findings = new ArrayList<>();
         for (JsonNode resultNode : root.path("Results")) {
             String target = text(resultNode, "Target");
@@ -146,6 +146,7 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
     private void appendVulnerabilities(List<NormalizedFinding> findings, JsonNode items, String target) {
         for (JsonNode item : items) {
             NormalizedFinding finding = base(item, "VULNERABILITY", target);
+            finding.setFilePath(defaultValue(text(item, "PkgPath"), target));
             finding.setRuleId(text(item, "VulnerabilityID"));
             finding.setTitle(text(item, "Title"));
             finding.setDescription(text(item, "Description"));

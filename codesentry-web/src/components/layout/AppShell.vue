@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { currentTheme, setTheme, themes } from '@/utils/theme'
+import { formatChinaDate } from '@/utils/datetime'
 
 const route = useRoute()
 const pageTitle = computed(() => String(route.meta.title ?? 'CodeSentry'))
@@ -14,6 +15,7 @@ const navigation = [
   { label: '问题台账', to: '/findings', glyph: '!' },
   { label: '扫描规则', to: '/rules', glyph: '⌗' },
   { label: '整改报告', to: '/reports', glyph: '▱' },
+  { label: '工具管理', to: '/tools', glyph: '⌘' },
 ]
 </script>
 
@@ -56,7 +58,7 @@ const navigation = [
         </div>
         <div class="command-actions">
           <label class="theme-switch"><span>页面主题</span><select :value="currentTheme" aria-label="页面主题" @change="setTheme(($event.target as HTMLSelectElement).value)"><option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.name }}</option></select></label>
-          <div class="time-chip"><span>本地时间</span><b>{{ new Date().toLocaleDateString('zh-CN') }}</b></div>
+          <div class="time-chip"><span>东八区时间</span><b>{{ formatChinaDate() }}</b></div>
         </div>
       </header>
 

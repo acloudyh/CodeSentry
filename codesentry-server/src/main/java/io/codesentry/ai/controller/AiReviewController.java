@@ -6,6 +6,7 @@ import io.codesentry.ai.dto.AiReviewConfigurationRequest;
 import io.codesentry.ai.model.AiReviewJob;
 import io.codesentry.ai.model.AiReviewRecord;
 import io.codesentry.ai.service.AiReviewService;
+import io.codesentry.ai.service.AiReviewConfigurationService;
 import io.codesentry.common.api.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,8 +23,12 @@ import javax.validation.Valid;
 @RequestMapping("/api/v1/ai-reviews")
 public class AiReviewController {
     private final AiReviewService service;
+    private final AiReviewConfigurationService configurationService;
 
-    public AiReviewController(AiReviewService service) { this.service = service; }
+    public AiReviewController(AiReviewService service, AiReviewConfigurationService configurationService) {
+        this.service = service;
+        this.configurationService = configurationService;
+    }
 
     @PostMapping("/jobs/{jobId}/cancel")
     public ApiResponse<AiReviewJob> cancel(@PathVariable Long jobId) {
@@ -32,13 +37,13 @@ public class AiReviewController {
 
     @GetMapping("/config")
     public ApiResponse<AiReviewConfigurationView> configuration() {
-        return ApiResponse.success(service.configuration());
+        return ApiResponse.success(configurationService.configuration());
     }
 
     @PutMapping("/config")
     public ApiResponse<AiReviewConfigurationView> configure(
             @Valid @RequestBody AiReviewConfigurationRequest request) {
-        return ApiResponse.success(service.configure(request));
+        return ApiResponse.success(configurationService.configure(request));
     }
 
     @PostMapping("/findings/{findingId}")

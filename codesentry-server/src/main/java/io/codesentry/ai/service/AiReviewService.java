@@ -2,10 +2,8 @@ package io.codesentry.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.codesentry.ai.dto.AiReviewDecision;
-import io.codesentry.ai.dto.AiReviewConfigurationView;
 import io.codesentry.ai.dto.AiReviewEvidence;
 import io.codesentry.ai.dto.AiReviewSummary;
-import io.codesentry.ai.dto.AiReviewConfigurationRequest;
 import io.codesentry.ai.mapper.AiReviewMapper;
 import io.codesentry.ai.model.AiReviewJob;
 import io.codesentry.ai.model.AiReviewRecord;
@@ -28,9 +26,11 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class AiReviewService {
@@ -96,18 +96,29 @@ public class AiReviewService {
         }
         AiReviewJob active = mapper.findLatestJobByRunId(scanRunId);
         if (active != null && ("PENDING".equals(active.getStatus()) || "RUNNING".equals(active.getStatus()))) {
-            return active;
+            if (tasks.isActive(active.getId())) return active;
+            mapper.finishJob(active.getId(), "FAILED", "服务中断，任务未完整执行", LocalDateTime.now());
         }
         List<FindingView> findings = reviewableFindings(scanRunId);
+        List<AiReviewRecord> existingRecords = mapper.findByRunId(scanRunId);
+        List<AiReviewSummary> latestReviews = latestForRun(existingRecords);
         if (failedOnly) {
-            java.util.Set<Long> failedIds = new java.util.HashSet<>();
-            for (AiReviewSummary summary : latestForRun(scanRunId)) {
+            Set<Long> failedIds = new HashSet<>();
+            for (AiReviewSummary summary : latestReviews) {
                 if ("FAILED".equals(summary.getStatus())) failedIds.add(summary.getFindingId());
             }
             findings.removeIf(finding -> !failedIds.contains(finding.getId()));
+        } else {
+            Set<Long> completedIds = new HashSet<>();
+            for (AiReviewSummary summary : latestReviews) {
+                if (!"FAILED".equals(summary.getStatus()) && !"CANCELLED".equals(summary.getStatus())) {
+                    completedIds.add(summary.getFindingId());
+                }
+            }
+            findings.removeIf(finding -> completedIds.contains(finding.getId()));
         }
         if (findings.isEmpty()) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "当前批次没有等待 AI 审核的问题");
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "当前批次没有等待工具审核或需要重试的问题");
         }
         AiReviewJob job = createJob(scanRunId, findings.size());
         try {
@@ -255,8 +266,12 @@ public class AiReviewService {
     }
 
     public List<AiReviewSummary> latestForRun(Long scanRunId) {
+        return latestForRun(mapper.findByRunId(scanRunId));
+    }
+
+    private List<AiReviewSummary> latestForRun(List<AiReviewRecord> allRecords) {
         Map<Long, List<AiReviewRecord>> grouped = new LinkedHashMap<>();
-        for (AiReviewRecord record : mapper.findByRunId(scanRunId)) {
+        for (AiReviewRecord record : allRecords) {
             grouped.computeIfAbsent(record.getFindingId(), ignored -> new ArrayList<>()).add(record);
         }
         List<AiReviewSummary> summaries = new ArrayList<>();
@@ -292,44 +307,6 @@ public class AiReviewService {
     public AiReviewJob latestJobForRun(Long scanRunId) {
         scanRunService.requireById(scanRunId);
         return mapper.findLatestJobByRunId(scanRunId);
-    }
-
-    public AiReviewConfigurationView configuration() {
-        return configurationView();
-    }
-
-    public synchronized AiReviewConfigurationView configure(AiReviewConfigurationRequest request) {
-        String baseUrl = trim(request.getBaseUrl());
-        String model = trim(request.getModel());
-        String apiKey = trim(request.getApiKey());
-        if (request.isEnabled()) {
-            if (!org.springframework.util.StringUtils.hasText(baseUrl)
-                    || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) {
-                throw new BusinessException(HttpStatus.BAD_REQUEST, "请输入有效的工具服务地址");
-            }
-            if (!org.springframework.util.StringUtils.hasText(model)) {
-                throw new BusinessException(HttpStatus.BAD_REQUEST, "请输入工具模型名称");
-            }
-            if (!org.springframework.util.StringUtils.hasText(apiKey)
-                    && !org.springframework.util.StringUtils.hasText(properties.getAi().getApiKey())) {
-                throw new BusinessException(HttpStatus.BAD_REQUEST, "请输入 API Key");
-            }
-        }
-        properties.getAi().setBaseUrl(baseUrl);
-        properties.getAi().setModel(model);
-        if (org.springframework.util.StringUtils.hasText(apiKey)) properties.getAi().setApiKey(apiKey);
-        properties.getAi().setEnabled(request.isEnabled());
-        return configurationView();
-    }
-
-    private AiReviewConfigurationView configurationView() {
-        return new AiReviewConfigurationView(properties.getAi().isEnabled(), provider.providerName(),
-                properties.getAi().getModel(), properties.getAi().getBaseUrl(),
-                org.springframework.util.StringUtils.hasText(properties.getAi().getApiKey()));
-    }
-
-    private String trim(String value) {
-        return value == null ? null : value.trim();
     }
 
     private AiReviewSummary latestSummary(List<AiReviewRecord> records) {

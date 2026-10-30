@@ -102,6 +102,32 @@ class RemediationReportServiceTest {
         assertFalse(html.contains("EXCLUDED"));
     }
 
+    @Test
+    void dependencyVulnerabilityReportShowsJarPathAndExplainsMissingSourceLine() {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
+        ScanRun run = new ScanRun(); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
+        FindingView dependency = finding(101L, "依赖漏洞", "CONFIRMED");
+        dependency.setScanner("Trivy");
+        dependency.setCategory("VULNERABILITY");
+        dependency.setFilePath("src/main/webapp/WEB-INF/lib/dom4j-1.6.1.jar");
+        dependency.setStartLine(null);
+        when(runs.requireById(8L)).thenReturn(run);
+        when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(dependency));
+        when(reviews.latestForRun(8L)).thenReturn(List.of());
+
+        String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+
+        assertTrue(html.contains("src/main/webapp/WEB-INF/lib/dom4j-1.6.1.jar"));
+        assertTrue(html.contains("依赖组件漏洞，无源码行号"));
+        assertFalse(html.contains("Java:-"));
+    }
+
     private FindingView finding(Long id, String title, String triageStatus) {
         FindingView finding = new FindingView();
         finding.setId(id);
@@ -135,9 +161,20 @@ class RemediationReportServiceTest {
         when(findings.findByRunId(8L)).thenReturn(List.of(candidate));
         when(reviews.latestForRun(8L)).thenReturn(List.of(failed));
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+        assertTrue(html.contains("'CodeSentrySong','SimSun'"));
+        assertTrue(html.contains("'CodeSentryHei','SimHei'"));
+        byte[] docxBytes = service.exportDocx(8L);
+        List<String> docxEntries = zipEntries(docxBytes);
+        assertTrue(docxEntries.contains("word/fontTable.xml"));
+        assertTrue(docxEntries.contains("word/fonts/simsun.odttf"));
+        assertTrue(docxEntries.contains("word/fonts/simhei.odttf"));
         try (org.apache.poi.xwpf.usermodel.XWPFDocument doc = new org.apache.poi.xwpf.usermodel.XWPFDocument(
-                new java.io.ByteArrayInputStream(service.exportDocx(8L)));
+                new java.io.ByteArrayInputStream(docxBytes));
              org.apache.pdfbox.pdmodel.PDDocument pdf = org.apache.pdfbox.pdmodel.PDDocument.load(service.exportPdf(8L))) {
+            assertEquals("黑体", doc.getParagraphs().get(0).getRuns().get(0)
+                    .getFontFamily(org.apache.poi.xwpf.usermodel.XWPFRun.FontCharRange.eastAsia));
+            assertEquals("宋体", doc.getParagraphs().get(2).getRuns().get(0)
+                    .getFontFamily(org.apache.poi.xwpf.usermodel.XWPFRun.FontCharRange.eastAsia));
             String word = doc.getParagraphs().stream().map(org.apache.poi.xwpf.usermodel.XWPFParagraph::getText)
                     .collect(java.util.stream.Collectors.joining("\n"));
             String pdfText = new org.apache.pdfbox.text.PDFTextStripper().getText(pdf);
@@ -151,6 +188,16 @@ class RemediationReportServiceTest {
         }
         assertEquals("AI 双轮复核建议：DeepSeek 提供风险线索，人工已确认。", candidate.getTriageComment());
         assertEquals("AI返回内容因输出长度限制被截断", failed.getErrorMessage());
+    }
+
+    private List<String> zipEntries(byte[] content) throws Exception {
+        List<String> entries = new java.util.ArrayList<>();
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(
+                new java.io.ByteArrayInputStream(content))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) entries.add(entry.getName());
+        }
+        return entries;
     }
 
     private AiReviewSummary aiSummary(Long findingId, String verdict, boolean highConfidence,

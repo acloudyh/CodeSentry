@@ -13,10 +13,11 @@ spring:
     hikari:
       maximum-pool-size: 8
       minimum-idle: 1
+      connection-init-sql: SET time_zone = '+08:00'
   sql:
     init:
       mode: always
-      schema-locations: classpath:db/migration/V1__init_schema.sql,classpath:db/migration/V2__add_ai_review.sql
+      schema-locations: classpath:db/migration/V1__init_schema.sql,classpath:db/migration/V2__add_ai_review.sql,classpath:db/migration/V3__add_ai_runtime_configuration.sql,classpath:db/migration/V4__add_ai_tool_configuration.sql
   jackson:
     default-property-inclusion: non_null
     time-zone: Asia/Shanghai
@@ -109,6 +110,8 @@ codesentry:
     base-url: ${CODESENTRY_AI_BASE_URL:}
     model: ${CODESENTRY_AI_MODEL:}
     api-key: ${CODESENTRY_AI_API_KEY:}
+    keychain-service: ${CODESENTRY_AI_KEYCHAIN_SERVICE:CodeSentry-DeepSeek}
+    keychain-account: ${CODESENTRY_AI_KEYCHAIN_ACCOUNT:${user.name}}
     thinking-mode: ${CODESENTRY_AI_THINKING_MODE:}
     connect-timeout-seconds: ${CODESENTRY_AI_CONNECT_TIMEOUT_SECONDS:10}
     read-timeout-seconds: ${CODESENTRY_AI_READ_TIMEOUT_SECONDS:90}
