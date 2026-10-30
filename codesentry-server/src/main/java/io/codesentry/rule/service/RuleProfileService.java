@@ -22,6 +22,11 @@ public class RuleProfileService {
     public static final String COMMUNITY_GENERAL = "COMMUNITY_GENERAL";
     public static final String LOCAL_OWASP = "LOCAL_OWASP";
     public static final String COMPREHENSIVE = "COMPREHENSIVE";
+    private static final List<String> JSP_RULES = Arrays.asList(
+            "JSP 路径穿越 · CWE-22",
+            "JSP 命令执行 · CWE-78",
+            "JSP 开放重定向 · CWE-601"
+    );
 
     private final CodeSentryProperties properties;
 
@@ -32,17 +37,20 @@ public class RuleProfileService {
     public List<RuleProfileView> list() {
         return Arrays.asList(
                 new RuleProfileView(LOCAL_OWASP, "本地 OWASP / CWE 基线",
-                        "CodeSentry 内置并随产品发布，断网也能执行，覆盖常见注入、弱加密、危险执行和前端脚本风险。",
-                        Arrays.asList("OWASP Top 10", "CWE", "CERT Java"),
-                        Arrays.asList("Semgrep", "Gitleaks", "Trivy Secret"), true),
+                        "CodeSentry 内置并随产品发布，断网也能执行，覆盖 JSP、Java、JavaScript 的常见注入、弱加密和危险执行风险。",
+                        Arrays.asList("OWASP Top 10", "CWE", "CERT Java", "Alibaba Java Coding Guidelines"),
+                        Arrays.asList("Semgrep", "Gitleaks", "Trivy 漏洞/密钥", "SpotBugs/FindSecBugs", "Alibaba P3C"),
+                        JSP_RULES, true),
                 new RuleProfileView(COMMUNITY_GENERAL, "Semgrep 社区通用规则",
                         "使用 Semgrep auto 根据仓库语言匹配社区规则，首次使用可能需要访问规则仓库。",
-                        Arrays.asList("Semgrep Registry", "OWASP", "CWE"),
-                        Arrays.asList("Semgrep", "Gitleaks", "Trivy Secret"), false),
+                        Arrays.asList("Semgrep Registry", "OWASP", "CWE", "Alibaba Java Coding Guidelines"),
+                        Arrays.asList("Semgrep", "Gitleaks", "Trivy 漏洞/密钥", "SpotBugs/FindSecBugs", "Alibaba P3C"),
+                        Collections.emptyList(), false),
                 new RuleProfileView(COMPREHENSIVE, "综合深度审计",
                         "同时执行本地基线和 Semgrep 社区规则，覆盖面更大，扫描时间也更长。",
-                        Arrays.asList("OWASP Top 10", "CWE", "CERT", "Semgrep Registry"),
-                        Arrays.asList("Semgrep", "Gitleaks", "Trivy Secret"), false)
+                        Arrays.asList("OWASP Top 10", "CWE", "CERT", "Semgrep Registry", "Alibaba Java Coding Guidelines"),
+                        Arrays.asList("Semgrep", "Gitleaks", "Trivy 漏洞/密钥", "SpotBugs/FindSecBugs", "Alibaba P3C"),
+                        JSP_RULES, false)
         );
     }
 

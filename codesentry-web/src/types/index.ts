@@ -96,6 +96,14 @@ export interface FindingView {
   expiresAt?: string
 }
 
+export interface BatchTriageResult {
+  requested: number
+  matched: number
+  unmatched: number
+  matchedFindingIds: number[]
+  unmatchedSelectors: string[]
+}
+
 export interface AiReviewRecord {
   id: number
   findingId: number
@@ -157,6 +165,8 @@ export interface AiReviewConfiguration {
   enabled: boolean
   provider: string
   model?: string
+  baseUrl?: string
+  apiKeyConfigured: boolean
 }
 
 export interface RuleProfile {
@@ -165,6 +175,7 @@ export interface RuleProfile {
   description: string
   standards: string[]
   scanners: string[]
+  rules: string[]
   offlineReady: boolean
 }
 

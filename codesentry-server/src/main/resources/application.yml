@@ -43,6 +43,41 @@ codesentry:
   scanning:
     worker-count: 2
     task-timeout-minutes: 30
+    excluded-globs:
+      - "**/*.bmp"
+      - "**/*.cab"
+      - "**/*.doc"
+      - "**/*.docx"
+      - "**/*.eot"
+      - "**/*.gif"
+      - "**/*.ico"
+      - "**/*.jpeg"
+      - "**/*.jpg"
+      - "**/*.map"
+      - "**/*.mov"
+      - "**/*.mp3"
+      - "**/*.mp4"
+      - "**/*.otf"
+      - "**/*.pdf"
+      - "**/*.png"
+      - "**/*.sdoc"
+      - "**/*.svg"
+      - "**/*.swp"
+      - "**/*.swo"
+      - "**/*.tar"
+      - "**/*.ttf"
+      - "**/*.wav"
+      - "**/*.wmv"
+      - "**/*.woff"
+      - "**/*.woff2"
+      - "**/*.xls"
+      - "**/*.xlsx"
+      - "**/*.zip"
+      - "**/*.min.js"
+      - "**/jquery*.js"
+      - "**/bootstrap*.js"
+      - "**/echarts*.js"
+      - "**/amcharts/**"
   scanners:
     semgrep:
       enabled: ${CODESENTRY_SEMGREP_ENABLED:true}
@@ -54,9 +89,21 @@ codesentry:
     trivy:
       enabled: ${CODESENTRY_TRIVY_ENABLED:true}
       executable: ${CODESENTRY_TRIVY_EXECUTABLE:trivy}
-      config: ${CODESENTRY_TRIVY_SCANNERS:secret}
+      config: ${CODESENTRY_TRIVY_SCANNERS:vuln,secret}
       timeout-seconds: ${CODESENTRY_TRIVY_TIMEOUT_SECONDS:180}
       offline-scan: ${CODESENTRY_TRIVY_OFFLINE_SCAN:true}
+    spotbugs:
+      enabled: ${CODESENTRY_SPOTBUGS_ENABLED:true}
+      executable: ${CODESENTRY_SPOTBUGS_EXECUTABLE:spotbugs}
+      config: ${CODESENTRY_FINDSECBUGS_PLUGIN:${user.home}/.codesentry/tools/findsecbugs-plugin-1.14.0.jar}
+      include: ${CODESENTRY_SPOTBUGS_INCLUDE:com.srtech.*,com.lyq.*,PoiXlsJz.*}
+      timeout-seconds: ${CODESENTRY_SPOTBUGS_TIMEOUT_SECONDS:600}
+    p3c:
+      enabled: ${CODESENTRY_P3C_ENABLED:true}
+      executable: ${CODESENTRY_JAVA_EXECUTABLE:java}
+      config: ${CODESENTRY_P3C_JAR:${user.home}/.codesentry/tools/p3c-pmd-2.1.1-jar-with-dependencies.jar}
+      include: ${CODESENTRY_P3C_JAVA_VERSION:1.8}
+      timeout-seconds: ${CODESENTRY_P3C_TIMEOUT_SECONDS:600}
   ai:
     enabled: ${CODESENTRY_AI_ENABLED:false}
     base-url: ${CODESENTRY_AI_BASE_URL:}

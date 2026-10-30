@@ -5,6 +5,7 @@ import io.codesentry.ai.dto.AiReviewDecision;
 import io.codesentry.ai.dto.AiReviewConfigurationView;
 import io.codesentry.ai.dto.AiReviewEvidence;
 import io.codesentry.ai.dto.AiReviewSummary;
+import io.codesentry.ai.dto.AiReviewConfigurationRequest;
 import io.codesentry.ai.mapper.AiReviewMapper;
 import io.codesentry.ai.model.AiReviewJob;
 import io.codesentry.ai.model.AiReviewRecord;
@@ -294,8 +295,41 @@ public class AiReviewService {
     }
 
     public AiReviewConfigurationView configuration() {
+        return configurationView();
+    }
+
+    public synchronized AiReviewConfigurationView configure(AiReviewConfigurationRequest request) {
+        String baseUrl = trim(request.getBaseUrl());
+        String model = trim(request.getModel());
+        String apiKey = trim(request.getApiKey());
+        if (request.isEnabled()) {
+            if (!org.springframework.util.StringUtils.hasText(baseUrl)
+                    || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "请输入有效的工具服务地址");
+            }
+            if (!org.springframework.util.StringUtils.hasText(model)) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "请输入工具模型名称");
+            }
+            if (!org.springframework.util.StringUtils.hasText(apiKey)
+                    && !org.springframework.util.StringUtils.hasText(properties.getAi().getApiKey())) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "请输入 API Key");
+            }
+        }
+        properties.getAi().setBaseUrl(baseUrl);
+        properties.getAi().setModel(model);
+        if (org.springframework.util.StringUtils.hasText(apiKey)) properties.getAi().setApiKey(apiKey);
+        properties.getAi().setEnabled(request.isEnabled());
+        return configurationView();
+    }
+
+    private AiReviewConfigurationView configurationView() {
         return new AiReviewConfigurationView(properties.getAi().isEnabled(), provider.providerName(),
-                properties.getAi().isEnabled() ? provider.modelName() : null);
+                properties.getAi().getModel(), properties.getAi().getBaseUrl(),
+                org.springframework.util.StringUtils.hasText(properties.getAi().getApiKey()));
+    }
+
+    private String trim(String value) {
+        return value == null ? null : value.trim();
     }
 
     private AiReviewSummary latestSummary(List<AiReviewRecord> records) {

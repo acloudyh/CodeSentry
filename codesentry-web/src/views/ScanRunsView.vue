@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/codesentry'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -7,6 +7,9 @@ import type { ScanProject, ScanRun } from '@/types'
 
 const runs = ref<ScanRun[]>([])
 const projects = ref<ScanProject[]>([])
+const page = ref(1)
+const pageSize = ref(20)
+const pageSizes = [20, 50, 100, 500]
 const error = ref('')
 const stopping = ref<number | null>(null)
 let loadSequence = 0
@@ -32,12 +35,17 @@ async function load() {
   if (stopping.value !== null) return
   const sequence = ++loadSequence
   try {
-    const [allRuns, allProjects] = await Promise.all([api.scanRuns(100), api.projects()])
+    const [allRuns, allProjects] = await Promise.all([api.scanRuns(500), api.projects()])
     if (sequence !== loadSequence) return
     runs.value = allRuns; projects.value = allProjects
   }
   catch (reason) { error.value = reason instanceof Error ? reason.message : '扫描记录加载失败' }
 }
+
+const totalPages = computed(() => Math.max(1, Math.ceil(runs.value.length / pageSize.value)))
+const pagedRuns = computed(() => runs.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch(pageSize, () => { page.value = 1 })
+watch(totalPages, (maximum) => { if (page.value > maximum) page.value = maximum })
 
 onMounted(() => { load(); timer = window.setInterval(load, 5000) })
 onBeforeUnmount(() => timer && window.clearInterval(timer))
@@ -52,7 +60,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
         <table class="data-table">
           <thead><tr><th>任务</th><th>项目</th><th>模式 / 工作区</th><th>分支 → 基线</th><th>结果统计</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
           <tbody>
-            <tr v-for="run in runs" :key="run.id">
+            <tr v-for="run in pagedRuns" :key="run.id">
               <td><strong>#{{ String(run.id).padStart(5,'0') }}</strong><div v-if="run.repositoryDirty" class="danger-text" style="font-size:10px;margin-top:5px">含未提交内容</div></td>
               <td>{{ projectName(run.projectId) }}</td>
               <td><span>{{ modeLabel(run) }}</span><div class="muted" style="margin-top:4px">{{ workspaceLabel(run) }}</div></td>
@@ -65,6 +73,14 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
           </tbody>
         </table>
       </div>
+      <footer v-if="runs.length" class="table-pager">
+        <span>第 {{ page }} / {{ totalPages }} 页，共 {{ runs.length }} 个扫描批次</span>
+        <div class="pager-controls">
+          <label class="pager-field">每页<select v-model.number="pageSize" class="pager-select" aria-label="扫描列表每页条数"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} 条</option></select></label>
+          <label class="pager-field">跳至<select v-model.number="page" class="pager-select" aria-label="扫描列表选择页数"><option v-for="number in totalPages" :key="number" :value="number">第 {{ number }} 页</option></select></label>
+          <div class="pager-buttons"><button class="button secondary compact" :disabled="page <= 1" @click="page--">上一页</button><button class="button secondary compact" :disabled="page >= totalPages" @click="page++">下一页</button></div>
+        </div>
+      </footer>
       <EmptyState v-else title="尚无扫描记录" description="选择一个代码仓库，执行全量基线扫描或基于分支的增量扫描。" action="发起第一轮扫描" to="/scans/new" />
     </section>
   </div>

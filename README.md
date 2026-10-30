@@ -7,7 +7,7 @@ CodeSentry 是一个本地化代码审查产品。它读取已有本地 Git 仓�
 - 后端：JDK 11、Spring Boot、MyBatis、Flyway
 - 前端：Vue 3、TypeScript、Vite、Pinia、Vue Router
 - 数据库：MySQL 5.7+
-- 扫描引擎：Semgrep、Gitleaks、Trivy，以及可扩展的 Java 扫描器适配器
+- 扫描引擎：Semgrep、Gitleaks、Trivy、SpotBugs/FindSecBugs、Alibaba P3C-PMD，以及可扩展的扫描器适配器
 
 ## 项目结构
 
@@ -65,6 +65,32 @@ npm run dev
 ```
 
 前端默认监听 `http://127.0.0.1:5173`。
+
+## 扫描工具准备
+
+- Semgrep 用于 Java、JavaScript 和 JSP 专项规则扫描。
+- Gitleaks 用于源码、配置和证书目录中的敏感信息检测。
+- Trivy 默认执行 `vuln,secret`，离线运行前必须预先准备漏洞库和 Java 索引库。
+- SpotBugs/FindSecBugs 用于没有 Java 源码的私有 JAR 字节码扫描。
+- Alibaba P3C-PMD 2.1.1 使用官方 49 条 Java 开发规范规则扫描 `.java` 源码；纯 JSP 项目不会产生 P3C 结果。
+
+```bash
+# SpotBugs 可执行文件应在 PATH 中；FindSecBugs 插件通过环境变量指定
+export CODESENTRY_FINDSECBUGS_PLUGIN=/path/to/findsecbugs-plugin.jar
+
+# 下载官方 P3C-PMD 完整包；生产环境应同时按 Maven Central 提供的摘要校验文件完整性
+mkdir -p "$HOME/.codesentry/tools"
+curl -fL https://repo1.maven.org/maven2/com/alibaba/p3c/p3c-pmd/2.1.1/p3c-pmd-2.1.1-jar-with-dependencies.jar \
+  -o "$HOME/.codesentry/tools/p3c-pmd-2.1.1-jar-with-dependencies.jar"
+
+# 内网无法访问默认镜像时，可从公共 ECR 预下载后再离线扫描
+trivy filesystem --db-repository public.ecr.aws/aquasecurity/trivy-db:2 \
+  --download-db-only --no-progress
+trivy filesystem --java-db-repository public.ecr.aws/aquasecurity/trivy-java-db:1 \
+  --download-java-db-only --no-progress
+```
+
+图片、视频、字体、Office 模板和压缩包默认不进入源码规则扫描；JSP、JavaScript、配置文件、标准 JAR 及历史遗留的 `.jar15/.jar37` 等归档仍会进入对应扫描器。
 
 ## 仓库扫描约束
 

@@ -15,26 +15,29 @@ class AiReviewEvidenceBuilderTest {
             new CodeSentryProperties(), new ObjectMapper());
 
     @Test
-    void secretFindingIncludesRealSourceAndUsesRepositoryRelativePath() {
+    void secretFindingRedactsSourceBeforeExternalReviewAndUsesRepositoryRelativePath() {
         FindingView finding = finding("Gitleaks", "generic-api-key",
                 "/Users/test/.codesentry/snapshots/7/current/project/src/config.properties",
                 "api_key=very-secret-value");
 
         AiReviewEvidence evidence = builder.build(finding);
 
-        assertEquals("api_key=very-secret-value", evidence.getCodeSnippet());
+        assertEquals("api_key=<REDACTED>", evidence.getCodeSnippet());
         assertEquals("project/src/config.properties", evidence.getFilePath());
-        assertTrue(builder.serialize(evidence).contains("very-secret-value"));
+        assertFalse(builder.serialize(evidence).contains("very-secret-value"));
     }
 
     @Test
-    void codeFindingKeepsOriginalSourceForReview() {
+    void codeFindingRedactsCredentialPatternsButKeepsSurroundingSource() {
         FindingView finding = finding("Semgrep", "command-execution", "src/App.java",
                 "Authorization: Bearer abc.def\npassword=hunter2\nhttps://x.test?a=1&token=sensitive");
 
         String snippet = builder.build(finding).getCodeSnippet();
 
-        assertEquals(finding.getCodeSnippet(), snippet);
+        assertTrue(snippet.contains("Authorization: Bearer <REDACTED>"));
+        assertTrue(snippet.contains("password=<REDACTED>"));
+        assertTrue(snippet.contains("token=<REDACTED>"));
+        assertFalse(snippet.contains("hunter2"));
     }
 
     private FindingView finding(String scanner, String ruleId, String path, String snippet) {

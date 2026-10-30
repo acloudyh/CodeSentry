@@ -4,6 +4,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 @ConfigurationProperties(prefix = "codesentry")
 public class CodeSentryProperties {
@@ -101,6 +104,15 @@ public class CodeSentryProperties {
     public static class Scanning {
         private int workerCount = 2;
         private long taskTimeoutMinutes = 30;
+        private List<String> excludedGlobs = new ArrayList<>(Arrays.asList(
+                "**/*.bmp", "**/*.cab", "**/*.doc", "**/*.docx", "**/*.eot",
+                "**/*.gif", "**/*.ico", "**/*.jpeg", "**/*.jpg", "**/*.map",
+                "**/*.mov", "**/*.mp3", "**/*.mp4", "**/*.otf", "**/*.pdf",
+                "**/*.png", "**/*.sdoc", "**/*.svg", "**/*.swp", "**/*.swo",
+                "**/*.tar", "**/*.ttf", "**/*.wav", "**/*.wmv", "**/*.woff",
+                "**/*.woff2", "**/*.xls", "**/*.xlsx", "**/*.zip", "**/*.min.js",
+                "**/jquery*.js", "**/bootstrap*.js", "**/echarts*.js", "**/amcharts/**"
+        ));
 
         public int getWorkerCount() {
             return workerCount;
@@ -117,12 +129,22 @@ public class CodeSentryProperties {
         public void setTaskTimeoutMinutes(long taskTimeoutMinutes) {
             this.taskTimeoutMinutes = taskTimeoutMinutes;
         }
+
+        public List<String> getExcludedGlobs() {
+            return excludedGlobs;
+        }
+
+        public void setExcludedGlobs(List<String> excludedGlobs) {
+            this.excludedGlobs = excludedGlobs == null ? new ArrayList<>() : new ArrayList<>(excludedGlobs);
+        }
     }
 
     public static class Scanners {
         private final Tool semgrep = new Tool("semgrep", true);
         private final Tool gitleaks = new Tool("gitleaks", true);
         private final Tool trivy = new Tool("trivy", true);
+        private final Tool spotbugs = new Tool("spotbugs", true);
+        private final Tool p3c = new Tool("java", true);
 
         public Tool getSemgrep() {
             return semgrep;
@@ -135,12 +157,21 @@ public class CodeSentryProperties {
         public Tool getTrivy() {
             return trivy;
         }
+
+        public Tool getSpotbugs() {
+            return spotbugs;
+        }
+
+        public Tool getP3c() {
+            return p3c;
+        }
     }
 
     public static class Tool {
         private String executable;
         private boolean enabled;
         private String config;
+        private String include;
         private int timeoutSeconds = 180;
         private boolean offlineScan = true;
 
@@ -179,6 +210,14 @@ public class CodeSentryProperties {
 
         public void setConfig(String config) {
             this.config = config;
+        }
+
+        public String getInclude() {
+            return include;
+        }
+
+        public void setInclude(String include) {
+            this.include = include;
         }
     }
 

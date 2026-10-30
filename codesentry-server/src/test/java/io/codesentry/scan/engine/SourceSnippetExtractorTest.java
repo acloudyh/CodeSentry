@@ -36,4 +36,16 @@ class SourceSnippetExtractorTest {
             Files.deleteIfExists(outside);
         }
     }
+
+    @Test
+    void oversizedSnippetsKeepBothEndsWithinDatabaseSafeLimit() {
+        String oversized = "begin-" + "x".repeat(20000) + "-end";
+
+        String limited = SourceSnippetExtractor.limit(oversized);
+
+        assertEquals(SourceSnippetExtractor.MAX_SNIPPET_CHARACTERS, limited.length());
+        assertTrue(limited.startsWith("begin-"));
+        assertTrue(limited.endsWith("-end"));
+        assertTrue(limited.contains("代码片段过长"));
+    }
 }

@@ -11,5 +11,9 @@ public interface ScannerAdapter {
     boolean available();
 
     List<NormalizedFinding> scan(ScanContext context);
+
+    default String reportExtension() {
+        return "json";
+    }
 }
 

@@ -2,6 +2,7 @@ package io.codesentry.ai.controller;
 
 import io.codesentry.ai.dto.AiReviewSummary;
 import io.codesentry.ai.dto.AiReviewConfigurationView;
+import io.codesentry.ai.dto.AiReviewConfigurationRequest;
 import io.codesentry.ai.model.AiReviewJob;
 import io.codesentry.ai.model.AiReviewRecord;
 import io.codesentry.ai.service.AiReviewService;
@@ -9,10 +10,13 @@ import io.codesentry.common.api.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import javax.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/ai-reviews")
@@ -29,6 +33,12 @@ public class AiReviewController {
     @GetMapping("/config")
     public ApiResponse<AiReviewConfigurationView> configuration() {
         return ApiResponse.success(service.configuration());
+    }
+
+    @PutMapping("/config")
+    public ApiResponse<AiReviewConfigurationView> configure(
+            @Valid @RequestBody AiReviewConfigurationRequest request) {
+        return ApiResponse.success(service.configure(request));
     }
 
     @PostMapping("/findings/{findingId}")

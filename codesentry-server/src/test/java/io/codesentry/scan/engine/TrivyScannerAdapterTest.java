@@ -11,6 +11,8 @@ import io.codesentry.scan.model.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.util.Map;
 import java.time.Duration;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,7 +37,10 @@ class TrivyScannerAdapterTest {
         when(commands.execute(any(), anyList(), any())).thenReturn(new CommandResult(0, ""));
         assertTrue(adapter().scan(context()).isEmpty());
         verify(commands).execute(eq(temp), argThat(args -> args.contains("--offline-scan")
-                && args.contains("--timeout") && args.contains("180s") && args.contains("secret")), eq(Duration.ofSeconds(195)));
+                && args.contains("rootfs")
+                && args.contains("--skip-db-update") && args.contains("--skip-java-db-update")
+                && args.contains("--timeout") && args.contains("180s") && args.contains("vuln,secret")
+                && args.contains("--skip-files") && args.contains("**/*.png")), eq(Duration.ofSeconds(195)));
     }
     @Test void configurableTimeoutAndOnlineModeAreHonored() {
         properties.getScanners().getTrivy().setTimeoutSeconds(60);
@@ -48,5 +53,17 @@ class TrivyScannerAdapterTest {
         when(commands.execute(any(), anyList(), any())).thenReturn(new CommandResult(1, "semaphore acquire: context deadline exceeded"));
         BusinessException error = assertThrows(BusinessException.class, () -> adapter().scan(context()));
         assertTrue(error.getMessage().contains("180 秒"));
+    }
+    @Test void renamedJarFilesAreCopiedToAStandardJarAlias() throws Exception {
+        Path legacy = temp.resolve("legacy.jar37");
+        Files.writeString(legacy, "archive");
+
+        Map<String, String> aliases = adapter().prepareArchiveAliases(context());
+
+        assertEquals(1, aliases.size());
+        String alias = aliases.keySet().iterator().next();
+        assertTrue(alias.endsWith(".jar"));
+        assertEquals("legacy.jar37", aliases.get(alias));
+        assertTrue(Files.isRegularFile(temp.resolve("trivy-archive-aliases-current").resolve(alias)));
     }
 }

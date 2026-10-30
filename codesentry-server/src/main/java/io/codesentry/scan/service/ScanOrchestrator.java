@@ -250,7 +250,7 @@ public class ScanOrchestrator {
 
     private Path reportPath(ScanContext context, ScannerAdapter adapter) {
         return context.getOutputDirectory()
-                .resolve(adapter.name().toLowerCase() + "-" + context.getLabel() + ".json");
+                .resolve(adapter.name().toLowerCase() + "-" + context.getLabel() + "." + adapter.reportExtension());
     }
 
     private void assignFingerprints(List<NormalizedFinding> findings) {

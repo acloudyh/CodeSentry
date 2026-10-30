@@ -16,18 +16,20 @@ export const ruleProfileLabel = (value?: string) => ({
 export const categoryLabel = (value?: string) => ({
   security: '安全风险', correctness: '代码正确性', maintainability: '可维护性',
   secret: '敏感凭据', secrets: '敏感凭据', vulnerability: '依赖漏洞',
-  misconfiguration: '配置风险',
+  misconfiguration: '配置风险', code_standard: '代码规范',
 } as Record<string, string>)[String(value).toLowerCase()] ?? value ?? '未分类'
 
 export const standardLabel = (value: string) => ({
   'OWASP Top 10': 'OWASP 十大安全风险', OWASP: 'OWASP 安全规范', CWE: 'CWE 常见弱点分类',
   CERT: 'CERT 安全编码规范', 'CERT Java': 'CERT Java 安全编码规范',
   'Semgrep Registry': 'Semgrep 社区规则库',
+  'Alibaba Java Coding Guidelines': '阿里巴巴 Java 开发规范',
 } as Record<string, string>)[value] ?? value
 
 export const scannerLabel = (value: string) => ({
   Semgrep: 'Semgrep（代码规则）', Gitleaks: 'Gitleaks（凭据泄露）',
   Trivy: 'Trivy（配置与密钥）', 'Trivy Secret': 'Trivy（密钥检测）',
+  'Alibaba-P3C': '阿里巴巴 P3C（Java 代码规范）',
 } as Record<string, string>)[value] ?? value
 
 export function findingTitle(item: FindingView) {
@@ -42,7 +44,6 @@ export function findingTitle(item: FindingView) {
   if (rule.includes('detect-non-literal-regexp')) return '动态正则表达式可能导致拒绝服务'
   if (rule.includes('sql-concatenation')) return 'SQL 字符串拼接可能导致注入'
   if (rule.includes('command-execution')) return '系统命令执行需要人工确认输入边界'
-  if (rule.includes('unsafe-innerhtml')) return 'innerHTML 写入可能导致跨站脚本'
   if (rule.includes('javascript.eval')) return '动态代码执行可能导致代码注入'
   return item.title
 }

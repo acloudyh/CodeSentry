@@ -13,6 +13,8 @@ import java.util.List;
 public class ScanToolRunService {
 
     private static final int MAX_LOG_LENGTH = 200_000;
+    private static final int MAX_COMMAND_LENGTH = 2_000;
+    private static final int MAX_WORKING_DIRECTORY_LENGTH = 1_000;
 
     private final ScanToolRunMapper mapper;
 
@@ -81,8 +83,8 @@ public class ScanToolRunService {
             return;
         }
         toolRun.setExitCode(trace.getExitCode());
-        toolRun.setCommandLine(trace.getCommandLine());
-        toolRun.setWorkingDirectory(trace.getWorkingDirectory());
+        toolRun.setCommandLine(limit(trace.getCommandLine(), MAX_COMMAND_LENGTH, " ... [命令过长，已截断]"));
+        toolRun.setWorkingDirectory(limit(trace.getWorkingDirectory(), MAX_WORKING_DIRECTORY_LENGTH, "..."));
         toolRun.setOutputLog(limit(trace.getOutput()));
     }
 
@@ -96,5 +98,11 @@ public class ScanToolRunService {
             return value;
         }
         return value.substring(0, MAX_LOG_LENGTH) + "\n\n[CodeSentry] 日志过长，已截断。";
+    }
+
+    private String limit(String value, int maximum, String suffix) {
+        if (value == null || value.length() <= maximum) return value;
+        int contentLength = Math.max(0, maximum - suffix.length());
+        return value.substring(0, contentLength) + suffix;
     }
 }

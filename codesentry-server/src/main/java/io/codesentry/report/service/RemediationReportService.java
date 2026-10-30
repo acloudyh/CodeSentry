@@ -420,7 +420,6 @@ public class RemediationReportService {
         if (rule.contains("cookie-")) return "会话 Cookie 被明文传输或可被脚本读取时，攻击者可窃取会话。";
         if (rule.contains("insecure-hostname")) return "客户端连接不可信 HTTPS 服务时，可能遭受中间人攻击。";
         if (rule.contains("generic-api-key")) return "仓库访问者可读取配置凭据并尝试访问对应外部服务。";
-        if (rule.contains("unsafe-innerhtml")) return "可控字符串进入浏览器 DOM 且未转义时可能触发 XSS。";
         if (rule.contains("eval")) return "仅当执行内容受外部输入控制时成立。";
         if (rule.contains("tainted-file-path")) return "仅当参数能控制本地文件读取且缺少授权校验时成立；当前调用需核查对象存储权限。";
         if (rule.contains("command-execution")) return "命令或参数受外部输入影响并经 /bin/sh -c 解析时成立。";

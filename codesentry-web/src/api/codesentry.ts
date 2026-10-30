@@ -1,5 +1,5 @@
 import { request } from './http'
-import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
+import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
 
 export interface CreateProjectPayload {
   projectName: string
@@ -26,6 +26,17 @@ export interface TriageFindingPayload {
   expiresAt?: string
 }
 
+export interface BatchTriageFindingPayload extends TriageFindingPayload {
+  selectors: Array<{ findingId: number }>
+}
+
+export interface AiReviewConfigurationPayload {
+  enabled: boolean
+  baseUrl?: string
+  model?: string
+  apiKey?: string
+}
+
 export const api = {
   dashboard: () => request<DashboardSummary>('/api/v1/dashboard/summary'),
   projects: () => request<ScanProject[]>('/api/v1/projects'),
@@ -50,7 +61,13 @@ export const api = {
   triageFinding: (findingId: number, payload: TriageFindingPayload) => request<FindingView>(`/api/v1/findings/${findingId}/triage`, {
     method: 'PUT', body: JSON.stringify(payload),
   }),
+  batchTriageFindings: (runId: number, payload: BatchTriageFindingPayload) => request<BatchTriageResult>(`/api/v1/findings/scan-runs/${runId}/triage/batch`, {
+    method: 'POST', body: JSON.stringify(payload),
+  }),
   aiReviewConfig: () => request<AiReviewConfiguration>('/api/v1/ai-reviews/config'),
+  updateAiReviewConfig: (payload: AiReviewConfigurationPayload) => request<AiReviewConfiguration>('/api/v1/ai-reviews/config', {
+    method: 'PUT', body: JSON.stringify(payload),
+  }),
   aiReviewFinding: (findingId: number) => request<AiReviewSummary>(`/api/v1/ai-reviews/findings/${findingId}`, { method: 'POST' }),
   aiFindingReview: (findingId: number) => request<AiReviewSummary | null>(`/api/v1/ai-reviews/findings/${findingId}`),
   aiReviewRun: (runId: number) => request<AiReviewJob>(`/api/v1/ai-reviews/scan-runs/${runId}`, { method: 'POST' }),

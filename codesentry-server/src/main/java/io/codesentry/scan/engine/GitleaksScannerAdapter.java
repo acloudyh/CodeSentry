@@ -48,8 +48,8 @@ public class GitleaksScannerAdapter extends AbstractCliScannerAdapter {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "无法创建 Gitleaks 报告目录");
         }
 
-        List<String> command = List.of(executable(), "dir", "--redact", "--report-format", "json",
-                "--report-path", report.toString(), context.getWorkspace().toString());
+        List<String> command = List.of(executable(), "dir", "--redact", "--max-target-megabytes", "5",
+                "--report-format", "json", "--report-path", report.toString(), context.getWorkspace().toString());
         CommandResult result = execute(context.getWorkspace(), command,
                 Duration.ofMinutes(properties.getScanning().getTaskTimeoutMinutes()));
         if (result.getExitCode() != 0 && result.getExitCode() != 1) {

@@ -60,6 +60,11 @@ public class SemgrepScannerAdapter extends AbstractCliScannerAdapter {
             command.add("--config");
             command.add(config);
         }
+        for (String excluded : properties.getScanning().getExcludedGlobs()) {
+            command.add("--exclude");
+            command.add(excluded);
+        }
+        command.add("--no-rewrite-rule-ids");
         command.add("--json");
         command.add("--output");
         command.add(report.toString());

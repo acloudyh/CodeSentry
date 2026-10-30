@@ -6,6 +6,9 @@ import io.codesentry.finding.dto.BatchTriageFindingRequest;
 import io.codesentry.finding.dto.BatchTriageResult;
 import io.codesentry.finding.mapper.ScanFindingMapper;
 import io.codesentry.finding.model.FindingView;
+import io.codesentry.finding.model.ScanFinding;
+import io.codesentry.scan.engine.FindingSeverity;
+import io.codesentry.scan.engine.NormalizedFinding;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -15,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.when;
 import java.util.List;
 import java.nio.file.Files;
@@ -24,6 +28,27 @@ class FindingPersistenceServiceTest {
 
     @TempDir
     Path storageRoot;
+
+    @Test
+    void longScannerTitleIsSafelyLimitedBeforePersistence() {
+        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+        NormalizedFinding source = new NormalizedFinding();
+        source.setFingerprint("fp");
+        source.setScanner("Semgrep");
+        source.setRuleId("community.long-title");
+        source.setCategory("security");
+        source.setSeverity(FindingSeverity.MEDIUM);
+        source.setTitle("长".repeat(700));
+        source.setDescription("完整描述保留");
+        source.setFilePath("src/example.jsp");
+
+        new FindingPersistenceService(mapper, new CodeSentryProperties())
+                .save(3L, 30L, source, "NEW");
+
+        verify(mapper).upsert(argThat((ScanFinding finding) -> finding.getTitle().length() == 512
+                && finding.getTitle().endsWith("…")
+                && "完整描述保留".equals(finding.getDescription())));
+    }
 
     @Test
     void triagePersistsManualConclusionAndReturnsLatestView() {
@@ -132,6 +157,30 @@ class FindingPersistenceServiceTest {
         FindingView result = service.findByRunId(11L).get(0);
 
         assertTrue(result.getCodeSnippet().contains("real.value=local-evidence"));
+        org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
+    }
+
+    @Test
+    void restoresRelativeSecretPathFromTheRunSnapshot() throws Exception {
+        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+        CodeSentryProperties properties = new CodeSentryProperties();
+        properties.getStorage().setRoot(storageRoot.toString());
+        Path source = storageRoot.resolve("snapshots/12/current/https/service.key");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, "-----BEGIN TEST KEY-----\nlocal-only-value\n-----END TEST KEY-----\n");
+        FindingView finding = new FindingView();
+        finding.setId(42L);
+        finding.setScanRunId(12L);
+        finding.setScanner("Trivy");
+        finding.setFilePath("https/service.key");
+        finding.setStartLine(1);
+        finding.setEndLine(2);
+        finding.setCodeSnippet("[REDACTED]");
+        when(mapper.findByRunId(12L)).thenReturn(List.of(finding));
+
+        FindingView result = new FindingPersistenceService(mapper, properties).findByRunId(12L).get(0);
+
+        assertTrue(result.getCodeSnippet().contains("local-only-value"));
         org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
     }
 }

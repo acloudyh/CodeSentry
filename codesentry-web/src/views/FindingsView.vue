@@ -4,10 +4,12 @@ import { api } from '@/api/codesentry'
 import { categoryLabel, findingTitle, scannerLabel, statusLabel } from '@/utils/labels'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, FindingView, ScanRun, TriageStatus } from '@/types'
+import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, FindingView, ScanProject, ScanRun, TriageStatus } from '@/types'
 
 const findings = ref<FindingView[]>([])
 const runs = ref<ScanRun[]>([])
+const projects = ref<ScanProject[]>([])
+const selectedProjectId = ref<number | null>(null)
 const selectedRunId = ref<number | null>(null)
 const severity = ref('ALL')
 const state = ref('ALL')
@@ -15,11 +17,16 @@ const keyword = ref('')
 const error = ref('')
 const loading = ref(false)
 const page = ref(1)
-const pageSize = 25
+const pageSize = ref(20)
+const pageSizes = [20, 50, 100, 500]
 const selected = ref<FindingView | null>(null)
 const snippetFinding = ref<FindingView | null>(null)
 const saving = ref(false)
-const aiConfig = ref<AiReviewConfiguration>({ enabled: false, provider: 'OPENAI_COMPATIBLE' })
+const selectedFindingIds = ref<number[]>([])
+const batchReviewOpen = ref(false)
+const batchReviewSaving = ref(false)
+const batchReviewResult = ref('')
+const aiConfig = ref<AiReviewConfiguration>({ enabled: false, provider: 'OPENAI_COMPATIBLE', apiKeyConfigured: false })
 const aiReviews = ref<Record<number, AiReviewSummary>>({})
 const aiReviewingId = ref<number | null>(null)
 const aiJob = ref<AiReviewJob | null>(null)
@@ -43,8 +50,12 @@ const aiJobRecords = ref<AiReviewRecord[]>([])
 const aiExecutionFindings = ref<FindingView[]>([])
 let aiPollTimer: number | undefined
 const review = reactive({ triageStatus: 'CONFIRMED' as TriageStatus, comment: '', reviewer: '本地复核人', expiresAt: '' })
+const batchReview = reactive({ triageStatus: 'CONFIRMED' as TriageStatus, comment: '', reviewer: '本地复核人', expiresAt: '' })
 
 const isRedacted = (item: FindingView) => item.codeSnippet?.trim() === '[REDACTED]'
+const projectRuns = computed(() => selectedProjectId.value === null
+  ? runs.value : runs.value.filter((item) => item.projectId === selectedProjectId.value))
+const selectedProject = computed(() => projects.value.find((item) => item.id === selectedProjectId.value))
 const selectedRun = computed(() => runs.value.find((item) => item.id === selectedRunId.value))
 const batchNewCount = computed(() => findings.value.filter((item) => item.resultStatus === 'NEW' || item.resultStatus === 'REOPENED').length)
 const batchFixedCount = computed(() => findings.value.filter((item) => item.resultStatus === 'FIXED').length)
@@ -175,10 +186,65 @@ const filtered = computed(() => findings.value.filter((item) => {
     && (state.value === 'ALL' || item.resultStatus === state.value)
     && (!keyword.value || text.includes(keyword.value.toLowerCase()))
 }))
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize)))
-const pagedFindings = computed(() => filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize))
-watch([severity, state, keyword, selectedRunId], () => { page.value = 1 })
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
+const pagedFindings = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const pageFindingIds = computed(() => pagedFindings.value.map((item) => item.id))
+const allPageSelected = computed(() => pageFindingIds.value.length > 0
+  && pageFindingIds.value.every((id) => selectedFindingIds.value.includes(id)))
+
+function toggleFindingSelection(id: number) {
+  selectedFindingIds.value = selectedFindingIds.value.includes(id)
+    ? selectedFindingIds.value.filter((item) => item !== id)
+    : [...selectedFindingIds.value, id]
+}
+
+function togglePageSelection() {
+  if (allPageSelected.value) {
+    selectedFindingIds.value = selectedFindingIds.value.filter((id) => !pageFindingIds.value.includes(id))
+  } else {
+    selectedFindingIds.value = [...new Set([...selectedFindingIds.value, ...pageFindingIds.value])]
+  }
+}
+
+function openBatchReview() {
+  if (!selectedFindingIds.value.length) return
+  batchReview.triageStatus = 'CONFIRMED'
+  batchReview.comment = ''
+  batchReview.reviewer = localStorage.getItem('codesentry-reviewer') ?? '本地复核人'
+  batchReview.expiresAt = ''
+  batchReviewResult.value = ''
+  batchReviewOpen.value = true
+}
+
+async function saveBatchReview() {
+  if (!selectedRunId.value || !selectedFindingIds.value.length) return
+  batchReviewSaving.value = true; error.value = ''; batchReviewResult.value = ''
+  try {
+    const result = await api.batchTriageFindings(selectedRunId.value, {
+      ...batchReview,
+      expiresAt: batchReview.expiresAt || undefined,
+      selectors: selectedFindingIds.value.slice(0, 500).map((findingId) => ({ findingId })),
+    })
+    localStorage.setItem('codesentry-reviewer', batchReview.reviewer)
+    findings.value = await api.runFindings(selectedRunId.value)
+    batchReviewResult.value = `已完成 ${result.matched} 条人工复核${result.unmatched ? `，${result.unmatched} 条未匹配` : ''}`
+    selectedFindingIds.value = []
+    window.setTimeout(() => { batchReviewOpen.value = false; batchReviewResult.value = '' }, 900)
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : '批量人工复核失败' }
+  finally { batchReviewSaving.value = false }
+}
+
+watch([severity, state, keyword, selectedRunId, selectedProjectId], () => { page.value = 1 })
+watch(pageSize, () => { page.value = 1 })
+watch(totalPages, (maximum) => { if (page.value > maximum) page.value = maximum })
+watch(selectedProjectId, () => {
+  if (!projectRuns.value.some((item) => item.id === selectedRunId.value)) {
+    selectedRunId.value = projectRuns.value[0]?.id ?? null
+  }
+})
 watch(selectedRunId, async (runId) => {
+  selectedFindingIds.value = []
+  batchReviewOpen.value = false
   if (aiPollTimer) { window.clearTimeout(aiPollTimer); aiPollTimer = undefined }
   aiDetailsOpen.value = false
   aiJobRecords.value = []
@@ -198,10 +264,12 @@ watch(selectedRunId, async (runId) => {
 
 onMounted(async () => {
   try {
-    const [allRuns, config] = await Promise.all([api.scanRuns(200), api.aiReviewConfig()])
+    const [allRuns, allProjects, config] = await Promise.all([api.scanRuns(200), api.projects(), api.aiReviewConfig()])
     runs.value = allRuns
+    projects.value = allProjects
     aiConfig.value = config
-    selectedRunId.value = runs.value[0]?.id ?? null
+    selectedProjectId.value = runs.value[0]?.projectId ?? projects.value[0]?.id ?? null
+    selectedRunId.value = projectRuns.value[0]?.id ?? null
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '扫描批次加载失败' }
 })
 onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
@@ -213,7 +281,8 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
     <div v-if="error" class="error-banner">{{ error }}</div>
     <section class="panel panel-pad">
       <div class="form-grid filter-grid finding-filter-grid">
-        <div class="field"><label>扫描批次</label><select v-model.number="selectedRunId" class="select" :disabled="!runs.length"><option v-for="run in runs" :key="run.id" :value="run.id">{{ runOptionLabel(run) }}</option></select><small>默认展示最近一次扫描，可切换查询任意历史批次。</small></div>
+        <div class="field"><label>项目</label><select v-model.number="selectedProjectId" class="select" :disabled="!projects.length"><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.projectName }}</option></select><small>先选择项目，再查看该项目的扫描批次。</small></div>
+        <div class="field"><label>扫描批次</label><select v-model.number="selectedRunId" class="select" :disabled="!projectRuns.length"><option v-for="run in projectRuns" :key="run.id" :value="run.id">{{ runOptionLabel(run) }}</option></select><small>{{ selectedProject?.projectName ?? '当前项目' }}共有 {{ projectRuns.length }} 个批次。</small></div>
         <div class="field"><label>检索问题或文件</label><input v-model="keyword" class="input" placeholder="输入规则、标题或文件路径" /></div>
         <div class="field"><label>风险等级</label><select v-model="severity" class="select"><option value="ALL">全部等级</option><option v-for="item in ['CRITICAL','HIGH','MEDIUM','LOW','INFO']" :key="item" :value="item">{{ statusLabel(item) }}</option></select></div>
         <div class="field"><label>变化状态</label><select v-model="state" class="select"><option value="ALL">全部状态</option><option v-for="item in ['NEW','EXISTING','FIXED','REOPENED']" :key="item" :value="item">{{ statusLabel(item) }}</option></select></div>
@@ -226,15 +295,20 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       </div>
     </section>
     <section class="panel">
+      <div v-if="!loading && filtered.length" class="batch-review-toolbar">
+        <div class="batch-review-selection"><label><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /><span>选择当前页</span></label><strong>{{ selectedFindingIds.length }} 条已选</strong><button v-if="selectedFindingIds.length" type="button" class="text-button" @click="selectedFindingIds = []">清空</button></div>
+        <div><span>可对当前批次选中的问题统一填写人工结论</span><button class="button primary compact" :disabled="!selectedFindingIds.length" @click="openBatchReview">批量人工复核</button></div>
+      </div>
       <div v-if="loading" class="empty-state compact-empty"><h3>正在加载扫描批次</h3><p>正在读取 {{ selectedRunId ? batchNumber(selectedRunId) : '' }} 的问题明细。</p></div>
       <div v-else-if="filtered.length" class="table-scroll findings-table">
         <table class="data-table">
-          <thead><tr><th>扫描批次</th><th>等级</th><th>问题</th><th>位置</th><th>扫描器 / 规则</th><th>变化</th><th>工具建议</th><th>人工结论</th><th>操作</th></tr></thead>
+          <thead><tr><th class="selection-column"><input type="checkbox" aria-label="选择当前页全部问题" :checked="allPageSelected" @change="togglePageSelection" /></th><th>扫描批次</th><th>等级</th><th>问题</th><th>位置</th><th>扫描器 / 规则</th><th>变化</th><th>工具建议</th><th>人工结论</th><th>操作</th></tr></thead>
           <tbody>
-            <tr v-for="item in pagedFindings" :key="`${item.scanRunId}-${item.id}`">
+            <tr v-for="item in pagedFindings" :key="`${item.scanRunId}-${item.id}`" :class="{ 'is-selected': selectedFindingIds.includes(item.id) }">
+              <td class="selection-column"><input type="checkbox" :aria-label="`选择问题 ${findingTitle(item)}`" :checked="selectedFindingIds.includes(item.id)" @change="toggleFindingSelection(item.id)" /></td>
               <td><RouterLink :to="`/scans/${item.scanRunId}`" class="batch-link">{{ batchNumber(item.scanRunId) }}</RouterLink></td>
               <td><StatusBadge :value="item.severity" /></td>
-              <td><strong>{{ findingTitle(item) }}</strong><div v-if="findingTitle(item) !== item.title" class="muted finding-original" :title="item.title">原始描述：{{ item.title }}</div><div class="finding-tags"><span>{{ categoryLabel(item.category) }}</span><span v-if="item.cwe">弱点编号 {{ item.cwe }}</span></div><button v-if="item.codeSnippet" type="button" class="snippet-trigger" @click="snippetFinding = item"><span>{{ isRedacted(item) ? '◈' : '⌁' }}</span> {{ isRedacted(item) ? '查看脱敏说明' : '查看代码片段' }}</button></td>
+              <td><strong>{{ findingTitle(item) }}</strong><div v-if="findingTitle(item) !== item.title" class="muted finding-original" :title="item.title">原始描述：{{ item.title }}</div><div class="finding-tags"><span>{{ categoryLabel(item.category) }}</span><span v-if="item.cwe">弱点编号 {{ item.cwe }}</span></div><button v-if="item.codeSnippet" type="button" class="snippet-trigger" @click="snippetFinding = item"><span>{{ isRedacted(item) ? '◈' : '⌁' }}</span> {{ isRedacted(item) ? '查看文件说明' : '查看原始内容' }}</button></td>
               <td><span class="mono">{{ item.filePath }}:{{ item.startLine ?? '-' }}</span></td>
               <td><div>{{ scannerLabel(item.scanner) }}</div><div class="mono" style="margin-top:4px">{{ item.ruleId }}</div></td>
               <td><StatusBadge :value="item.resultStatus" /></td>
@@ -247,7 +321,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       </div>
       <div v-if="!loading && filtered.length" class="finding-card-list">
         <article v-for="item in pagedFindings" :key="`mobile-${item.scanRunId}-${item.id}`" class="finding-card">
-          <header><StatusBadge :value="item.severity" /><StatusBadge :value="item.resultStatus" /></header>
+          <header><label class="mobile-select"><input type="checkbox" :checked="selectedFindingIds.includes(item.id)" @change="toggleFindingSelection(item.id)" />选择</label><StatusBadge :value="item.severity" /><StatusBadge :value="item.resultStatus" /></header>
           <h3>{{ findingTitle(item) }}</h3>
           <p v-if="findingTitle(item) !== item.title" class="muted">{{ item.title }}</p>
           <code>{{ item.filePath }}:{{ item.startLine ?? '-' }}</code>
@@ -257,7 +331,14 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
           <button class="button secondary" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button>
         </article>
       </div>
-      <footer v-if="!loading && filtered.length > pageSize" class="table-pager"><span>第 {{ page }} / {{ totalPages }} 页，共 {{ filtered.length }} 个问题</span><div><button class="button secondary compact" :disabled="page <= 1" @click="page--">上一页</button><button class="button secondary compact" :disabled="page >= totalPages" @click="page++">下一页</button></div></footer>
+      <footer v-if="!loading && filtered.length" class="table-pager">
+        <span>第 {{ page }} / {{ totalPages }} 页，共 {{ filtered.length }} 个问题</span>
+        <div class="pager-controls">
+          <label class="pager-field">每页<select v-model.number="pageSize" class="pager-select" aria-label="问题台账每页条数"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} 条</option></select></label>
+          <label class="pager-field">跳至<select v-model.number="page" class="pager-select" aria-label="问题台账选择页数"><option v-for="number in totalPages" :key="number" :value="number">第 {{ number }} 页</option></select></label>
+          <div class="pager-buttons"><button class="button secondary compact" :disabled="page <= 1" @click="page--">上一页</button><button class="button secondary compact" :disabled="page >= totalPages" @click="page++">下一页</button></div>
+        </div>
+      </footer>
       <EmptyState v-if="!loading && !filtered.length" title="当前批次没有匹配的问题" :description="selectedRun ? `${batchNumber(selectedRun.id)} 没有符合当前筛选条件的问题；若刚完成扫描，请先执行 工具审核或人工复核。` : '尚无可查询的扫描批次。'" />
     </section>
 
@@ -290,6 +371,22 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
     </Teleport>
 
     <Teleport to="body">
+      <div v-if="batchReviewOpen" class="modal-backdrop" @click.self="batchReviewOpen = false">
+        <section class="review-dialog batch-review-dialog" role="dialog" aria-modal="true" aria-label="批量人工复核">
+          <header class="review-head"><div><span class="eyebrow">批量人工复核</span><h2>统一处理 {{ selectedFindingIds.length }} 条问题</h2><p>仅更新当前选中的问题，不删除扫描证据；后续仍可逐条修改。</p></div><button class="icon-button" aria-label="关闭批量人工复核" @click="batchReviewOpen = false">×</button></header>
+          <form class="review-form" @submit.prevent="saveBatchReview">
+            <div class="field"><label for="batch-triage-status">复核结论</label><select id="batch-triage-status" v-model="batchReview.triageStatus" class="select" required><option value="CONFIRMED">确认风险</option><option value="FALSE_POSITIVE">误报</option><option value="ACCEPTED_RISK">接受风险</option><option value="FIXED_PENDING">已整改，等待复扫验证</option></select></div>
+            <div class="field"><label for="batch-triage-reviewer">复核人</label><input id="batch-triage-reviewer" v-model.trim="batchReview.reviewer" class="input" maxlength="128" required /></div>
+            <div class="field span-2"><label for="batch-triage-comment">统一复核说明</label><textarea id="batch-triage-comment" v-model="batchReview.comment" class="textarea" maxlength="2000" placeholder="记录本批问题的统一判断依据、整改建议或风险接受原因"></textarea></div>
+            <div v-if="batchReview.triageStatus === 'ACCEPTED_RISK'" class="field span-2"><label for="batch-triage-expires">风险接受到期时间（可选）</label><input id="batch-triage-expires" v-model="batchReview.expiresAt" type="datetime-local" class="input" /></div>
+            <div v-if="batchReviewResult" class="success-banner span-2">{{ batchReviewResult }}</div>
+            <div class="form-actions span-2"><button type="button" class="button secondary" @click="batchReviewOpen = false">取消</button><button class="button primary" :disabled="batchReviewSaving">{{ batchReviewSaving ? '正在批量保存…' : `保存 ${selectedFindingIds.length} 条复核结论` }}</button></div>
+          </form>
+        </section>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
       <div v-if="selected" class="modal-backdrop" @click.self="selected = null">
         <section class="review-dialog" role="dialog" aria-modal="true" aria-label="人工复核">
           <header class="review-head"><div><span class="eyebrow">人工复核</span><h2>{{ findingTitle(selected) }}</h2></div><button class="icon-button" aria-label="关闭" @click="selected = null">×</button></header>
@@ -298,7 +395,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
             <div><span>风险等级</span><StatusBadge :value="selected.severity" /></div>
             <div><span>扫描规则</span><b>{{ scannerLabel(selected.scanner) }} / {{ selected.ruleId }}</b></div>
             <div><span>代码位置</span><code>{{ selected.filePath }}:{{ selected.startLine ?? '-' }}</code></div>
-            <div v-if="selected.codeSnippet" class="review-code"><span>{{ isRedacted(selected) ? '敏感内容' : '代码片段' }}</span><button type="button" class="snippet-trigger" @click="snippetFinding = selected"><span>{{ isRedacted(selected) ? '◈' : '⌁' }}</span> {{ isRedacted(selected) ? '查看脱敏说明' : '在代码查看器中打开' }}</button></div>
+            <div v-if="selected.codeSnippet" class="review-code"><span>{{ isRedacted(selected) ? '二进制凭据文件' : '代码片段' }}</span><button type="button" class="snippet-trigger" @click="snippetFinding = selected"><span>{{ isRedacted(selected) ? '◈' : '⌁' }}</span> {{ isRedacted(selected) ? '查看文件说明' : '查看原始内容' }}</button></div>
             <div v-if="selected.description"><span>问题说明</span><p>{{ selected.description }}</p></div>
             <div v-if="selected.recommendation"><span>整改建议</span><p>{{ selected.recommendation }}</p></div>
           </div>
@@ -317,7 +414,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       <div v-if="snippetFinding" class="modal-backdrop snippet-backdrop" @click.self="snippetFinding = null">
         <section class="snippet-dialog" role="dialog" aria-modal="true" aria-label="代码片段查看器">
           <header class="snippet-head">
-            <div><span class="eyebrow">{{ isRedacted(snippetFinding) ? '敏感信息保护' : '源码上下文' }}</span><h2>{{ findingTitle(snippetFinding) }}</h2></div>
+            <div><span class="eyebrow">{{ isRedacted(snippetFinding) ? '二进制文件' : '本机原始内容' }}</span><h2>{{ findingTitle(snippetFinding) }}</h2></div>
             <button class="icon-button" aria-label="关闭代码片段" @click="snippetFinding = null">×</button>
           </header>
           <div class="snippet-meta">
@@ -328,12 +425,12 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
           <template v-if="isRedacted(snippetFinding)">
             <div class="redacted-view">
               <div class="redacted-mark"><span>!</span></div>
-              <div class="redacted-copy"><span>历史内容已脱敏</span><h3>敏感内容已脱敏</h3><p>该位置检测到疑似密钥、令牌或其他敏感凭据。为避免在页面、数据库和整改报告中造成二次泄露，CodeSentry 不保存也不展示原始内容。</p></div>
-              <div class="redacted-location"><span>请在本地源文件核查</span><code>{{ snippetFinding.filePath }}:{{ snippetFinding.startLine ?? '-' }}</code><small>确认后请删除硬编码凭据，并及时轮换可能已经暴露的密钥。</small></div>
+              <div class="redacted-copy"><span>无法文本预览</span><h3>二进制凭据文件</h3><p>该文件不是可读文本，不能在代码查看器中直接展示。文本格式的密钥、令牌和配置内容会在问题台账中显示原始行，不再使用脱敏占位符。</p></div>
+              <div class="redacted-location"><span>本地文件位置</span><code>{{ snippetFinding.filePath }}:{{ snippetFinding.startLine ?? '-' }}</code><small>请使用对应证书工具核验；确认暴露后及时移除并轮换凭据。</small></div>
             </div>
           </template>
           <template v-else>
-            <div class="code-viewer-head"><span>代码预览</span><span>保留原始缩进 · 横向滚动查看长代码</span></div>
+            <div class="code-viewer-head"><span>原始内容</span><span>仅在本机页面展示 · 正式报告与工具复核仍会脱敏</span></div>
             <pre class="code-viewer"><code>{{ snippetFinding.codeSnippet }}</code></pre>
           </template>
         </section>

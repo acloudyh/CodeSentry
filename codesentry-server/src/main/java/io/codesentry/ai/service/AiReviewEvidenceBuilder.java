@@ -42,7 +42,7 @@ public class AiReviewEvidenceBuilder {
         evidence.setFilePath(normalizePath(finding.getFilePath()));
         evidence.setStartLine(finding.getStartLine());
         evidence.setEndLine(finding.getEndLine());
-        evidence.setCodeSnippet(limit(finding.getCodeSnippet(),
+        evidence.setCodeSnippet(limit(sanitize(finding.getCodeSnippet()),
                 Math.max(1000, properties.getAi().getMaxContextCharacters())));
         return evidence;
     }

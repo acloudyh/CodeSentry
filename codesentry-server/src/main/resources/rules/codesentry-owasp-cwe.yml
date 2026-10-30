@@ -80,13 +80,51 @@ rules:
     pattern-either:
       - pattern: eval(...)
       - pattern: new Function(...)
-  - id: codesentry.javascript.unsafe-innerhtml
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: 直接写入 innerHTML 可能引入跨站脚本风险。
+  - id: codesentry.jsp.request-to-file
+    languages: [generic]
+    paths:
+      include:
+        - "**/*.jsp"
+        - "**/*.jspx"
+    severity: ERROR
+    message: JSP 请求参数可能参与文件路径或文件流构造，存在路径穿越或任意文件访问风险。
     metadata:
       category: security
-      cwe: CWE-79
+      cwe: CWE-22
+      owasp: A01:2021-Broken Access Control
+      fix: 固定文件根目录，规范化路径后校验仍位于根目录内，并使用文件名白名单。
+    pattern-either:
+      - pattern-regex: '(?is)(?:new\s+(?:File|FileInputStream|FileOutputStream)|ImageIO\.write)\s*\([^;]{0,600}?request\.getParameter\s*\('
+      - pattern-regex: '(?is)(?P<VAR>[A-Za-z_$][A-Za-z0-9_$]*)\s*=[^;\r\n]{0,160}?request\.getParameter\([^)]*\).{0,5000}?(?:new\s+(?:File|FileInputStream|FileOutputStream)|ImageIO\.write)\s*\([^;]{0,500}?(?P=VAR)'
+  - id: codesentry.jsp.request-to-command
+    languages: [generic]
+    paths:
+      include:
+        - "**/*.jsp"
+        - "**/*.jspx"
+    severity: ERROR
+    message: JSP 请求参数可能进入系统命令执行。
+    metadata:
+      category: security
+      cwe: CWE-78
       owasp: A03:2021-Injection
-      fix: 使用 textContent 或经过可信 HTML 净化器处理后再渲染。
-    pattern: $EL.innerHTML = $VALUE
+      fix: 禁止外部输入参与命令构造；确有需要时对命令和参数分别实施严格白名单。
+    pattern-either:
+      - pattern-regex: '(?is)(?:Runtime\.getRuntime\(\)\.exec|new\s+ProcessBuilder)\s*\([^;]{0,600}?request\.getParameter\s*\('
+      - pattern-regex: '(?is)(?P<VAR>[A-Za-z_$][A-Za-z0-9_$]*)\s*=[^;\r\n]{0,160}?request\.getParameter\([^)]*\).{0,5000}?(?:Runtime\.getRuntime\(\)\.exec|new\s+ProcessBuilder)\s*\([^;]{0,500}?(?P=VAR)'
+  - id: codesentry.jsp.request-to-redirect
+    languages: [generic]
+    paths:
+      include:
+        - "**/*.jsp"
+        - "**/*.jspx"
+    severity: WARNING
+    message: JSP 请求参数可能控制跳转地址，存在开放重定向风险。
+    metadata:
+      category: security
+      cwe: CWE-601
+      owasp: A01:2021-Broken Access Control
+      fix: 仅允许跳转到服务端预定义的站内路径，不接受完整外部 URL。
+    pattern-either:
+      - pattern-regex: '(?is)response\.sendRedirect\s*\([^;]{0,600}?request\.getParameter\s*\('
+      - pattern-regex: '(?is)(?P<VAR>[A-Za-z_$][A-Za-z0-9_$]*)\s*=[^;\r\n]{0,160}?request\.getParameter\([^)]*\).{0,5000}?response\.sendRedirect\s*\([^;]{0,500}?(?P=VAR)'

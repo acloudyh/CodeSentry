@@ -7,6 +7,7 @@ import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import javax.validation.constraints.Size;
+import javax.validation.constraints.AssertTrue;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -42,22 +43,22 @@ public class BatchTriageFindingRequest {
     public void setSelectors(List<Selector> selectors) { this.selectors = selectors; }
 
     public static class Selector {
-        @NotBlank
+        private Long findingId;
+
         private String scanner;
 
-        @NotBlank
         private String ruleId;
 
-        @NotBlank
         private String filePath;
 
-        @NotNull
         @Min(1)
         private Integer startLine;
 
         @Min(1)
         private Integer endLine;
 
+        public Long getFindingId() { return findingId; }
+        public void setFindingId(Long findingId) { this.findingId = findingId; }
         public String getScanner() { return scanner; }
         public void setScanner(String scanner) { this.scanner = scanner; }
         public String getRuleId() { return ruleId; }
@@ -69,7 +70,16 @@ public class BatchTriageFindingRequest {
         public Integer getEndLine() { return endLine; }
         public void setEndLine(Integer endLine) { this.endLine = endLine; }
 
+        @AssertTrue(message = "批量复核选择器必须提供问题编号或完整位置")
+        public boolean isValidSelector() {
+            return findingId != null || (hasText(scanner) && hasText(ruleId) && hasText(filePath)
+                    && startLine != null && startLine > 0);
+        }
+
+        private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
+
         public String describe() {
+            if (findingId != null) return "finding#" + findingId;
             return scanner + "/" + ruleId + " @ " + filePath + ":" + startLine
                     + (endLine == null ? "" : "-" + endLine);
         }

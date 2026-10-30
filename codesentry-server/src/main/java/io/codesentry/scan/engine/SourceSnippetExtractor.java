@@ -7,6 +7,9 @@ import java.util.List;
 
 public final class SourceSnippetExtractor {
 
+    static final int MAX_SNIPPET_CHARACTERS = 12000;
+    private static final String TRUNCATION_MARKER = "\n... [代码片段过长，已保留首尾内容] ...\n";
+
     private SourceSnippetExtractor() {
     }
 
@@ -14,7 +17,7 @@ public final class SourceSnippetExtractor {
                                  String fallback) {
         if (allowedRoot == null || filePath == null || filePath.trim().isEmpty()
                 || startLine == null || startLine <= 0) {
-            return fallback;
+            return limit(fallback);
         }
         try {
             Path root = allowedRoot.toAbsolutePath().normalize();
@@ -22,12 +25,12 @@ public final class SourceSnippetExtractor {
             Path sourcePath = (reportedPath.isAbsolute() ? reportedPath : root.resolve(reportedPath))
                     .toAbsolutePath().normalize();
             if (!sourcePath.startsWith(root) || !Files.isRegularFile(sourcePath)) {
-                return fallback;
+                return limit(fallback);
             }
 
             List<String> lines = Files.readAllLines(sourcePath, StandardCharsets.UTF_8);
             if (lines.isEmpty() || startLine > lines.size()) {
-                return fallback;
+                return limit(fallback);
             }
             int safeEndLine = Math.max(startLine,
                     Math.min(endLine == null ? startLine : endLine, lines.size()));
@@ -40,9 +43,17 @@ public final class SourceSnippetExtractor {
                         .append(String.format("%4d | ", lineNumber))
                         .append(lines.get(lineNumber - 1));
             }
-            return snippet.toString();
+            return limit(snippet.toString());
         } catch (Exception ignored) {
-            return fallback;
+            return limit(fallback);
         }
+    }
+
+    static String limit(String value) {
+        if (value == null || value.length() <= MAX_SNIPPET_CHARACTERS) return value;
+        int remaining = MAX_SNIPPET_CHARACTERS - TRUNCATION_MARKER.length();
+        int head = remaining / 2;
+        int tail = remaining - head;
+        return value.substring(0, head) + TRUNCATION_MARKER + value.substring(value.length() - tail);
     }
 }

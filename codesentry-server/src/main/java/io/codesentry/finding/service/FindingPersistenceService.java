@@ -40,7 +40,8 @@ public class FindingPersistenceService {
         finding.setRuleId(source.getRuleId() == null ? "unknown" : source.getRuleId());
         finding.setCategory(source.getCategory());
         finding.setSeverity(source.getSeverity().name());
-        finding.setTitle(source.getTitle() == null ? source.getRuleId() : source.getTitle());
+        String sourceTitle = source.getTitle() == null ? source.getRuleId() : source.getTitle();
+        finding.setTitle(limit(sourceTitle == null ? "unknown" : sourceTitle, 512));
         finding.setDescription(source.getDescription());
         finding.setRecommendation(source.getRecommendation());
         finding.setCwe(source.getCwe());
@@ -103,6 +104,7 @@ public class FindingPersistenceService {
     }
 
     private boolean matches(FindingView finding, BatchTriageFindingRequest.Selector selector) {
+        if (selector.getFindingId() != null) return selector.getFindingId().equals(finding.getId());
         return value(finding.getScanner()).equalsIgnoreCase(value(selector.getScanner()))
                 && value(finding.getRuleId()).equals(value(selector.getRuleId()))
                 && normalizePath(finding.getFilePath()).equals(normalizePath(selector.getFilePath()))
@@ -111,6 +113,11 @@ public class FindingPersistenceService {
     }
 
     private String value(String value) { return value == null ? "" : value.trim(); }
+
+    private String limit(String value, int maximum) {
+        if (value == null || value.length() <= maximum) return value;
+        return value.substring(0, Math.max(0, maximum - 1)) + "…";
+    }
 
     private String normalizePath(String value) {
         return value(value).replace('\\', '/').replaceFirst("^\\./", "");
@@ -129,9 +136,23 @@ public class FindingPersistenceService {
 
     private FindingView enrichSnippet(FindingView finding) {
         if (finding != null) {
-            finding.setCodeSnippet(SourceSnippetExtractor.extract(properties.getStorage().rootPath(),
-                    finding.getFilePath(), finding.getStartLine(), finding.getEndLine(), finding.getCodeSnippet()));
+            String fallback = finding.getCodeSnippet();
+            String snippet = SourceSnippetExtractor.extract(properties.getStorage().rootPath(),
+                    finding.getFilePath(), finding.getStartLine(), finding.getEndLine(), fallback);
+            if (isUnavailable(snippet, fallback) && finding.getScanRunId() != null
+                    && finding.getFilePath() != null && !java.nio.file.Path.of(finding.getFilePath()).isAbsolute()) {
+                java.nio.file.Path snapshot = properties.getStorage().rootPath()
+                        .resolve(properties.getStorage().getSnapshotsDirectory())
+                        .resolve(String.valueOf(finding.getScanRunId())).resolve("current");
+                snippet = SourceSnippetExtractor.extract(snapshot, finding.getFilePath(),
+                        finding.getStartLine(), finding.getEndLine(), fallback);
+            }
+            finding.setCodeSnippet(snippet);
         }
         return finding;
+    }
+
+    private boolean isUnavailable(String snippet, String fallback) {
+        return snippet == null || snippet.equals(fallback) || "[REDACTED]".equals(snippet.trim());
     }
 }

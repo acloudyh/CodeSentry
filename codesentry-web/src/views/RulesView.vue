@@ -26,6 +26,7 @@ onMounted(async () => {
         <h3>{{ profile.name }}</h3><p>{{ profile.description }}</p>
         <div class="rule-block"><b>标准映射</b><div class="tag-row"><span v-for="item in profile.standards" :key="item">{{ standardLabel(item) }}</span></div></div>
         <div class="rule-block"><b>扫描引擎</b><div class="tag-row"><span v-for="item in profile.scanners" :key="item">{{ scannerLabel(item) }}</span></div></div>
+        <div v-if="profile.rules?.length" class="rule-block"><b>内置 JSP 规则</b><div class="tag-row rule-detail-row"><span v-for="item in profile.rules" :key="item">{{ item }}</span></div></div>
         <footer><code>{{ profile.id }}</code><RouterLink :to="{ path: '/scans/new', query: { ruleProfile: profile.id } }">选择此规则集 →</RouterLink></footer>
       </article>
     </section>

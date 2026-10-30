@@ -11,9 +11,15 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Component
 public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
@@ -49,15 +55,39 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
         }
 
         String scanners = properties.getScanners().getTrivy().getConfig();
-        if (scanners == null || scanners.isBlank()) {
-            scanners = "secret";
-        }
+        if (scanners == null || scanners.isBlank()) scanners = "vuln,secret";
         int timeoutSeconds = Math.max(1, properties.getScanners().getTrivy().getTimeoutSeconds());
-        List<String> command = new ArrayList<>(List.of(executable(), "filesystem", "--format", "json", "--output",
+        scanTarget(context.getWorkspace(), report, scanners, timeoutSeconds);
+
+        List<NormalizedFinding> findings = findings(readJson(report));
+        Map<String, String> aliases = prepareArchiveAliases(context);
+        if (!aliases.isEmpty()) {
+            Path aliasRoot = context.getOutputDirectory().resolve("trivy-archive-aliases-" + context.getLabel());
+            Path aliasReport = context.getOutputDirectory().resolve("trivy-archive-aliases-" + context.getLabel() + ".json");
+            scanTarget(aliasRoot, aliasReport, "vuln", timeoutSeconds);
+            List<NormalizedFinding> aliasFindings = findings(readJson(aliasReport));
+            aliasFindings.forEach(finding -> restoreArchivePath(finding, aliases));
+            findings.addAll(aliasFindings);
+        }
+        return findings;
+    }
+
+    private void scanTarget(Path target, Path report, String scanners, int timeoutSeconds) {
+        // rootfs expands packaged Java artifacts on Trivy 0.62, while filesystem may
+        // report zero language files for legacy WEB-INF/lib directories.
+        List<String> command = new ArrayList<>(List.of(executable(), "rootfs", "--format", "json", "--output",
                 report.toString(), "--scanners", scanners, "--timeout", timeoutSeconds + "s"));
-        if (properties.getScanners().getTrivy().isOfflineScan()) command.add("--offline-scan");
-        command.add(context.getWorkspace().toString());
-        CommandResult result = execute(context.getWorkspace(), command,
+        for (String excluded : properties.getScanning().getExcludedGlobs()) {
+            command.add("--skip-files");
+            command.add(excluded);
+        }
+        if (properties.getScanners().getTrivy().isOfflineScan()) {
+            command.add("--offline-scan");
+            command.add("--skip-db-update");
+            command.add("--skip-java-db-update");
+        }
+        command.add(target.toString());
+        CommandResult result = execute(target, command,
                 Duration.ofSeconds(timeoutSeconds + 15L));
         if (!result.isSuccess()) {
             boolean timeout = result.getOutput() != null && result.getOutput().contains("context deadline exceeded");
@@ -66,7 +96,9 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
                             : "Trivy 扫描执行失败（退出码 " + result.getExitCode() + "），请查看执行日志");
         }
 
-        JsonNode root = readJson(report);
+    }
+
+    private List<NormalizedFinding> findings(JsonNode root) {
         List<NormalizedFinding> findings = new ArrayList<>();
         for (JsonNode resultNode : root.path("Results")) {
             String target = text(resultNode, "Target");
@@ -75,6 +107,40 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
             appendSecrets(findings, resultNode.path("Secrets"), target);
         }
         return findings;
+    }
+
+    Map<String, String> prepareArchiveAliases(ScanContext context) {
+        Path aliases = context.getOutputDirectory().resolve("trivy-archive-aliases-" + context.getLabel());
+        Map<String, String> originals = new LinkedHashMap<>();
+        try (Stream<Path> paths = Files.walk(context.getWorkspace())) {
+            List<Path> renamedArchives = paths.filter(Files::isRegularFile)
+                    .filter(this::isRenamedJar)
+                    .sorted()
+                    .collect(Collectors.toList());
+            if (renamedArchives.isEmpty()) return originals;
+            Files.createDirectories(aliases);
+            int index = 0;
+            for (Path source : renamedArchives) {
+                String aliasName = String.format("%03d-%s.jar", index++, source.getFileName());
+                Files.copy(source, aliases.resolve(aliasName), StandardCopyOption.REPLACE_EXISTING);
+                originals.put(aliasName, context.getWorkspace().relativize(source).toString());
+            }
+            return originals;
+        } catch (Exception exception) {
+            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "无法准备非标准 JAR 依赖扫描目录");
+        }
+    }
+
+    private boolean isRenamedJar(Path path) {
+        return path.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.jar\\d+$");
+    }
+
+    private void restoreArchivePath(NormalizedFinding finding, Map<String, String> aliases) {
+        String path = finding.getFilePath();
+        if (path == null) return;
+        aliases.forEach((alias, original) -> {
+            if (path.contains(alias)) finding.setFilePath(original);
+        });
     }
 
     private void appendVulnerabilities(List<NormalizedFinding> findings, JsonNode items, String target) {
