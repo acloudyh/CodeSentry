@@ -73,6 +73,9 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
         Path report = context.getOutputDirectory().resolve("spotbugs-findsecbugs-" + context.getLabel() + ".xml");
         List<String> command = new ArrayList<>();
         command.add(properties.getScanners().getSpotbugs().getExecutable());
+        command.add("-maxHeap");
+        command.add(String.valueOf(Math.max(256,
+                properties.getScanners().getSpotbugs().getMaxHeapMegabytes())));
         command.add("-textui");
         command.add("-xml:withMessages");
         command.add("-output");
@@ -110,7 +113,7 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
         return parseReport(report);
     }
 
-    private void writeProject(Path target, List<Path> archives) {
+    void writeProject(Path target, List<Path> archives) {
         try {
             Files.createDirectories(target.getParent());
             XMLOutputFactory outputFactory = XMLOutputFactory.newFactory();
@@ -120,10 +123,12 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
                 writer.writeCharacters("\n");
                 writer.writeStartElement("Project");
                 writer.writeAttribute("projectName", "CodeSentry bytecode scan");
+                writer.writeCharacters("\n");
                 for (Path archive : archives) {
                     writer.writeStartElement("Jar");
                     writer.writeCharacters(archive.toAbsolutePath().normalize().toString());
                     writer.writeEndElement();
+                    writer.writeCharacters("\n");
                 }
                 writer.writeEndElement();
                 writer.writeEndDocument();

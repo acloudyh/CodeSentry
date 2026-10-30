@@ -173,10 +173,13 @@ public class CodeSentryProperties {
         private String config;
         private String include;
         private int timeoutSeconds = 180;
+        private int maxHeapMegabytes = 768;
         private boolean offlineScan = true;
 
         public int getTimeoutSeconds() { return timeoutSeconds; }
         public void setTimeoutSeconds(int value) { timeoutSeconds = value; }
+        public int getMaxHeapMegabytes() { return maxHeapMegabytes; }
+        public void setMaxHeapMegabytes(int value) { maxHeapMegabytes = value; }
         public boolean isOfflineScan() { return offlineScan; }
         public void setOfflineScan(boolean value) { offlineScan = value; }
 

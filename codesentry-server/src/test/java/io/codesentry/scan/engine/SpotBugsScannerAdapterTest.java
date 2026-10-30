@@ -36,6 +36,21 @@ class SpotBugsScannerAdapterTest {
     }
 
     @Test
+    void projectFileWritesEachArchiveOnItsOwnLine() throws Exception {
+        Path first = Files.createFile(temp.resolve("first.jar"));
+        Path second = Files.createFile(temp.resolve("second.jar"));
+        Path project = temp.resolve("spotbugs-current.fbp");
+
+        adapter().writeProject(project, List.of(first, second));
+
+        List<String> lines = Files.readAllLines(project);
+        assertTrue(lines.stream().anyMatch(line -> line.contains(first.toString())));
+        assertTrue(lines.stream().anyMatch(line -> line.contains(second.toString())));
+        assertEquals(2, lines.stream().filter(line -> line.contains("<Jar>")).count());
+        assertTrue(lines.stream().noneMatch(line -> line.contains(first.toString()) && line.contains(second.toString())));
+    }
+
+    @Test
     void spotbugsXmlIsNormalizedWithoutLoadingExternalEntities() throws Exception {
         Path report = temp.resolve("spotbugs.xml");
         Files.writeString(report, "<BugCollection>"

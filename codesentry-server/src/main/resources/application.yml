@@ -99,6 +99,7 @@ codesentry:
       config: ${CODESENTRY_FINDSECBUGS_PLUGIN:${user.home}/.codesentry/tools/findsecbugs-plugin-1.14.0.jar}
       include: ${CODESENTRY_SPOTBUGS_INCLUDE:com.srtech.*,com.lyq.*,PoiXlsJz.*}
       timeout-seconds: ${CODESENTRY_SPOTBUGS_TIMEOUT_SECONDS:600}
+      max-heap-megabytes: ${CODESENTRY_SPOTBUGS_MAX_HEAP_MEGABYTES:2048}
     p3c:
       enabled: ${CODESENTRY_P3C_ENABLED:true}
       executable: ${CODESENTRY_JAVA_EXECUTABLE:java}
