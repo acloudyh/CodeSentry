@@ -18,7 +18,9 @@ services:
       CODESENTRY_AI_API_KEY: ${CODESENTRY_AI_API_KEY:-}
       CODESENTRY_FINDSECBUGS_PLUGIN: /opt/codesentry/tools/findsecbugs-plugin-1.14.0.jar
       CODESENTRY_P3C_JAR: /opt/codesentry/tools/p3c-pmd-2.1.1-jar-with-dependencies.jar
-      CODESENTRY_TRIVY_OFFLINE_SCAN: "false"
+      # 扫描阶段只读取持久化缓存，避免漏洞库下载占用扫描任务超时时间。
+      CODESENTRY_TRIVY_OFFLINE_SCAN: "true"
+      CODESENTRY_TRIVY_TIMEOUT_SECONDS: ${CODESENTRY_TRIVY_TIMEOUT_SECONDS:-900}
       TRIVY_CACHE_DIR: /Users/neo/.codesentry/trivy-cache
       HTTP_PROXY: ${CODESENTRY_HTTP_PROXY:-}
       HTTPS_PROXY: ${CODESENTRY_HTTPS_PROXY:-}

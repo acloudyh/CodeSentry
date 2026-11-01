@@ -70,7 +70,7 @@ npm run dev
 
 - Semgrep 用于 Java、JavaScript 和 JSP 专项规则扫描。
 - Gitleaks 用于源码、配置和证书目录中的敏感信息检测。
-- Trivy 默认执行 `vuln,secret`，离线运行前必须预先准备漏洞库和 Java 索引库。
+- Trivy 默认执行 `vuln,secret`。Docker 扫描阶段只读取持久化缓存，不会在扫描任务中下载漏洞库；漏洞库和 Java 索引库通过独立维护命令更新。
 - SpotBugs/FindSecBugs 用于没有 Java 源码的私有 JAR 字节码扫描。
 - Alibaba P3C-PMD 2.1.1 使用官方 49 条 Java 开发规范规则扫描 `.java` 源码；纯 JSP 项目不会产生 P3C 结果。
 
@@ -88,6 +88,9 @@ trivy filesystem --db-repository public.ecr.aws/aquasecurity/trivy-db:2 \
   --download-db-only --no-progress
 trivy filesystem --java-db-repository public.ecr.aws/aquasecurity/trivy-java-db:1 \
   --download-java-db-only --no-progress
+
+# Docker 部署使用以下维护命令更新持久化缓存；下载缓慢时会沿用容器代理配置。
+./scripts/update-trivy-db.sh
 ```
 
 图片、视频、字体、Office 模板和压缩包默认不进入源码规则扫描；JSP、JavaScript、配置文件、标准 JAR 及历史遗留的 `.jar15/.jar37` 等归档仍会进入对应扫描器。
