@@ -106,11 +106,29 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
         int timeoutSeconds = Math.max(30, properties.getScanners().getSpotbugs().getTimeoutSeconds());
         CommandResult result = commandExecutor.execute(context.getWorkspace(), command,
                 Duration.ofSeconds(timeoutSeconds));
-        if (!result.isSuccess()) {
+        if (!result.isSuccess() && !(result.getExitCode() == 1 && isUsableReport(report))) {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "SpotBugs/FindSecBugs 扫描执行失败（退出码 " + result.getExitCode() + "）");
         }
         return parseReport(report);
+    }
+
+    private boolean isUsableReport(Path report) {
+        if (!Files.isRegularFile(report)) return false;
+        try {
+            Document document = readReport(report);
+            if (document.getDocumentElement() == null
+                    || !"BugCollection".equals(document.getDocumentElement().getTagName())
+                    || document.getElementsByTagName("FindBugsSummary").getLength() == 0) {
+                return false;
+            }
+            NodeList errors = document.getElementsByTagName("Errors");
+            if (errors.getLength() == 0) return true;
+            String errorCount = ((Element) errors.item(0)).getAttribute("errors");
+            return errorCount.isBlank() || "0".equals(errorCount);
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     void writeProject(Path target, List<Path> archives) {
@@ -160,13 +178,7 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "SpotBugs 未生成预期的 XML 报告");
         }
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-            Document document = factory.newDocumentBuilder().parse(report.toFile());
+            Document document = readReport(report);
             NodeList bugs = document.getElementsByTagName("BugInstance");
             List<NormalizedFinding> findings = new ArrayList<>();
             for (int index = 0; index < bugs.getLength(); index++) {
@@ -176,6 +188,16 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
         } catch (Exception exception) {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "SpotBugs XML 报告解析失败");
         }
+    }
+
+    private Document readReport(Path report) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        return factory.newDocumentBuilder().parse(report.toFile());
     }
 
     private NormalizedFinding toFinding(Element bug) {
