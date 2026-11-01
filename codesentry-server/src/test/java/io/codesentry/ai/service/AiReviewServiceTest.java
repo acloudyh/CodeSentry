@@ -2,6 +2,7 @@ package io.codesentry.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.codesentry.ai.dto.AiReviewDecision;
+import io.codesentry.ai.dto.AiReviewEvidence;
 import io.codesentry.ai.dto.AiReviewSummary;
 import io.codesentry.ai.mapper.AiReviewMapper;
 import io.codesentry.ai.model.AiReviewJob;
@@ -11,8 +12,11 @@ import io.codesentry.config.CodeSentryProperties;
 import io.codesentry.finding.model.FindingView;
 import io.codesentry.finding.service.FindingPersistenceService;
 import io.codesentry.scan.service.ScanRunService;
+import io.codesentry.scan.model.ScanRun;
+import io.codesentry.scan.model.ScanRunStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
@@ -28,6 +32,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 class AiReviewServiceTest {
     @Test
@@ -127,6 +132,56 @@ class AiReviewServiceTest {
         assertTrue(summary.isDisagreement());
         assertFalse(summary.isHighConfidence());
         verify(findings, never()).triage(any(), any());
+    }
+
+    @Test
+    void sameDependencyVersionUsesOneTwoRoundReviewAndPersistsResultForEveryCve() {
+        AiReviewMapper mapper = mock(AiReviewMapper.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        ScanRunService runs = mock(ScanRunService.class);
+        AiReviewProvider provider = mock(AiReviewProvider.class);
+        CodeSentryProperties properties = new CodeSentryProperties();
+        properties.getAi().setEnabled(true);
+        properties.getAi().setBaseUrl("http://mock/v1");
+        properties.getAi().setModel("mock-model");
+        ObjectMapper objectMapper = new ObjectMapper();
+        AiReviewService service = new AiReviewService(mapper, findings, runs,
+                new AiReviewEvidenceBuilder(properties, objectMapper), provider, properties, objectMapper,
+                new SyncTaskExecutor());
+        ScanRun run = new ScanRun(); run.setId(7L); run.setStatus(ScanRunStatus.COMPLETED);
+        FindingView first = dependencyFinding(31L, "CVE-2017-5644", "Apache POI 远程攻击");
+        FindingView second = dependencyFinding(32L, "CVE-2014-9527", "POI 拒绝服务");
+        when(runs.requireById(7L)).thenReturn(run);
+        when(findings.findByRunId(7L)).thenReturn(List.of(first, second));
+        when(provider.providerName()).thenReturn("MOCK");
+        when(provider.modelName()).thenReturn("mock-model");
+        doAnswer(invocation -> { ((AiReviewJob) invocation.getArgument(0)).setId(23L); return 1; })
+                .when(mapper).insertJob(any(AiReviewJob.class));
+        when(provider.review(any(), any(), any())).thenReturn(decision("CONFIRMED", 0.94),
+                decision("CONFIRMED", 0.91));
+
+        AiReviewJob job = service.startRunReview(7L);
+
+        assertEquals(1, job.getTotalFindings());
+        ArgumentCaptor<AiReviewEvidence> evidence = ArgumentCaptor.forClass(AiReviewEvidence.class);
+        verify(provider, times(2)).review(evidence.capture(), any(), any());
+        assertTrue(evidence.getAllValues().get(0).getTitle().contains("POI 组件 2 个已知漏洞"));
+        assertTrue(evidence.getAllValues().get(0).getDescription().contains("CVE-2017-5644"));
+        assertTrue(evidence.getAllValues().get(0).getDescription().contains("CVE-2014-9527"));
+        ArgumentCaptor<AiReviewRecord> records = ArgumentCaptor.forClass(AiReviewRecord.class);
+        verify(mapper, times(4)).insertReview(records.capture());
+        assertEquals(java.util.Set.of(31L, 32L), records.getAllValues().stream()
+                .map(AiReviewRecord::getFindingId).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    private FindingView dependencyFinding(Long id, String ruleId, String title) {
+        FindingView finding = new FindingView();
+        finding.setId(id); finding.setProjectId(3L); finding.setScanRunId(7L);
+        finding.setScanner("Trivy"); finding.setCategory("VULNERABILITY");
+        finding.setRuleId(ruleId); finding.setSeverity("MEDIUM"); finding.setTitle(title);
+        finding.setFilePath("src/main/webapp/WEB-INF/lib/poi-3.7.jar37");
+        finding.setCodeSnippet("org.apache.poi:poi@3.7");
+        return finding;
     }
 
     private AiReviewDecision decision(String verdict, double confidence) {

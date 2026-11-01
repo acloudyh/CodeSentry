@@ -11,6 +11,7 @@ import io.codesentry.ai.provider.AiReviewProvider;
 import io.codesentry.common.error.BusinessException;
 import io.codesentry.config.CodeSentryProperties;
 import io.codesentry.finding.model.FindingView;
+import io.codesentry.finding.service.DependencyFindingGrouping;
 import io.codesentry.finding.service.FindingPersistenceService;
 import io.codesentry.scan.model.ScanRun;
 import io.codesentry.scan.model.ScanRunStatus;
@@ -35,7 +36,7 @@ import java.util.Set;
 @Service
 public class AiReviewService {
     private final io.codesentry.process.CancellableTasks tasks = new io.codesentry.process.CancellableTasks();
-    public static final String PROMPT_VERSION = "codesentry-ai-review-v2";
+    public static final String PROMPT_VERSION = "codesentry-ai-review-v3-grouped-dependencies";
     private final AiReviewMapper mapper;
     private final FindingPersistenceService findingService;
     private final ScanRunService scanRunService;
@@ -62,11 +63,14 @@ public class AiReviewService {
     public AiReviewSummary reviewFinding(Long findingId) {
         ensureEnabled();
         FindingView finding = findingService.requireLatest(findingId);
+        ReviewUnit unit = reviewUnits(reviewableFindings(finding.getScanRunId())).stream()
+                .filter(item -> item.contains(findingId)).findFirst()
+                .orElse(new ReviewUnit(finding));
         AiReviewJob job = createJob(finding.getScanRunId(), 1);
         tasks.registerCurrent(job.getId());
         try {
             mapper.markJobRunning(job.getId(), LocalDateTime.now());
-            AiReviewSummary summary = executeFinding(finding, job.getId());
+            AiReviewSummary summary = executeUnit(unit, job.getId(), findingId);
             mapper.updateJobProgress(job.getId(), 1, 0);
             mapper.finishJob(job.getId(), "COMPLETED", null, LocalDateTime.now());
             return summary;
@@ -120,9 +124,10 @@ public class AiReviewService {
         if (findings.isEmpty()) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "当前批次没有等待工具审核或需要重试的问题");
         }
-        AiReviewJob job = createJob(scanRunId, findings.size());
+        List<ReviewUnit> units = reviewUnits(findings);
+        AiReviewJob job = createJob(scanRunId, units.size());
         try {
-            tasks.submit(job.getId(), taskExecutor, () -> executeJob(job.getId(), findings));
+            tasks.submit(job.getId(), taskExecutor, () -> executeJob(job.getId(), units));
         } catch (RuntimeException exception) {
             mapper.finishJob(job.getId(), "FAILED", "AI 审核任务队列已满", LocalDateTime.now());
             throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "AI 审核任务队列已满，请稍后重试");
@@ -139,34 +144,34 @@ public class AiReviewService {
         return result;
     }
 
-    private void executeJob(Long jobId, List<FindingView> findings) {
+    private void executeJob(Long jobId, List<ReviewUnit> units) {
         checkJobActive(jobId);
         mapper.markJobRunning(jobId, LocalDateTime.now());
         int completed = 0;
         int failed = 0;
-        List<FindingView> retryFindings = new ArrayList<>();
-        for (FindingView finding : findings) {
+        List<ReviewUnit> retryUnits = new ArrayList<>();
+        for (ReviewUnit unit : units) {
             checkJobActive(jobId);
             try {
-                executeFinding(finding, jobId);
+                executeUnit(unit, jobId, unit.primary().getId());
                 completed++;
             } catch (Exception exception) {
                 if (exception instanceof java.util.concurrent.CancellationException) return;
                 io.codesentry.process.CancellableTasks.check();
                 failed++;
-                retryFindings.add(finding);
+                retryUnits.add(unit);
             }
             mapper.updateJobProgress(jobId, completed, failed);
         }
         // Finish the first pass before retrying. Successful findings are never called again.
-        if (!retryFindings.isEmpty()) {
+        if (!retryUnits.isEmpty()) {
             checkJobActive(jobId);
             failed = 0;
             mapper.updateJobProgress(jobId, completed, failed);
-            for (FindingView finding : retryFindings) {
+            for (ReviewUnit unit : retryUnits) {
                 checkJobActive(jobId);
                 try {
-                    executeFinding(finding, jobId);
+                    executeUnit(unit, jobId, unit.primary().getId());
                     completed++;
                 } catch (Exception exception) {
                     if (exception instanceof java.util.concurrent.CancellationException) return;
@@ -180,24 +185,74 @@ public class AiReviewService {
         mapper.finishJob(jobId, status, failed == 0 ? null : failed + " 个问题 AI 审核失败", LocalDateTime.now());
     }
 
-    private AiReviewSummary executeFinding(FindingView finding, Long jobId) {
+    private AiReviewSummary executeUnit(ReviewUnit unit, Long jobId, Long requestedFindingId) {
         checkJobActive(jobId);
-        AiReviewEvidence evidence = evidenceBuilder.build(finding);
+        AiReviewEvidence evidence = buildUnitEvidence(unit);
         String serialized = evidenceBuilder.serialize(evidence);
         String inputHash = evidenceBuilder.sha256(serialized);
         try {
             AiReviewDecision primary = provider.review(evidence, "PRIMARY", null);
             checkJobActive(jobId);
-            AiReviewRecord primaryRecord = saveDecision(finding, jobId, "PRIMARY", primary, inputHash);
             AiReviewDecision verification = provider.review(evidence, "VERIFY", primary);
             checkJobActive(jobId);
-            AiReviewRecord verificationRecord = saveDecision(finding, jobId, "VERIFY", verification, inputHash);
-            return summarize(primaryRecord, verificationRecord);
+            AiReviewSummary requested = null;
+            for (FindingView member : unit.members) {
+                AiReviewRecord primaryRecord = saveDecision(member, jobId, "PRIMARY", primary, inputHash);
+                AiReviewRecord verificationRecord = saveDecision(member, jobId, "VERIFY", verification, inputHash);
+                if (requested == null || Objects.equals(member.getId(), requestedFindingId)) {
+                    requested = summarize(primaryRecord, verificationRecord);
+                }
+            }
+            return requested;
         } catch (RuntimeException exception) {
             if (exception instanceof java.util.concurrent.CancellationException) throw exception;
             checkJobActive(jobId);
-            saveFailure(finding, jobId, inputHash, exception);
+            for (FindingView member : unit.members) saveFailure(member, jobId, inputHash, exception);
             throw exception;
+        }
+    }
+
+    private List<ReviewUnit> reviewUnits(List<FindingView> findings) {
+        Map<String, ReviewUnit> grouped = new LinkedHashMap<>();
+        for (FindingView finding : findings) {
+            String dependencyKey = DependencyFindingGrouping.groupKey(finding);
+            String key = dependencyKey == null ? "finding|" + finding.getId() : "dependency|" + dependencyKey;
+            grouped.computeIfAbsent(key, ignored -> new ReviewUnit()).members.add(finding);
+        }
+        return new ArrayList<>(grouped.values());
+    }
+
+    private AiReviewEvidence buildUnitEvidence(ReviewUnit unit) {
+        AiReviewEvidence evidence = evidenceBuilder.build(unit.primary());
+        if (!unit.isGrouped()) return evidence;
+        StringBuilder details = new StringBuilder("同一依赖文件与组件版本的多个 CVE，请作为一个整改组统一复核：");
+        StringBuilder ruleIds = new StringBuilder();
+        for (FindingView member : unit.members) {
+            if (ruleIds.length() > 0) ruleIds.append(',');
+            ruleIds.append(value(member.getRuleId(), "unknown"));
+            details.append("\n- ").append(value(member.getRuleId(), "unknown"))
+                    .append("：").append(value(member.getTitle(), "依赖漏洞"));
+        }
+        evidence.setRuleId(ruleIds.toString());
+        evidence.setTitle(DependencyFindingGrouping.componentLabel(unit.primary()) + " 组件 "
+                + unit.members.size() + " 个已知漏洞（合并复核）");
+        evidence.setDescription(details.toString());
+        evidence.setRecommendation("对该依赖组件统一升级到可修复上述 CVE 的安全版本，并完成兼容性验证。");
+        return evidence;
+    }
+
+    private String value(String value, String fallback) {
+        return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private static final class ReviewUnit {
+        private final List<FindingView> members = new ArrayList<>();
+        private ReviewUnit() {}
+        private ReviewUnit(FindingView finding) { members.add(finding); }
+        private FindingView primary() { return members.get(0); }
+        private boolean isGrouped() { return members.size() > 1; }
+        private boolean contains(Long findingId) {
+            return members.stream().anyMatch(item -> Objects.equals(item.getId(), findingId));
         }
     }
 

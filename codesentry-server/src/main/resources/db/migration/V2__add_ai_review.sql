@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS scan_ai_review (
     missing_evidence TEXT NULL,
     recommendation TEXT NULL,
     input_hash CHAR(64) NOT NULL,
-    prompt_version VARCHAR(32) NOT NULL,
+    prompt_version VARCHAR(128) NOT NULL,
     status VARCHAR(24) NOT NULL,
     error_message TEXT NULL,
     created_at DATETIME(3) NOT NULL,

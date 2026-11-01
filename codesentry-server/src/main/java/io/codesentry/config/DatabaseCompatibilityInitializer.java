@@ -32,6 +32,7 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
         ensureColumn("scan_run", "rule_profile",
                 "ALTER TABLE scan_run ADD COLUMN rule_profile VARCHAR(64) NOT NULL DEFAULT 'COMMUNITY_GENERAL' AFTER baseline_ref");
         alterColumn("ALTER TABLE scan_finding MODIFY COLUMN cwe VARCHAR(512) NULL");
+        alterColumn("ALTER TABLE scan_ai_review MODIFY COLUMN prompt_version VARCHAR(128) NOT NULL");
         failInterruptedRuns();
         failInterruptedAiReviewJobs();
     }
