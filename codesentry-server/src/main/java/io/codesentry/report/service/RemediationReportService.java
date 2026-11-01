@@ -6,6 +6,7 @@ import io.codesentry.ai.dto.AiReviewSummary;
 import io.codesentry.ai.model.AiReviewRecord;
 import io.codesentry.ai.service.AiReviewService;
 import io.codesentry.finding.model.FindingView;
+import io.codesentry.finding.service.DependencyFindingGrouping;
 import io.codesentry.finding.service.FindingPersistenceService;
 import io.codesentry.project.model.ScanProject;
 import io.codesentry.project.service.ScanProjectService;
@@ -29,7 +30,6 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageSz;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.util.HtmlUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -44,11 +44,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class RemediationReportService {
@@ -83,8 +85,10 @@ public class RemediationReportService {
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
             ReportData data = load(run.getId());
             reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
-                    run.getStatus(), data.findings.size(), data.newFindingCount));
+                    run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt()));
         }
+        reports.sort(Comparator.comparing(RemediationReportSummary::getCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
         return reports;
     }
 
@@ -138,33 +142,43 @@ public class RemediationReportService {
                 addText(document, "当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。", 10, "66796E", false);
             }
             int index = 1;
-            for (FindingView finding : data.findings) {
+            for (ReportFindingGroup group : groupFindings(data.findings)) {
+                FindingView finding = group.primary();
                 XWPFParagraph heading = document.createParagraph();
                 heading.setSpacingBefore(220);
                 heading.setSpacingAfter(80);
                 styleRun(heading.createRun(), String.format("%02d  ", index++), 11, "78A921", true);
                 styleRun(heading.createRun(), "[" + severityLabel(finding.getSeverity()) + "] ", 11,
                         severityColor(finding.getSeverity()), true);
-                styleRun(heading.createRun(), finding.getTitle(), 11, "14201B", true);
+                styleRun(heading.createRun(), group.title(), 11, "14201B", true);
 
-                addText(document, "扫描器 / 规则：" + finding.getScanner() + " / " + finding.getRuleId(),
+                addText(document, "扫描器 / 规则：" + finding.getScanner() + " / " + group.ruleIds(),
                         9, "66796E", false);
                 addText(document, reportLocationLabel(finding), 9, "66796E", false);
-                addText(document, "变化状态：" + resultLabel(finding.getResultStatus())
-                        + "    人工结论：" + triageLabel(finding.getTriageStatus()), 9, "66796E", false);
-                addText(document, "利用条件：" + exploitCondition(finding), 9, "38483F", false);
-                addText(document, "复核证据：" + reviewEvidence(finding), 9, "38483F", false);
-                AiReviewSummary aiReview = data.aiReviews.get(finding.getId());
-                if (aiReview != null) {
-                    addAiReviewToDocx(document, aiReview);
-                }
-                if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) {
-                    addText(document, "误报原因：" + falsePositiveReason(finding), 9, "A46400", false);
+                addText(document, "变化状态：" + group.resultLabels()
+                        + "    人工结论：" + group.triageLabels(), 9, "66796E", false);
+                if (group.isGrouped()) {
+                    addText(document, "合并说明：同一依赖文件与组件版本的 " + group.members.size()
+                            + " 个 CVE 合并展示；原始问题台账及统计仍按 CVE 保留。", 9, "66796E", false);
+                    for (FindingView member : group.members) {
+                        addText(document, "• " + value(member.getRuleId(), "unknown") + "  "
+                                + value(member.getTitle(), "依赖漏洞") + "\n  利用条件：" + exploitCondition(member)
+                                + "\n  复核证据：" + reviewEvidence(member), 9, "38483F", false);
+                        addGroupedAiReviewToDocx(document, member, data.aiReviews.get(member.getId()));
+                    }
+                } else {
+                    addText(document, "利用条件：" + exploitCondition(finding), 9, "38483F", false);
+                    addText(document, "复核证据：" + reviewEvidence(finding), 9, "38483F", false);
+                    AiReviewSummary aiReview = data.aiReviews.get(finding.getId());
+                    if (aiReview != null) addAiReviewToDocx(document, aiReview);
+                    if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) {
+                        addText(document, "误报原因：" + falsePositiveReason(finding), 9, "A46400", false);
+                    }
                 }
                 if (hasText(finding.getCodeSnippet())) {
                     addCodeBlock(document, reportCodeSnippet(finding.getCodeSnippet()));
                 }
-                if (hasText(finding.getDescription()) && !finding.getDescription().equals(finding.getTitle())) {
+                if (!group.isGrouped() && hasText(finding.getDescription()) && !finding.getDescription().equals(finding.getTitle())) {
                     addText(document, "问题说明：" + finding.getDescription(), 9, "38483F", false);
                 }
                 addText(document, "整改建议：" + value(finding.getRecommendation(),
@@ -198,29 +212,42 @@ public class RemediationReportService {
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
         int index = 1;
-        for (FindingView finding : data.findings) {
+        List<ReportFindingGroup> groups = groupFindings(data.findings);
+        for (ReportFindingGroup group : groups) {
+            FindingView finding = group.primary();
             rows.append("<tr><td>").append(index++).append("</td><td><span class=\"severity ")
                     .append(escape(finding.getSeverity().toLowerCase())).append("\">")
                     .append(severityLabel(finding.getSeverity())).append("</span></td><td><b>")
-                    .append(escape(finding.getTitle())).append("</b><small>")
-                    .append(escape(finding.getScanner())).append(" / ").append(escape(finding.getRuleId()))
+                    .append(escape(group.title())).append("</b><small>")
+                    .append(escape(finding.getScanner())).append(" / ").append(escape(group.ruleIds()))
                     .append("</small>");
+            if (group.isGrouped()) {
+                rows.append("<ul class=\"vuln-list\">");
+                for (FindingView member : group.members) {
+                    rows.append("<li><b>").append(escape(value(member.getRuleId(), "unknown")))
+                            .append("</b> ").append(escape(value(member.getTitle(), "依赖漏洞"))).append("</li>");
+                }
+                rows.append("</ul>");
+            }
             if (hasText(finding.getCodeSnippet())) {
                 rows.append("<pre>").append(escape(reportCodeSnippet(finding.getCodeSnippet()))).append("</pre>");
             }
             rows.append("</td><td><code>").append(escape(reportLocationValue(finding)))
                     .append("</code></td><td>")
-                    .append(resultLabel(finding.getResultStatus())).append("</td><td>")
-                    .append(triageLabel(finding.getTriageStatus())).append("</td><td>")
-                    .append("<b>利用条件：</b>").append(escape(exploitCondition(finding)))
-                    .append("<br/><b>复核证据：</b>").append(escape(reviewEvidence(finding)));
-            if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) {
-                rows.append("<br/><b class=\"false-positive\">误报原因：</b>")
-                        .append(escape(falsePositiveReason(finding)));
+                    .append(escape(group.resultLabels())).append("</td><td>")
+                    .append(escape(group.triageLabels())).append("</td><td>");
+            if (group.isGrouped()) appendGroupedEvidenceHtml(rows, group);
+            else {
+                rows.append("<b>利用条件：</b>").append(escape(exploitCondition(finding)))
+                        .append("<br/><b>复核证据：</b>").append(escape(reviewEvidence(finding)));
+                if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) {
+                    rows.append("<br/><b class=\"false-positive\">误报原因：</b>")
+                            .append(escape(falsePositiveReason(finding)));
+                }
             }
-            AiReviewSummary aiReview = data.aiReviews.get(finding.getId());
             rows.append("</td><td class=\"ai-cell\">");
-            appendAiReviewHtml(rows, aiReview);
+            if (group.isGrouped()) appendGroupedAiReviewHtml(rows, group, data.aiReviews);
+            else appendAiReviewHtml(rows, data.aiReviews.get(finding.getId()));
             rows.append("</td><td>")
                     .append(escape(value(finding.getRecommendation(), "请结合代码上下文复核并按安全编码规范整改。")))
                     .append("</td></tr>");
@@ -236,7 +263,7 @@ public class RemediationReportService {
                 ".summary-table td{width:25%;background:white;border:1px solid #d9e2dc;padding:14px}.summary-table span{color:#66796e;font-size:11px}.summary-table b{display:block;font-size:24px;margin-top:7px}" +
                 ".card{background:white;border:1px solid #d9e2dc;padding:16px;margin-bottom:20px}.data{width:100%;border-collapse:collapse;background:white;font-size:10px;table-layout:fixed}" +
                 ".data th,.data td{padding:9px 7px;border:1px solid #dfe6e1;text-align:left;vertical-align:top;word-wrap:break-word}.data th{background:#e9efe9;color:#44574c}" +
-                "small{display:block;color:#718077;margin-top:5px}code{word-break:break-all}pre{white-space:pre-wrap;word-wrap:break-word;margin:8px 0 0;padding:8px;background:#f0f3ef;border-left:3px solid #78a921;font:8px/1.45 monospace}" +
+                "small{display:block;color:#718077;margin-top:5px}code{word-break:break-all}pre{white-space:pre-wrap;word-wrap:break-word;margin:8px 0 0;padding:8px;background:#f0f3ef;border-left:3px solid #78a921;font:8px/1.45 monospace}.vuln-list{margin:8px 0 0;padding-left:17px}.vuln-list li{margin:4px 0}.group-review{margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid #eadfca}" +
                 ".severity{font-weight:700}.critical,.high{color:#c83232}.medium{color:#a46400}.low,.info{color:#167c6d}.false-positive,.ai-review{color:#a46400}.ai-cell{background:#fffaf0}.ai-cell b{display:block;margin-bottom:3px}.ai-cell small{margin:2px 0 7px;line-height:1.45}.foot{margin-top:18px;color:#718077;font-size:9px}" +
                 "tr{page-break-inside:avoid}</style></head><body><header class=\"cover\"><div class=\"brand\">CODESENTRY / REMEDIATION REPORT</div>" +
                 "<h1>代码安全扫描整改报告</h1><div class=\"meta\">报告编号 CSR-" + String.format("%06d", run.getId()) +
@@ -247,7 +274,8 @@ public class RemediationReportService {
                 "<section class=\"card\"><b>扫描基线</b><p>规则集：" + escape(ruleProfileLabel(run.getRuleProfile())) + "</p><p>扫描分支：" +
                 escape(value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
                 "；扫描提交：" + escape(value(run.getScanCommit(), "-")) + "；merge-base：" + escape(value(run.getMergeBaseCommit(), "-")) +
-                "</p></section><p class=\"foot\">人工复核状态：" + escape(data.reviewStatus()) +
+                "</p></section>" + (groups.size() < data.findings.size() ? "<p class=\"foot\">合并说明：同一依赖文件与组件版本的多个 CVE 在明细中合并展示；统计仍按 CVE 数量计算。</p>" : "") +
+                "<p class=\"foot\">人工复核状态：" + escape(data.reviewStatus()) +
                 "报告保留人工已确认的风险，以及工具复核完成、通过可信度门槛且未判为误报的问题；人工判为误报的不纳入报告，可信度不代表漏洞可利用性。" +
                 "本报告由 CodeSentry 本地节点生成。</p><h2>问题明细与整改建议</h2><table class=\"data\"><thead><tr><th style=\"width:3%\">#</th><th style=\"width:6%\">等级</th>" +
                 "<th style=\"width:18%\">问题 / 规则 / 代码片段</th><th style=\"width:14%\">位置</th><th style=\"width:6%\">变化</th><th style=\"width:8%\">人工结论</th><th style=\"width:15%\">利用条件 / 复核证据</th><th style=\"width:16%\">工具复核</th><th style=\"width:14%\">整改建议</th>" +
@@ -460,7 +488,79 @@ public class RemediationReportService {
         return (isDependencyVulnerability(finding) ? "依赖文件：" : "代码位置：")
                 + reportLocationValue(finding);
     }
-    private String escape(String value) { return HtmlUtils.htmlEscape(value == null ? "" : value); }
+
+    private List<ReportFindingGroup> groupFindings(List<FindingView> findings) {
+        Map<String, ReportFindingGroup> groups = new LinkedHashMap<>();
+        for (FindingView finding : findings) {
+            String dependencyKey = DependencyFindingGrouping.groupKey(finding);
+            String key = dependencyKey == null ? "finding|" + finding.getId() : "dependency|" + dependencyKey;
+            groups.computeIfAbsent(key, ignored -> new ReportFindingGroup()).members.add(finding);
+        }
+        return new ArrayList<>(groups.values());
+    }
+
+    private int severityRank(String severity) {
+        if ("CRITICAL".equals(severity)) return 4;
+        if ("HIGH".equals(severity)) return 3;
+        if ("MEDIUM".equals(severity)) return 2;
+        if ("LOW".equals(severity)) return 1;
+        return 0;
+    }
+
+    private void appendGroupedEvidenceHtml(StringBuilder html, ReportFindingGroup group) {
+        for (FindingView member : group.members) {
+            html.append("<div class=\"group-review\"><b>")
+                    .append(escape(value(member.getRuleId(), "unknown"))).append("</b><small><b>利用条件：</b>")
+                    .append(escape(exploitCondition(member))).append("<br/><b>复核证据：</b>")
+                    .append(escape(reviewEvidence(member))).append("</small></div>");
+        }
+    }
+
+    private void appendGroupedAiReviewHtml(StringBuilder html, ReportFindingGroup group,
+                                           Map<Long, AiReviewSummary> reviews) {
+        for (FindingView member : group.members) {
+            AiReviewSummary summary = reviews.get(member.getId());
+            html.append("<div class=\"group-review\"><b>")
+                    .append(escape(value(member.getRuleId(), "unknown"))).append("：</b>");
+            if (summary == null) {
+                html.append("<span>暂无工具审核结果</span>");
+            } else if ("FAILED".equals(summary.getStatus())) {
+                html.append("<span>工具审核失败：")
+                        .append(escape(publicReviewText(value(summary.getErrorMessage(), "工具复核未完整执行"))))
+                        .append("</span>");
+            } else {
+                html.append("<span>").append(escape(aiReviewLabel(summary))).append("，可信度 ")
+                        .append(escape(confidenceLabel(summary.getConfidence()))).append("</span>");
+            }
+            html.append("</div>");
+        }
+    }
+
+    private void addGroupedAiReviewToDocx(XWPFDocument document, FindingView finding, AiReviewSummary summary) {
+        String prefix = "  工具复核 " + value(finding.getRuleId(), "unknown") + "：";
+        if (summary == null) {
+            addText(document, prefix + "暂无结果", 9, "A46400", false);
+        } else if ("FAILED".equals(summary.getStatus())) {
+            addText(document, prefix + "审核失败，"
+                    + publicReviewText(value(summary.getErrorMessage(), "工具复核未完整执行")), 9, "A46400", false);
+        } else {
+            addText(document, prefix + aiReviewLabel(summary) + "，可信度 "
+                    + confidenceLabel(summary.getConfidence()), 9, "A46400", false);
+        }
+    }
+    /**
+     * Escape only the five XML syntax characters. Keeping ordinary Unicode characters intact is
+     * important because OpenHTMLToPDF parses XHTML and does not define HTML named entities such as
+     * {@code &ldquo;}.
+     */
+    private String escape(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
     private boolean hasText(String value) { return value != null && !value.isBlank(); }
     private String value(String value, String fallback) { return hasText(value) ? value : fallback; }
     private String scanModeLabel(ScanRun run) { return "FULL".equals(run.getScanMode().name()) ? "全量扫描" : "增量审查"; }
@@ -602,6 +702,37 @@ public class RemediationReportService {
     private String confidenceLabel(double confidence) {
         return java.math.BigDecimal.valueOf(confidence).multiply(java.math.BigDecimal.valueOf(100))
                 .setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + "%";
+    }
+
+    private final class ReportFindingGroup {
+        private final List<FindingView> members = new ArrayList<>();
+
+        private FindingView primary() {
+            return members.stream().max(Comparator.comparingInt(item -> severityRank(item.getSeverity())))
+                    .orElseThrow(IllegalStateException::new);
+        }
+
+        private boolean isGrouped() { return members.size() > 1; }
+
+        private String title() {
+            return isGrouped() ? DependencyFindingGrouping.componentLabel(primary()) + " 组件存在 " + members.size() + " 个已知漏洞（合并整改）"
+                    : value(primary().getTitle(), "依赖漏洞");
+        }
+
+        private String ruleIds() {
+            return members.stream().map(item -> value(item.getRuleId(), "unknown"))
+                    .distinct().collect(Collectors.joining("、"));
+        }
+
+        private String resultLabels() {
+            return members.stream().map(item -> resultLabel(item.getResultStatus()))
+                    .distinct().collect(Collectors.joining("、"));
+        }
+
+        private String triageLabels() {
+            return members.stream().map(item -> triageLabel(item.getTriageStatus()))
+                    .distinct().collect(Collectors.joining("、"));
+        }
     }
 
     private static class ReportData {

@@ -144,6 +144,7 @@ export interface RemediationReportSummary {
   status: ScanStatus
   totalFindings: number
   newFindings: number
+  createdAt: string
 }
 
 export interface AiReviewJob {

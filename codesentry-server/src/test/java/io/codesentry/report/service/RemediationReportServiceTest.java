@@ -13,6 +13,7 @@ import io.codesentry.scan.service.ScanRunService;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -103,6 +104,79 @@ class RemediationReportServiceTest {
     }
 
     @Test
+    void reportListIsSortedByScanTimeDescendingAndExposesTheTime() {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
+        ScanRun older = reportRun(31L, LocalDateTime.of(2026, 10, 30, 8, 0));
+        ScanRun newer = reportRun(35L, LocalDateTime.of(2026, 11, 1, 9, 30));
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
+        when(runs.recent(100)).thenReturn(List.of(older, newer));
+        when(runs.requireById(31L)).thenReturn(older);
+        when(runs.requireById(35L)).thenReturn(newer);
+        when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(31L)).thenReturn(List.of());
+        when(findings.findByRunId(35L)).thenReturn(List.of());
+        when(reviews.latestForRun(31L)).thenReturn(List.of());
+        when(reviews.latestForRun(35L)).thenReturn(List.of());
+
+        List<io.codesentry.report.dto.RemediationReportSummary> result = service.recent(100);
+
+        assertEquals(List.of(35L, 31L), result.stream()
+                .map(io.codesentry.report.dto.RemediationReportSummary::getId)
+                .collect(java.util.stream.Collectors.toList()));
+        assertEquals(LocalDateTime.of(2026, 11, 1, 9, 30), result.get(0).getCreatedAt());
+    }
+
+    @Test
+    void cvesForAnySameDependencyAndVersionAreMergedWithoutLosingDetails() throws Exception {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
+        ScanRun run = reportRun(8L, LocalDateTime.of(2026, 11, 1, 10, 0));
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
+        FindingView first = log4jFinding(201L, "CVE-2022-23302", "JMSSink 远程代码执行");
+        FindingView second = log4jFinding(202L, "CVE-2021-4104", "JMSAppender 远程代码执行");
+        FindingView poiFirst = dependencyFinding(203L, "CVE-2017-5644", "Apache POI 远程攻击",
+                "src/main/webapp/WEB-INF/lib/poi-3.7.jar37", "org.apache.poi:poi@3.7");
+        FindingView poiSecond = dependencyFinding(204L, "CVE-2014-9527", "POI 拒绝服务",
+                "src/main/webapp/WEB-INF/lib/poi-3.7.jar37", "org.apache.poi:poi@3.7");
+        FindingView poiOtherVersion = dependencyFinding(205L, "CVE-2099-0001", "POI 另一版本风险",
+                "src/main/webapp/WEB-INF/lib/poi-4.0.jar", "org.apache.poi:poi@4.0");
+        when(runs.requireById(8L)).thenReturn(run);
+        when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(first, second, poiFirst, poiSecond, poiOtherVersion));
+        when(reviews.latestForRun(8L)).thenReturn(List.of());
+
+        String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+        byte[] docxBytes = service.exportDocx(8L);
+        String word;
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(
+                new java.io.ByteArrayInputStream(docxBytes))) {
+            word = document.getParagraphs().stream().map(org.apache.poi.xwpf.usermodel.XWPFParagraph::getText)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+        }
+
+        for (String report : List.of(html, word)) {
+            assertTrue(report.contains("Log4j 组件存在 2 个已知漏洞（合并整改）"));
+            assertTrue(report.contains("CVE-2022-23302"));
+            assertTrue(report.contains("CVE-2021-4104"));
+            assertTrue(report.contains("JMSSink 远程代码执行"));
+            assertTrue(report.contains("JMSAppender 远程代码执行"));
+            assertTrue(report.contains("POI 组件存在 2 个已知漏洞（合并整改）"));
+            assertTrue(report.contains("CVE-2017-5644"));
+            assertTrue(report.contains("CVE-2014-9527"));
+            assertTrue(report.contains("POI 另一版本风险"));
+            assertFalse(report.contains("POI 组件存在 3 个已知漏洞（合并整改）"));
+        }
+        assertTrue(html.contains("统计仍按 CVE 数量计算"));
+    }
+
+    @Test
     void dependencyVulnerabilityReportShowsJarPathAndExplainsMissingSourceLine() {
         ScanRunService runs = mock(ScanRunService.class);
         ScanProjectService projects = mock(ScanProjectService.class);
@@ -143,6 +217,40 @@ class RemediationReportServiceTest {
         return finding;
     }
 
+    private ScanRun reportRun(Long id, LocalDateTime createdAt) {
+        ScanRun run = new ScanRun();
+        run.setId(id); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
+        run.setCreatedAt(createdAt);
+        return run;
+    }
+
+    private FindingView log4jFinding(Long id, String ruleId, String title) {
+        FindingView finding = finding(id, title, "CONFIRMED");
+        finding.setScanner("Trivy");
+        finding.setCategory("VULNERABILITY");
+        finding.setRuleId(ruleId);
+        finding.setSeverity("HIGH");
+        finding.setFilePath("src/main/webapp/WEB-INF/lib/log4j-1.2.8.jar128");
+        finding.setStartLine(null);
+        finding.setCodeSnippet("log4j:log4j@1.2.8");
+        finding.setRecommendation("升级到修复版本。");
+        return finding;
+    }
+
+    private FindingView dependencyFinding(Long id, String ruleId, String title, String path, String coordinate) {
+        FindingView finding = finding(id, title, "CONFIRMED");
+        finding.setScanner("Trivy");
+        finding.setCategory("VULNERABILITY");
+        finding.setRuleId(ruleId);
+        finding.setSeverity("MEDIUM");
+        finding.setFilePath(path);
+        finding.setStartLine(null);
+        finding.setCodeSnippet(coordinate);
+        finding.setRecommendation("升级到修复版本。");
+        return finding;
+    }
+
     @Test
     void allReportFormatsUseToolTerminologyIncludingHistoricalCommentsAndFailures() throws Exception {
         ScanRunService runs = mock(ScanRunService.class);
@@ -152,7 +260,7 @@ class RemediationReportServiceTest {
         RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
         ScanRun run = new ScanRun(); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
-        FindingView candidate = finding(101L, "测试风险", "CONFIRMED");
+        FindingView candidate = finding(101L, "测试“风险”与 <script>", "CONFIRMED");
         candidate.setTriageComment("AI 双轮复核建议：DeepSeek 提供风险线索，人工已确认。");
         AiReviewSummary failed = aiSummary(101L, "CONFIRMED", false, false, "FAILED");
         failed.setErrorMessage("AI返回内容因输出长度限制被截断");
@@ -161,6 +269,7 @@ class RemediationReportServiceTest {
         when(findings.findByRunId(8L)).thenReturn(List.of(candidate));
         when(reviews.latestForRun(8L)).thenReturn(List.of(failed));
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+        assertTrue(html.contains("测试“风险”与 &lt;script&gt;"));
         assertTrue(html.contains("'CodeSentrySong','SimSun'"));
         assertTrue(html.contains("'CodeSentryHei','SimHei'"));
         byte[] docxBytes = service.exportDocx(8L);
