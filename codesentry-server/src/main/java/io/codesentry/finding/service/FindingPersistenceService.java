@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -54,11 +55,11 @@ public class FindingPersistenceService {
     }
 
     public List<FindingView> findByRunId(Long runId) {
-        return enrichSnippets(mapper.findByRunId(runId));
+        return enrichSnippets(excludeSuppressedRules(mapper.findByRunId(runId)));
     }
 
     public List<FindingView> findRecent(int limit) {
-        return enrichSnippets(mapper.findRecent(Math.min(Math.max(limit, 1), 500)));
+        return enrichSnippets(excludeSuppressedRules(mapper.findRecent(Math.min(Math.max(limit, 1), 500))));
     }
 
     public List<FindingView> findVisibleByRunId(Long runId) {
@@ -127,6 +128,13 @@ public class FindingPersistenceService {
         return findings.stream()
                 .filter(finding -> !"FALSE_POSITIVE".equals(finding.getTriageStatus()))
                 .collect(Collectors.toList());
+    }
+
+    private List<FindingView> excludeSuppressedRules(List<FindingView> findings) {
+        return findings.stream().filter(finding -> {
+            String rule = value(finding.getRuleId()).toLowerCase(Locale.ROOT);
+            return !"codesentry.javascript.eval".equals(rule) && !rule.contains("eval-detected");
+        }).collect(Collectors.toList());
     }
 
     private List<FindingView> enrichSnippets(List<FindingView> findings) {

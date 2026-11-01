@@ -44,6 +44,5 @@ export function findingTitle(item: FindingView) {
   if (rule.includes('detect-non-literal-regexp')) return '动态正则表达式可能导致拒绝服务'
   if (rule.includes('sql-concatenation')) return 'SQL 字符串拼接可能导致注入'
   if (rule.includes('command-execution')) return '系统命令执行需要人工确认输入边界'
-  if (rule.includes('javascript.eval')) return '动态代码执行可能导致代码注入'
   return item.title
 }

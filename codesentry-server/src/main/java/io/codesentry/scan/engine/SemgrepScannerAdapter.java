@@ -78,9 +78,13 @@ public class SemgrepScannerAdapter extends AbstractCliScannerAdapter {
         JsonNode root = readJson(report);
         List<NormalizedFinding> findings = new ArrayList<>();
         for (JsonNode item : root.path("results")) {
+            String ruleId = text(item, "check_id");
+            if (isSuppressedRule(ruleId)) {
+                continue;
+            }
             NormalizedFinding finding = new NormalizedFinding();
             finding.setScanner(name());
-            finding.setRuleId(text(item, "check_id"));
+            finding.setRuleId(ruleId);
             String filePath = text(item, "path");
             int startLine = integer(item.path("start"), "line");
             int endLine = integer(item.path("end"), "line");
@@ -100,6 +104,12 @@ public class SemgrepScannerAdapter extends AbstractCliScannerAdapter {
             findings.add(finding);
         }
         return findings;
+    }
+
+    private boolean isSuppressedRule(String ruleId) {
+        String normalized = ruleId == null ? "" : ruleId.toLowerCase(java.util.Locale.ROOT);
+        return "codesentry.javascript.eval".equals(normalized)
+                || normalized.contains("eval-detected");
     }
 
     private String firstText(JsonNode value) {

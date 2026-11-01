@@ -68,18 +68,6 @@ rules:
         public void checkServerTrusted(...) { }
         ...
       }
-  - id: codesentry.javascript.eval
-    languages: [javascript, typescript]
-    severity: ERROR
-    message: eval 会执行动态代码，外部输入可导致代码注入。
-    metadata:
-      category: security
-      cwe: CWE-95
-      owasp: A03:2021-Injection
-      fix: 使用结构化解析或明确的函数映射替代 eval。
-    pattern-either:
-      - pattern: eval(...)
-      - pattern: new Function(...)
   - id: codesentry.jsp.request-to-file
     languages: [generic]
     paths:

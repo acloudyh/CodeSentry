@@ -137,6 +137,22 @@ class FindingPersistenceServiceTest {
     }
 
     @Test
+    void historicalEvalFindingsAreHiddenFromUserAndReviewQueries() {
+        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+        FindingView eval = new FindingView();
+        eval.setId(51L); eval.setRuleId("javascript.lang.security.audit.eval-detected.eval-detected");
+        FindingView retained = new FindingView();
+        retained.setId(52L); retained.setRuleId("codesentry.jsp.request-to-file");
+        when(mapper.findByRunId(9L)).thenReturn(List.of(eval, retained));
+
+        List<FindingView> result = new FindingPersistenceService(mapper, new CodeSentryProperties())
+                .findByRunId(9L);
+
+        assertEquals(List.of(52L), result.stream().map(FindingView::getId)
+                .collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
     void restoresLocalSourceEvidenceForSecretScannerFindings() throws Exception {
         ScanFindingMapper mapper = mock(ScanFindingMapper.class);
         CodeSentryProperties properties = new CodeSentryProperties();
