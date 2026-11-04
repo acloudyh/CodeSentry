@@ -6,6 +6,10 @@ public class ScanRun {
 
     private Long id;
     private Long projectId;
+    private Long sourceReportRunId;
+    public Long getSourceReportRunId() { return sourceReportRunId; }
+    public void setSourceReportRunId(Long value) { sourceReportRunId = value; }
+
     private ScanMode scanMode;
     private WorkspaceMode workspaceMode;
     private String scanRef;

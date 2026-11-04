@@ -43,6 +43,7 @@ public class ScanProjectService {
     public ScanProject create(CreateProjectRequest request) {
         ScanProject project = new ScanProject();
         project.setProjectName(request.getProjectName().trim());
+        project.setTargetJavaVersion(request.getTargetJavaVersion());
         project.setSourceType(request.getSourceType());
         project.setDefaultBranch(StringUtils.hasText(request.getDefaultBranch())
                 ? request.getDefaultBranch().trim() : "main");
@@ -96,6 +97,7 @@ public class ScanProjectService {
             }
         }
         project.setProjectName(request.getProjectName().trim());
+        project.setTargetJavaVersion(request.getTargetJavaVersion());
         project.setDefaultBranch(StringUtils.hasText(request.getDefaultBranch())
                 ? request.getDefaultBranch().trim() : project.getDefaultBranch());
         repositoryService.resolveCommit(project, project.getDefaultBranch());

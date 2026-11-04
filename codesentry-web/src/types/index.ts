@@ -11,6 +11,7 @@ export interface ApiResponse<T> {
 }
 
 export interface ScanProject {
+  targetJavaVersion?: number | null
   id: number
   projectName: string
   sourceType: SourceType
@@ -29,6 +30,7 @@ export interface BranchView {
 }
 
 export interface ScanRun {
+  sourceReportRunId?: number
   id: number
   projectId: number
   scanMode: ScanMode
@@ -200,4 +202,12 @@ export interface DashboardSummary {
   scans: number
   runningScans: number
   newFindings: number
+}
+
+export interface ReportAcceptance {
+  source: ScanRun
+  verification?: ScanRun
+  history: ScanRun[]
+  counts: Record<string, number>
+  items: Array<{ finding: FindingView; status: string; triageStatus?: string; comment?: string; reviewer?: string }>
 }

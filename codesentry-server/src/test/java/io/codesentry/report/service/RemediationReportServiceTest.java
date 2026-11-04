@@ -23,6 +23,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class RemediationReportServiceTest {
+    private ReportSnapshotStore snapshotStore() {
+        ReportSnapshotStore store = mock(ReportSnapshotStore.class);
+        when(store.read(org.mockito.ArgumentMatchers.anyLong())).thenReturn(null);
+        when(store.freeze(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyList()))
+                .thenAnswer(call -> call.getArgument(1));
+        return store;
+    }
+
 
     @Test
     void reportUsesAiGateButHumanConfirmationOverridesAiFalsePositive() {
@@ -30,9 +38,10 @@ class RemediationReportServiceTest {
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
         AiReviewService aiReviews = mock(AiReviewService.class);
-        RemediationReportService service = new RemediationReportService(runs, projects, findings, aiReviews);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, aiReviews, snapshotStore());
 
         ScanRun run = new ScanRun();
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
         run.setId(8L);
         run.setProjectId(1L);
         run.setScanMode(ScanMode.FULL);
@@ -82,8 +91,9 @@ class RemediationReportServiceTest {
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
         AiReviewService aiReviews = mock(AiReviewService.class);
-        RemediationReportService service = new RemediationReportService(runs, projects, findings, aiReviews);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, aiReviews, snapshotStore());
         ScanRun run = new ScanRun();
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
         run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
         run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("review-target");
@@ -109,7 +119,7 @@ class RemediationReportServiceTest {
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
         AiReviewService reviews = mock(AiReviewService.class);
-        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
         ScanRun older = reportRun(31L, LocalDateTime.of(2026, 10, 30, 8, 0));
         ScanRun newer = reportRun(35L, LocalDateTime.of(2026, 11, 1, 9, 30));
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
@@ -136,7 +146,7 @@ class RemediationReportServiceTest {
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
         AiReviewService reviews = mock(AiReviewService.class);
-        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
         ScanRun run = reportRun(8L, LocalDateTime.of(2026, 11, 1, 10, 0));
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
         FindingView first = log4jFinding(201L, "CVE-2022-23302", "JMSSink 远程代码执行");
@@ -145,6 +155,8 @@ class RemediationReportServiceTest {
                 "src/main/webapp/WEB-INF/lib/poi-3.7.jar37", "org.apache.poi:poi@3.7");
         FindingView poiSecond = dependencyFinding(204L, "CVE-2014-9527", "POI 拒绝服务",
                 "src/main/webapp/WEB-INF/lib/poi-3.7.jar37", "org.apache.poi:poi@3.7");
+        poiFirst.setRecommendation("升级到修复版本：3.17");
+        poiSecond.setRecommendation("升级到修复版本：4.1.1");
         FindingView poiOtherVersion = dependencyFinding(205L, "CVE-2099-0001", "POI 另一版本风险",
                 "src/main/webapp/WEB-INF/lib/poi-4.0.jar", "org.apache.poi:poi@4.0");
         when(runs.requireById(8L)).thenReturn(run);
@@ -168,6 +180,10 @@ class RemediationReportServiceTest {
             assertTrue(report.contains("JMSSink 远程代码执行"));
             assertTrue(report.contains("JMSAppender 远程代码执行"));
             assertTrue(report.contains("POI 组件存在 2 个已知漏洞（合并整改）"));
+            assertTrue(report.contains("CVE-2017-5644：3.17"));
+            assertTrue(report.contains("CVE-2014-9527：4.1.1"));
+            assertTrue(report.contains("建议目标：迁移至 Log4j 2.26.1"));
+            assertFalse(report.contains("请查阅漏洞公告"));
             assertTrue(report.contains("CVE-2017-5644"));
             assertTrue(report.contains("CVE-2014-9527"));
             assertTrue(report.contains("POI 另一版本风险"));
@@ -182,8 +198,9 @@ class RemediationReportServiceTest {
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
         AiReviewService reviews = mock(AiReviewService.class);
-        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
-        ScanRun run = new ScanRun(); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
+        ScanRun run = new ScanRun();
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
         FindingView dependency = finding(101L, "依赖漏洞", "CONFIRMED");
         dependency.setScanner("Trivy");
@@ -219,10 +236,36 @@ class RemediationReportServiceTest {
 
     private ScanRun reportRun(Long id, LocalDateTime createdAt) {
         ScanRun run = new ScanRun();
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
         run.setId(id); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
         run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
         run.setCreatedAt(createdAt);
         return run;
+    }
+
+    @Test
+    void projectRuntimeControlsHtmlAndWordAdviceWithoutChangingArchivedMembers() throws Exception {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
+        ScanRun run = reportRun(8L, LocalDateTime.of(2026,11,3,10,0));
+        ScanProject project = new ScanProject();project.setId(1L);project.setProjectName("Java8业务");project.setTargetJavaVersion(8);
+        FindingView poi = dependencyFinding(203L,"CVE-2019-12415","POI XXE","lib/poi-3.7.jar37","org.apache.poi:poi@3.7");
+        when(runs.requireById(8L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(poi));when(reviews.latestForRun(8L)).thenReturn(List.of());
+        String html = new String(service.exportHtml(8L),StandardCharsets.UTF_8);
+        assertTrue(html.contains("业务 Java 版本：Java 8"));assertTrue(html.contains("统一 POI 组件至 5.5.1"));
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(
+                new java.io.ByteArrayInputStream(service.exportDocx(8L)))) {
+            String text = document.getParagraphs().stream().map(org.apache.poi.xwpf.usermodel.XWPFParagraph::getText)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            assertTrue(text.contains("业务 Java 版本：Java 8"));assertTrue(text.contains("统一 POI 组件至 5.5.1"));
+        }
+        project.setTargetJavaVersion(null);
+        assertFalse(new String(service.exportHtml(8L),StandardCharsets.UTF_8).contains("统一 POI 组件至 5.5.1"));
+        assertEquals("升级到修复版本。",poi.getRecommendation());
     }
 
     private FindingView log4jFinding(Long id, String ruleId, String title) {
@@ -257,8 +300,9 @@ class RemediationReportServiceTest {
         ScanProjectService projects = mock(ScanProjectService.class);
         FindingPersistenceService findings = mock(FindingPersistenceService.class);
         AiReviewService reviews = mock(AiReviewService.class);
-        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews);
-        ScanRun run = new ScanRun(); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
+        ScanRun run = new ScanRun();
+        run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED); run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
         FindingView candidate = finding(101L, "测试“风险”与 <script>", "CONFIRMED");
         candidate.setTriageComment("AI 双轮复核建议：DeepSeek 提供风险线索，人工已确认。");

@@ -12,12 +12,18 @@ import java.util.List;
 
 public interface ScanRunMapper {
 
-    @Insert("INSERT INTO scan_run(project_id, scan_mode, workspace_mode, scan_ref, baseline_ref, rule_profile, " +
+    @Insert("INSERT INTO scan_run(source_report_run_id, project_id, scan_mode, workspace_mode, scan_ref, baseline_ref, rule_profile, " +
             "repository_dirty, status, total_findings, new_findings, fixed_findings, created_at) " +
-            "VALUES(#{projectId}, #{scanMode}, #{workspaceMode}, #{scanRef}, #{baselineRef}, #{ruleProfile}, " +
+            "VALUES(#{sourceReportRunId}, #{projectId}, #{scanMode}, #{workspaceMode}, #{scanRef}, #{baselineRef}, #{ruleProfile}, " +
             "#{repositoryDirty}, #{status}, #{totalFindings}, #{newFindings}, #{fixedFindings}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScanRun scanRun);
+
+    @Select("SELECT * FROM scan_run WHERE source_report_run_id = #{id} ORDER BY id DESC LIMIT 100")
+    List<ScanRun> findAcceptanceRuns(@Param("id") Long id);
+
+    @Select("SELECT COUNT(*) FROM remediation_report_snapshot WHERE scan_run_id = #{id}")
+    int hasReportSnapshot(@Param("id") Long id);
 
     @Select("SELECT * FROM scan_run WHERE id = #{id}")
     ScanRun findById(@Param("id") Long id);

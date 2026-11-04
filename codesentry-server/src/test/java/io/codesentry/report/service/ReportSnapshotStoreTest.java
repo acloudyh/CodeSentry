@@ -1,0 +1,25 @@
+package io.codesentry.report.service;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.codesentry.finding.model.FindingView;
+import io.codesentry.report.mapper.ReportSnapshotMapper;
+import org.junit.jupiter.api.Test;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
+class ReportSnapshotStoreTest {
+    @Test void firstArchiveWinsAndEmptyArchiveIsDifferentFromNoArchive() {
+        ReportSnapshotMapper mapper = mock(ReportSnapshotMapper.class);
+        AtomicReference<String> stored = new AtomicReference<>();
+        when(mapper.find(1L)).thenAnswer(c -> stored.get());
+        when(mapper.insert(eq(1L), anyString())).thenAnswer(c -> stored.compareAndSet(null, c.getArgument(1)) ? 1 : 0);
+        ReportSnapshotStore store = new ReportSnapshotStore(mapper, new ObjectMapper().findAndRegisterModules());
+        assertNull(store.read(1L));
+        FindingView f = new FindingView(); f.setId(42L); f.setTitle("原报告问题");
+        assertEquals(42L, store.freeze(1L, List.of(f)).get(0).getId());
+        assertEquals("原报告问题", store.freeze(1L, List.of()).get(0).getTitle());
+        when(mapper.find(2L)).thenReturn("[]");
+        assertTrue(store.read(2L).isEmpty());
+    }
+}

@@ -1,7 +1,9 @@
 import { request } from './http'
+import type { ReportAcceptance } from '@/types'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, AiToolConfiguration, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
 
 export interface CreateProjectPayload {
+  targetJavaVersion?: number | null
   projectName: string
   sourceType: SourceType
   localPath?: string
@@ -10,6 +12,7 @@ export interface CreateProjectPayload {
 }
 
 export interface CreateScanPayload {
+  sourceReportRunId?: number
   projectId: number
   scanMode: ScanMode
   workspaceMode: WorkspaceMode
@@ -96,6 +99,7 @@ export const api = {
     method: 'PUT', body: JSON.stringify(payload),
   }),
   deleteAiTool: (id: number) => request<void>(`/api/v1/ai-tools/${id}`, { method: 'DELETE' }),
+  reportAcceptance: (id: number, verificationId?: number) => request<ReportAcceptance>(`/api/v1/reports/scan-runs/${id}/acceptance${verificationId ? `?verificationId=${verificationId}` : ''}`),
   reports: (limit = 100) => request<RemediationReportSummary[]>(`/api/v1/reports?limit=${limit}`),
   ruleProfiles: () => request<RuleProfile[]>('/api/v1/rule-profiles'),
   reportUrl: (runId: number, format: 'html' | 'docx' | 'pdf') => `/api/v1/reports/scan-runs/${runId}/${format}`,

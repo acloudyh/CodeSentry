@@ -65,17 +65,19 @@ public class RemediationReportService {
     private final ScanProjectService projectService;
     private final FindingPersistenceService findingService;
     private final AiReviewService aiReviewService;
+    private final ReportSnapshotStore snapshots;
 
     public RemediationReportService(ScanRunService scanRunService, ScanProjectService projectService,
-                                    FindingPersistenceService findingService, AiReviewService aiReviewService) {
+                                    FindingPersistenceService findingService, AiReviewService aiReviewService, ReportSnapshotStore snapshots) {
         this.scanRunService = scanRunService;
         this.projectService = projectService;
         this.findingService = findingService;
         this.aiReviewService = aiReviewService;
+        this.snapshots = snapshots;
     }
 
     public byte[] exportHtml(Long runId) {
-        return buildHtml(load(runId)).getBytes(StandardCharsets.UTF_8);
+        return buildHtml(load(runId, true)).getBytes(StandardCharsets.UTF_8);
     }
 
     public List<RemediationReportSummary> recent(int limit) {
@@ -83,7 +85,7 @@ public class RemediationReportService {
         for (ScanRun run : scanRunService.recent(limit)) {
             if (run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
-            ReportData data = load(run.getId());
+            ReportData data = load(run.getId(), false);
             reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
                     run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt()));
         }
@@ -93,7 +95,7 @@ public class RemediationReportService {
     }
 
     public byte[] exportPdf(Long runId) {
-        ReportData data = load(runId);
+        ReportData data = load(runId, true);
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFastMode();
@@ -110,7 +112,7 @@ public class RemediationReportService {
     }
 
     public byte[] exportDocx(Long runId) {
-        ReportData data = load(runId);
+        ReportData data = load(runId, true);
         try (XWPFDocument document = new XWPFDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             configureA4(document);
@@ -131,6 +133,7 @@ public class RemediationReportService {
             }
 
             addHeading(document, "扫描基线", 1);
+            addText(document, "业务 Java 版本：" + javaVersionLabel(data.project), 10, "14201B", false);
             addText(document, "规则集：" + ruleProfileLabel(data.run.getRuleProfile()), 10, "14201B", false);
             addText(document, "扫描分支：" + value(data.run.getScanRef(), "当前工作区")
                     + "    基线分支：" + value(data.run.getBaselineRef(), "无"), 10, "14201B", false);
@@ -142,7 +145,7 @@ public class RemediationReportService {
                 addText(document, "当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。", 10, "66796E", false);
             }
             int index = 1;
-            for (ReportFindingGroup group : groupFindings(data.findings)) {
+            for (ReportFindingGroup group : groupFindings(data.findings, data.project.getTargetJavaVersion())) {
                 FindingView finding = group.primary();
                 XWPFParagraph heading = document.createParagraph();
                 heading.setSpacingBefore(220);
@@ -152,6 +155,7 @@ public class RemediationReportService {
                         severityColor(finding.getSeverity()), true);
                 styleRun(heading.createRun(), group.title(), 11, "14201B", true);
 
+                addText(document, "问题编号：" + group.findingIds(), 9, "66796E", false);
                 addText(document, "扫描器 / 规则：" + finding.getScanner() + " / " + group.ruleIds(),
                         9, "66796E", false);
                 addText(document, reportLocationLabel(finding), 9, "66796E", false);
@@ -181,8 +185,23 @@ public class RemediationReportService {
                 if (!group.isGrouped() && hasText(finding.getDescription()) && !finding.getDescription().equals(finding.getTitle())) {
                     addText(document, "问题说明：" + finding.getDescription(), 9, "38483F", false);
                 }
-                addText(document, "整改建议：" + value(finding.getRecommendation(),
-                        "请结合代码上下文复核并按安全编码规范整改。"), 9, "38483F", false);
+                addText(document, "整改建议：", 9, "38483F", true);
+                for (String paragraph : group.recommendation().split("\\R")) {
+                    addText(document, paragraph, 9, "38483F", false);
+                }
+            }
+
+            List<ReportFindingGroup> sourceGroups = groupFindings(data.findings, data.project.getTargetJavaVersion()).stream()
+                    .filter(group -> !group.sources().isEmpty()).collect(Collectors.toList());
+            if (!sourceGroups.isEmpty()) {
+                addHeading(document, "附录：整改版本依据", 1);
+                addText(document, "修复记录仅针对所列漏洞；升级须核对 JDK 和依赖兼容性。官方迁移建议核实日期：2026-11-03。", 9, "66796E", false);
+                for (ReportFindingGroup group : sourceGroups) {
+                    addHeading(document, group.findingIds() + " · " + group.title(), 2);
+                    for (Map.Entry<String, List<String>> source : group.sources().entrySet()) {
+                        addText(document, String.join("、", source.getValue()) + "：" + source.getKey(), 9, "66796E", false);
+                    }
+                }
             }
 
             addText(document, "人工复核状态：" + data.reviewStatus()
@@ -198,13 +217,23 @@ public class RemediationReportService {
         }
     }
 
-    private ReportData load(Long runId) {
+    public List<FindingView> archiveFindings(Long runId) { return load(runId, true).findings; }
+
+    private ReportData load(Long runId, boolean archive) {
         ScanRun run = scanRunService.requireById(runId);
+        if (archive && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
+                && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "扫描结束后才能归档和导出报告");
+        }
         ScanProject project = projectService.requireById(run.getProjectId());
         List<FindingView> raw = findingService.findByRunId(runId);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
-        List<FindingView> visible = io.codesentry.finding.service.ReviewedFindingPolicy.select(raw, aiReviews);
+        List<FindingView> visible = snapshots.read(runId);
+        if (visible == null) {
+            visible = io.codesentry.finding.service.ReviewedFindingPolicy.select(raw, aiReviews);
+            if (archive) visible = snapshots.freeze(runId, visible);
+        }
         return new ReportData(run, project, visible, aiReviews);
     }
 
@@ -212,13 +241,13 @@ public class RemediationReportService {
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
         int index = 1;
-        List<ReportFindingGroup> groups = groupFindings(data.findings);
+        List<ReportFindingGroup> groups = groupFindings(data.findings, data.project.getTargetJavaVersion());
         for (ReportFindingGroup group : groups) {
             FindingView finding = group.primary();
             rows.append("<tr><td>").append(index++).append("</td><td><span class=\"severity ")
                     .append(escape(finding.getSeverity().toLowerCase())).append("\">")
                     .append(severityLabel(finding.getSeverity())).append("</span></td><td><b>")
-                    .append(escape(group.title())).append("</b><small>")
+                    .append(escape(group.title())).append("</b><small>问题编号：").append(escape(group.findingIds())).append("</small><small>")
                     .append(escape(finding.getScanner())).append(" / ").append(escape(group.ruleIds()))
                     .append("</small>");
             if (group.isGrouped()) {
@@ -249,7 +278,7 @@ public class RemediationReportService {
             if (group.isGrouped()) appendGroupedAiReviewHtml(rows, group, data.aiReviews);
             else appendAiReviewHtml(rows, data.aiReviews.get(finding.getId()));
             rows.append("</td><td>")
-                    .append(escape(value(finding.getRecommendation(), "请结合代码上下文复核并按安全编码规范整改。")))
+                    .append(escape(group.recommendation()).replace("\n", "<br/>"))
                     .append("</td></tr>");
         }
 
@@ -271,7 +300,7 @@ public class RemediationReportService {
                 "<table class=\"summary-table\"><tr>" + summaryCell("扫描模式", scanModeLabel(run)) + summaryCell("当前问题", String.valueOf(data.findings.size())) +
                 summaryCell("新增问题", String.valueOf(data.newFindingCount)) + summaryCell("已修复", String.valueOf(data.fixedFindingCount)) +
                 "</tr></table>" +
-                "<section class=\"card\"><b>扫描基线</b><p>规则集：" + escape(ruleProfileLabel(run.getRuleProfile())) + "</p><p>扫描分支：" +
+                "<section class=\"card\"><b>扫描基线</b><p>业务 Java 版本：" + javaVersionLabel(project) + "</p><p>规则集：" + escape(ruleProfileLabel(run.getRuleProfile())) + "</p><p>扫描分支：" +
                 escape(value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
                 "；扫描提交：" + escape(value(run.getScanCommit(), "-")) + "；merge-base：" + escape(value(run.getMergeBaseCommit(), "-")) +
                 "</p></section>" + (groups.size() < data.findings.size() ? "<p class=\"foot\">合并说明：同一依赖文件与组件版本的多个 CVE 在明细中合并展示；统计仍按 CVE 数量计算。</p>" : "") +
@@ -280,9 +309,23 @@ public class RemediationReportService {
                 "本报告由 CodeSentry 本地节点生成。</p><h2>问题明细与整改建议</h2><table class=\"data\"><thead><tr><th style=\"width:3%\">#</th><th style=\"width:6%\">等级</th>" +
                 "<th style=\"width:18%\">问题 / 规则 / 代码片段</th><th style=\"width:14%\">位置</th><th style=\"width:6%\">变化</th><th style=\"width:8%\">人工结论</th><th style=\"width:15%\">利用条件 / 复核证据</th><th style=\"width:16%\">工具复核</th><th style=\"width:14%\">整改建议</th>" +
                 "</tr></thead><tbody>" + (rows.length() == 0 ? "<tr><td colspan=\"9\">当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。</td></tr>" : rows) +
-                "</tbody></table></main></body></html>";
+                "</tbody></table>" + buildReferencesHtml(data.findings) + "</main></body></html>";
     }
 
+
+    private String buildReferencesHtml(List<FindingView> findings) {
+        StringBuilder html = new StringBuilder();
+        for (ReportFindingGroup group : groupFindings(findings)) {
+            Map<String, List<String>> sources = group.sources();
+            if (sources.isEmpty()) continue;
+            if (html.length() == 0) html.append("<h2>附录：整改版本依据</h2><p class=\"foot\">修复记录仅针对所列漏洞；升级须核对 JDK 和依赖兼容性。官方迁移建议核实日期：2026-11-03。</p>");
+            html.append("<section class=\"card\"><b>").append(escape(group.findingIds() + " · " + group.title())).append("</b>");
+            sources.forEach((url, cves) -> html.append("<p>").append(escape(String.join("、", cves)))
+                    .append("：<a href=\"").append(escape(url)).append("\">").append(escape(url)).append("</a></p>"));
+            html.append("</section>");
+        }
+        return html.toString();
+    }
 
     private File resolvePdfSongFont() {
         String configured = System.getenv("CODESENTRY_REPORT_SONG_FONT");
@@ -473,6 +516,10 @@ public class RemediationReportService {
                 + embedded.relationshipId + "\" w:fontKey=\"" + embedded.fontKey + "\"/></w:font>";
     }
 
+    private String javaVersionLabel(ScanProject project) {
+        return project.getTargetJavaVersion() == null ? "未确认" : "Java " + project.getTargetJavaVersion();
+    }
+
     private String summaryCell(String label, String value) { return "<td><span>" + escape(label) + "</span><b>" + escape(value) + "</b></td>"; }
     private boolean isDependencyVulnerability(FindingView finding) {
         return "Trivy".equals(finding.getScanner()) && "VULNERABILITY".equals(finding.getCategory());
@@ -489,12 +536,14 @@ public class RemediationReportService {
                 + reportLocationValue(finding);
     }
 
-    private List<ReportFindingGroup> groupFindings(List<FindingView> findings) {
+    private List<ReportFindingGroup> groupFindings(List<FindingView> findings) { return groupFindings(findings, null); }
+
+    private List<ReportFindingGroup> groupFindings(List<FindingView> findings, Integer javaVersion) {
         Map<String, ReportFindingGroup> groups = new LinkedHashMap<>();
         for (FindingView finding : findings) {
             String dependencyKey = DependencyFindingGrouping.groupKey(finding);
             String key = dependencyKey == null ? "finding|" + finding.getId() : "dependency|" + dependencyKey;
-            groups.computeIfAbsent(key, ignored -> new ReportFindingGroup()).members.add(finding);
+            groups.computeIfAbsent(key, ignored -> new ReportFindingGroup(javaVersion)).members.add(finding);
         }
         return new ArrayList<>(groups.values());
     }
@@ -706,6 +755,8 @@ public class RemediationReportService {
 
     private final class ReportFindingGroup {
         private final List<FindingView> members = new ArrayList<>();
+        private final Integer javaVersion;
+        private ReportFindingGroup(Integer javaVersion) { this.javaVersion = javaVersion; }
 
         private FindingView primary() {
             return members.stream().max(Comparator.comparingInt(item -> severityRank(item.getSeverity())))
@@ -717,6 +768,25 @@ public class RemediationReportService {
         private String title() {
             return isGrouped() ? DependencyFindingGrouping.componentLabel(primary()) + " 组件存在 " + members.size() + " 个已知漏洞（合并整改）"
                     : value(primary().getTitle(), "依赖漏洞");
+        }
+
+        private String recommendation() {
+            return io.codesentry.finding.service.DependencyRemediationAdvice.compact(members, javaVersion);
+        }
+
+        private Map<String, List<String>> sources() {
+            Map<String, List<String>> sources = new LinkedHashMap<>();
+            for (FindingView member : members) {
+                for (String url : io.codesentry.finding.service.DependencyRemediationAdvice.references(member)) {
+                    List<String> cves = sources.computeIfAbsent(url, key -> new ArrayList<>());
+                    if (!cves.contains(member.getRuleId())) cves.add(value(member.getRuleId(), "unknown"));
+                }
+            }
+            return sources;
+        }
+
+        private String findingIds() {
+            return members.stream().map(item -> "F-" + item.getId()).collect(Collectors.joining("、"));
         }
 
         private String ruleIds() {

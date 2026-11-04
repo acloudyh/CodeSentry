@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS scan_project (
     remote_url VARCHAR(1024) NULL,
     managed_path VARCHAR(1024) NULL,
     default_branch VARCHAR(255) NULL,
+    target_java_version INT NULL,
     enabled TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,

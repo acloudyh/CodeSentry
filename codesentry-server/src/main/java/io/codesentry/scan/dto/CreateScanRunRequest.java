@@ -9,6 +9,10 @@ public class CreateScanRunRequest {
 
     @NotNull(message = "项目不能为空")
     private Long projectId;
+    private Long sourceReportRunId;
+    public Long getSourceReportRunId() { return sourceReportRunId; }
+    public void setSourceReportRunId(Long value) { sourceReportRunId = value; }
+
 
     @NotNull(message = "扫描模式不能为空")
     private ScanMode scanMode;

@@ -10,7 +10,7 @@ const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref<number | null>(null)
 const error = ref('')
-const form = reactive({ projectName: '', sourceType: 'LOCAL' as SourceType, localPath: '', remoteUrl: '', defaultBranch: 'main' })
+const form = reactive({ projectName: '', sourceType: 'LOCAL' as SourceType, localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
 
 async function load() {
   try { projects.value = await api.projects() } catch (reason) { error.value = reason instanceof Error ? reason.message : '加载失败' }
@@ -18,14 +18,14 @@ async function load() {
 
 function register() {
   editingId.value = null
-  Object.assign(form, { projectName: '', sourceType: 'LOCAL', localPath: '', remoteUrl: '', defaultBranch: 'main' })
+  Object.assign(form, { projectName: '', sourceType: 'LOCAL', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
   showForm.value = true; error.value = ''
 }
 
 function edit(project: ScanProject) {
   editingId.value = project.id
   Object.assign(form, { projectName: project.projectName, sourceType: project.sourceType,
-    localPath: project.localPath ?? '', remoteUrl: project.remoteUrl ?? '', defaultBranch: project.defaultBranch ?? '' })
+    localPath: project.localPath ?? '', remoteUrl: project.remoteUrl ?? '', defaultBranch: project.defaultBranch ?? '', targetJavaVersion: project.targetJavaVersion ?? null })
   showForm.value = true; error.value = ''
   window.scrollTo({top:0, behavior:'smooth'})
 }
@@ -39,10 +39,11 @@ async function save() {
       localPath: form.sourceType === 'LOCAL' ? form.localPath : undefined,
       remoteUrl: form.sourceType === 'GIT' ? form.remoteUrl : undefined,
       defaultBranch: form.defaultBranch,
+      targetJavaVersion: form.targetJavaVersion,
     }
     if (editingId.value !== null) await api.updateProject(editingId.value, payload)
     else await api.createProject(payload)
-    Object.assign(form, { projectName: '', localPath: '', remoteUrl: '', defaultBranch: 'main' })
+    Object.assign(form, { projectName: '', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
     showForm.value = false
     editingId.value = null
     await load()
@@ -78,6 +79,7 @@ onMounted(load)
         </div>
         <div class="field"><label for="project-name">项目名称</label><input id="project-name" v-model.trim="form.projectName" :disabled="saving" class="input" required maxlength="128" placeholder="例如：订单中心" /></div>
         <div class="field"><label for="project-branch">默认基线分支</label><input id="project-branch" v-model.trim="form.defaultBranch" :disabled="saving" class="input" placeholder="main" /></div>
+        <div class="field span-2"><label for="project-java">业务系统 Java 版本</label><select id="project-java" v-model="form.targetJavaVersion" class="select" :disabled="saving"><option :value="null">未确认</option><option v-for="version in [8, 11, 17, 21, 25]" :key="version" :value="version">Java {{ version }}</option></select><small>用于筛选整改报告的依赖升级目标；填写被扫描业务系统的版本。</small></div>
         <div v-if="form.sourceType === 'LOCAL'" class="field span-2">
           <label for="project-path">本地 Git 仓库绝对路径</label><input id="project-path" v-model.trim="form.localPath" :disabled="saving" class="input mono" required placeholder="/Users/neo/code/project-a" />
           <small>CodeSentry 不会切换分支或执行 git pull；当前目录模式可以审查未提交代码。</small>

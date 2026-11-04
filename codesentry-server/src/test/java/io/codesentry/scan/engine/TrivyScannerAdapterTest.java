@@ -79,6 +79,8 @@ class TrivyScannerAdapterTest {
         assertEquals("src/main/webapp/WEB-INF/lib/dom4j-1.6.1.jar", findings.get(0).getFilePath());
         assertNull(findings.get(0).getStartLine());
         assertEquals("dom4j:dom4j@1.6.1", findings.get(0).getCodeSnippet());
+        assertTrue(findings.get(0).getRecommendation().contains("org.dom4j:dom4j:2.1.4"));
+        assertFalse(findings.get(0).getRecommendation().contains("请查阅漏洞公告"));
     }
 
     @Test void dependencyVulnerabilityFallsBackToResultTargetWhenPackagePathIsMissing() throws Exception {

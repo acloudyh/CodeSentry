@@ -11,6 +11,10 @@ public class ScanProject {
     private String remoteUrl;
     private String managedPath;
     private String defaultBranch;
+    private Integer targetJavaVersion;
+    public Integer getTargetJavaVersion() { return targetJavaVersion; }
+    public void setTargetJavaVersion(Integer value) { targetJavaVersion = value; }
+
     private Boolean enabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

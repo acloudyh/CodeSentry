@@ -30,7 +30,9 @@ class ScanProjectServiceTest {
     @Test void editsLocalMetadataAndValidatesRepositoryWithoutChangingRegistrationTime() {
         ScanProject p = project(ProjectSourceType.LOCAL); LocalDateTime created = p.getCreatedAt();
         when(git.validateLocalRepository("/new-repo")).thenReturn(Path.of("/new-repo"));
-        ScanProject updated = service.update(1L, request(ProjectSourceType.LOCAL));
+        CreateProjectRequest request = request(ProjectSourceType.LOCAL); request.setTargetJavaVersion(8);
+        ScanProject updated = service.update(1L, request);
+        assertEquals(8, updated.getTargetJavaVersion());
         assertEquals("新名称", updated.getProjectName()); assertEquals("/new-repo", updated.getLocalPath());
         assertEquals(created, updated.getCreatedAt()); assertNotNull(updated.getUpdatedAt());
         verify(git).resolveCommit(updated, "master"); verify(mapper).update(updated);

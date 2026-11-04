@@ -31,6 +31,10 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
                 "ALTER TABLE scan_tool_run ADD COLUMN output_log LONGTEXT NULL AFTER raw_report_path");
         ensureColumn("scan_run", "rule_profile",
                 "ALTER TABLE scan_run ADD COLUMN rule_profile VARCHAR(64) NOT NULL DEFAULT 'COMMUNITY_GENERAL' AFTER baseline_ref");
+        ensureColumn("scan_project", "target_java_version",
+                "ALTER TABLE scan_project ADD COLUMN target_java_version INT NULL");
+        ensureColumn("scan_run", "source_report_run_id",
+                "ALTER TABLE scan_run ADD COLUMN source_report_run_id BIGINT NULL");
         alterColumn("ALTER TABLE scan_finding MODIFY COLUMN cwe VARCHAR(512) NULL");
         alterColumn("ALTER TABLE scan_ai_review MODIFY COLUMN prompt_version VARCHAR(128) NOT NULL");
         failInterruptedRuns();

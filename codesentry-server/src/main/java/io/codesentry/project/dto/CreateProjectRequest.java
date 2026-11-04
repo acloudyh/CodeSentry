@@ -18,6 +18,12 @@ public class CreateProjectRequest {
     private String localPath;
     private String remoteUrl;
     private String defaultBranch;
+    @javax.validation.constraints.Min(value = 8, message = "业务 Java 版本不能低于 8")
+    @javax.validation.constraints.Max(value = 25, message = "业务 Java 版本不能高于 25")
+    private Integer targetJavaVersion;
+    public Integer getTargetJavaVersion() { return targetJavaVersion; }
+    public void setTargetJavaVersion(Integer value) { targetJavaVersion = value; }
+
 
     public String getProjectName() {
         return projectName;

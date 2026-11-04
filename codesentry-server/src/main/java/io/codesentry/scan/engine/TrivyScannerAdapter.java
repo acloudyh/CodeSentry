@@ -150,7 +150,9 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
             finding.setRuleId(text(item, "VulnerabilityID"));
             finding.setTitle(text(item, "Title"));
             finding.setDescription(text(item, "Description"));
-            finding.setRecommendation("升级到修复版本：" + defaultValue(text(item, "FixedVersion"), "请查阅漏洞公告"));
+            finding.setRecommendation(io.codesentry.finding.service.DependencyRemediationAdvice.fromScan(
+                    text(item, "PkgName"), text(item, "InstalledVersion"), text(item, "VulnerabilityID"),
+                    text(item, "FixedVersion"), text(item, "PrimaryURL")));
             finding.setCodeSnippet(text(item, "PkgName") + "@" + text(item, "InstalledVersion"));
             findings.add(finding);
         }

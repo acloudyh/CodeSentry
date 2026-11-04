@@ -18,8 +18,8 @@ public interface ScanProjectMapper {
     ScanProject findById(@Param("id") Long id);
 
     @Insert("INSERT INTO scan_project(project_name, source_type, local_path, remote_url, managed_path, " +
-            "default_branch, enabled, created_at, updated_at) VALUES(#{projectName}, #{sourceType}, " +
-            "#{localPath}, #{remoteUrl}, #{managedPath}, #{defaultBranch}, #{enabled}, #{createdAt}, #{updatedAt})")
+            "default_branch, target_java_version, enabled, created_at, updated_at) VALUES(#{projectName}, #{sourceType}, " +
+            "#{localPath}, #{remoteUrl}, #{managedPath}, #{defaultBranch}, #{targetJavaVersion}, #{enabled}, #{createdAt}, #{updatedAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScanProject project);
 
@@ -28,7 +28,7 @@ public interface ScanProjectMapper {
     int updateRepositoryState(ScanProject project);
 
     @Update("UPDATE scan_project SET project_name = #{projectName}, local_path = #{localPath}, " +
-            "remote_url = #{remoteUrl}, managed_path = #{managedPath}, default_branch = #{defaultBranch}, " +
+            "remote_url = #{remoteUrl}, managed_path = #{managedPath}, default_branch = #{defaultBranch}, target_java_version = #{targetJavaVersion}, " +
             "updated_at = #{updatedAt} WHERE id = #{id} AND enabled = 1")
     int update(ScanProject project);
 

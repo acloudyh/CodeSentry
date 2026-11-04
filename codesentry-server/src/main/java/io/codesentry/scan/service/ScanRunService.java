@@ -52,6 +52,7 @@ public class ScanRunService {
 
         ScanRun run = new ScanRun();
         run.setProjectId(project.getId());
+        run.setSourceReportRunId(request.getSourceReportRunId());
         run.setScanMode(request.getScanMode());
         run.setWorkspaceMode(request.getWorkspaceMode());
         run.setScanRef(request.getScanRef());
@@ -108,6 +109,14 @@ public class ScanRunService {
     }
 
     private void validate(ScanProject project, CreateScanRunRequest request) {
+        if (request.getSourceReportRunId() != null) {
+            ScanRun source = requireById(request.getSourceReportRunId());
+            if (!project.getId().equals(source.getProjectId()) || request.getScanMode() != ScanMode.FULL
+                    || !java.util.Objects.equals(source.getRuleProfile(), request.getRuleProfile())
+                    || mapper.hasReportSnapshot(source.getId()) == 0) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "整改验收必须关联已归档报告，并使用原项目、原规则集进行全量复扫");
+            }
+        }
         ruleProfileService.validate(StringUtils.hasText(request.getRuleProfile())
                 ? request.getRuleProfile() : RuleProfileService.COMMUNITY_GENERAL);
         if (request.getWorkspaceMode() == WorkspaceMode.CURRENT
