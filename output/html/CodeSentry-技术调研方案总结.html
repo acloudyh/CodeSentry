@@ -1,0 +1,518 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CodeSentry 技术调研方案总结</title><style>
+:root{--navy:#173a70;--ink:#26384e;--muted:#6b7d92;--line:#dce4ef;--paper:#fff;--bg:#f3f6fb}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:30px}body{margin:0;background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.85}a{color:#225ba6;text-decoration:none}a:hover{text-decoration:underline}.shell{max-width:1540px;margin:auto;display:grid;grid-template-columns:260px minmax(0,1fr);gap:36px;padding:36px}.side{position:sticky;top:28px;height:calc(100vh - 56px);overflow:auto;padding:22px 14px}.brand{font-size:19px;letter-spacing:2px;font-weight:750;color:var(--navy);margin-bottom:8px}.caption{font-size:12px;letter-spacing:1px;color:var(--muted)}.docs{margin:24px 0;padding-bottom:20px;border-bottom:1px solid var(--line)}.docs a,.toc a{display:block;font-size:13px;line-height:1.6;padding:7px 10px;border-radius:6px}.docs a.active{background:#e3ecfa;color:#173a70;font-weight:600}.toc a.sub{padding-left:24px;font-size:12px;color:#687d96}main{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:46px 54px;box-shadow:0 8px 28px #173a7005}.topline{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:28px;color:var(--muted);font-size:12px}button{font:inherit;font-size:13px;background:white;border:1px solid #bccce0;border-radius:6px;padding:6px 13px;color:var(--navy);cursor:pointer}h1{font-size:30px;line-height:1.5;color:#14345e;margin:0 0 28px;letter-spacing:-.5px}h2{font-size:22px;color:#173a70;margin:44px 0 18px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:18px;color:#285180;margin-top:28px}p{margin:14px 0}li{margin:5px 0}blockquote{margin:20px 0;border-left:3px solid #4778b5;padding:12px 20px;background:#f2f6fc;color:#43607f}table{border-collapse:collapse;width:100%;font-size:14px;margin:20px 0;line-height:1.7}th{background:#ecf2fa;color:#22476f;text-align:left;font-weight:600}th,td{padding:12px 14px;border:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tr:nth-child(even) td{background:#fafcfe}pre{overflow:auto;padding:20px;background:#f2f5fa;border:1px solid var(--line);border-radius:8px;line-height:1.6;font-size:13px}code{font-family:Menlo,Consolas,monospace;font-size:.88em;overflow-wrap:anywhere}p code,li code{background:#edf2f8;padding:2px 5px;border-radius:4px}img{display:block;max-width:100%;height:auto;margin:22px auto;border:1px solid var(--line);border-radius:10px}figure{margin:20px 0}figcaption{text-align:center;font-size:12px;color:var(--muted)}.footer{margin-top:50px;border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--muted)}@media(max-width:1150px){.shell{grid-template-columns:210px minmax(0,1fr);gap:18px;padding:20px}main{padding:30px}}@media print{body{background:white;font-size:10.5pt}.shell{display:block;padding:0;max-width:none}.side,button{display:none}main{padding:0;border:0;box-shadow:none}h2,h3{break-after:avoid}tr,img{break-inside:avoid}.topline{margin:0 0 16px}.footer{margin-top:20px}@page{size:A4;margin:18mm 15mm}}</style></head><body><div class="shell"><aside class="side"><div class="brand">CODESENTRY</div><div class="caption">本地代码安全审核 · 技术文档</div><nav class="docs" aria-label="文档导航"><a class="" href="代码安全审核技术调研与实施流程.html">代码安全审核技术调研与实施流程</a><a class="" href="工具复核与人工审核流程.html">工具复核与人工审核流程</a><a class="active" href="CodeSentry-技术调研方案总结.html">技术调研方案总结</a><a class="" href="CodeSentry-技术调研与客户培训手册.html">技术调研与讲解手册</a></nav><nav class="toc" aria-label="章节目录"><a class="" href="#1-项目背景">1. 项目背景</a><a class="" href="#2-调研结论">2. 调研结论</a><a class="" href="#3-约束条件与方案对比">3. 约束条件与方案对比</a><a class="sub" href="#31-硬性约束">3.1 硬性约束</a><a class="sub" href="#32-统一维度比较">3.2 统一维度比较</a><a class="" href="#4-总体架构">4. 总体架构</a><a class="" href="#5-各层职责">5. 各层职责</a><a class="" href="#6-全量与增量扫描设计">6. 全量与增量扫描设计</a><a class="sub" href="#61-全量扫描">6.1 全量扫描</a><a class="sub" href="#62-增量审查">6.2 增量审查</a><a class="" href="#7-扫描器选型">7. 扫描器选型</a><a class="sub" href="#71-老项目适配与范围">7.1 老项目适配与范围</a><a class="sub" href="#72-前端专项规则与覆盖边界">7.2 前端专项规则与覆盖边界</a><a class="" href="#8-为什么采用该架构">8. 为什么采用该架构</a><a class="sub" href="#81-本地优先">8.1 本地优先</a><a class="sub" href="#82-模块化单体">8.2 模块化单体</a><a class="sub" href="#83-git-隔离快照">8.3 Git 隔离快照</a><a class="sub" href="#84-数据库与文件分离">8.4 数据库与文件分离</a><a class="sub" href="#85-自动扫描与人工复核结合">8.5 自动扫描与人工复核结合</a><a class="sub" href="#86-工具复核与人工审核">8.6 工具复核与人工审核</a><a class="sub" href="#87-依赖归组与调用复用">8.7 依赖归组与调用复用</a><a class="sub" href="#88-持久化配置与容器部署">8.8 持久化配置与容器部署</a><a class="sub" href="#89-桌面操作与报告交付">8.9 桌面操作与报告交付</a><a class="sub" href="#810-漏洞库维护与定时更新设计">8.10 漏洞库维护与定时更新设计</a><a class="" href="#9-主要优势">9. 主要优势</a><a class="" href="#10-实现与验收状态">10. 实现与验收状态</a><a class="" href="#11-当前边界">11. 当前边界</a><a class="" href="#12-后续建设建议">12. 后续建设建议</a><a class="sub" href="#第一优先级完成交付验收">第一优先级：完成交付验收</a><a class="sub" href="#第二优先级扩大规则与治理能力">第二优先级：扩大规则与治理能力</a><a class="sub" href="#第三优先级提升规模化能力">第三优先级：提升规模化能力</a><a class="" href="#13-总结">13. 总结</a></nav></aside><main><div class="topline"><span>TECHNICAL RESEARCH / 技术调研</span><button onclick="window.print()">打印 / 保存 PDF</button></div><h1 id="codesentry-技术调研方案总结">CodeSentry 技术调研方案总结</h1>
+<h2 id="1-项目背景">1. 项目背景</h2>
+<p>本项目建设一套本地化代码安全扫描与审查产品，解决开源扫描工具结果分散、缺少增量比较、无法人工复核以及整改报告不统一等问题。</p>
+<p>核心需求如下：</p>
+<ul>
+<li>不采购商业扫描平台，不使用 SonarQube。</li>
+<li>GitLab 只作为代码来源，不依赖 GitLab CI、Runner、API、MR 或安全看板。</li>
+<li>支持扫描已有本地 Git 仓库，也支持通过标准 Git 地址拉取远程仓库。</li>
+<li>支持全量扫描和基于指定基线分支的增量审查。</li>
+<li>产品主体采用 Java 实现，前端采用 Vue，数据保存到本地 MySQL。</li>
+<li>允许人工介入，对扫描结果进行确认、误报判断和风险接受。</li>
+<li>支持工具复核、执行过程查询、失败重试和严格条件下的报告误报过滤。</li>
+<li>支持生成 HTML、Word、PDF 整改报告。</li>
+</ul>
+<h2 id="2-调研结论">2. 调研结论</h2>
+<p>本次调研最终选择建设 CodeSentry 本地代码安全审查平台，采用：</p>
+<blockquote>
+<p>Java 模块化单体 + Vue 操作台 + MySQL + 本地文件存储 + Git 快照 + 多扫描器适配器</p>
+</blockquote>
+<p>Semgrep、Gitleaks、Trivy、SpotBugs/FindSecBugs 和 Alibaba P3C 作为底层扫描工具，CodeSentry 负责仓库管理、任务编排、进度日志、结果标准化、问题去重、依赖归组、增量比较、工具复核、人工审核和报告生成。</p>
+<p>该方案不是重新开发一套代码扫描算法，而是将成熟开源扫描能力整合为可管理、可追踪、可复核、可交付的本地安全审查产品。</p>
+<h2 id="3-约束条件与方案对比">3. 约束条件与方案对比</h2>
+<h3 id="31-硬性约束">3.1 硬性约束</h3>
+<p>以下内容属于本项目的前置约束，不是对相关产品技术能力的否定：</p>
+<ul>
+<li>项目明确不使用 SonarQube。</li>
+<li>GitLab 只能作为标准 Git 代码来源。</li>
+<li>当前没有商业软件采购预算。</li>
+<li>源码和扫描数据需要保留在客户本地。</li>
+<li>产品业务和编排层需要由 Java 实现。</li>
+</ul>
+<p>因此，SonarQube、深度绑定 GitLab 平台能力的方案和需要付费授权的商业平台不进入本阶段实施范围。</p>
+<h3 id="32-统一维度比较">3.2 统一维度比较</h3>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>平台依赖</th>
+<th>本地数据控制</th>
+<th>治理闭环</th>
+<th>成本与维护</th>
+<th>适配结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SonarQube</td>
+<td>独立服务和数据库</td>
+<td>支持本地部署</td>
+<td>产品能力成熟</td>
+<td>无论社区版或其他版本都需要部署、升级和规则运营</td>
+<td>因项目明确不使用 Sonar，且需要自主流程，不采用</td>
+</tr>
+<tr>
+<td>GitLab 安全扫描</td>
+<td>依赖 GitLab CI、Runner 和平台功能</td>
+<td>取决于 GitLab 部署方式</td>
+<td>与流水线、MR 结合紧密</td>
+<td>需要维护 GitLab 扫描链路</td>
+<td>与“GitLab 只用于拉取代码”冲突，不采用</td>
+</tr>
+<tr>
+<td>商业 SAST/SCA</td>
+<td>取决于厂商产品</td>
+<td>云端、本地或混合部署均可能</td>
+<td>通常较完整</td>
+<td>存在授权和厂商依赖，仍需核验具体部署的数据边界</td>
+<td>当前无采购预算，不采用</td>
+</tr>
+<tr>
+<td>单个开源扫描器</td>
+<td>依赖较低</td>
+<td>本地执行可控</td>
+<td>缺少统一批次、复核和报告</td>
+<td>工具免费不等于无维护成本</td>
+<td>作为底层扫描引擎</td>
+</tr>
+<tr>
+<td>CodeSentry</td>
+<td>标准 Git、本地 CLI、MySQL</td>
+<td>源码和治理数据保留本地</td>
+<td>按项目需要自主建设</td>
+<td>无商业授权费用，研发和规则维护由项目团队承担</td>
+<td>最符合当前约束，采用</td>
+</tr>
+</tbody></table>
+<h2 id="4-总体架构">4. 总体架构</h2>
+<p><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDAwIiBoZWlnaHQ9IjExMjAiIHZpZXdCb3g9IjAgMCAxNDAwIDExMjAiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0iQ29kZVNlbnRyeSDmgLvkvZPmnrbmnoQiPjxkZWZzPjxtYXJrZXIgaWQ9ImFycm93IiBtYXJrZXJXaWR0aD0iOCIgbWFya2VySGVpZ2h0PSI4IiByZWZYPSI3IiByZWZZPSI0IiBvcmllbnQ9ImF1dG8iPjxwYXRoIGQ9Ik0wLDAgTDgsNCBMMCw4IiBmaWxsPSIjODE5N2IyIi8+PC9tYXJrZXI+PC9kZWZzPjxnIGZvbnQtZmFtaWx5PSJQaW5nRmFuZyBTQyxNaWNyb3NvZnQgWWFIZWksTm90byBTYW5zIENKSyBTQyxzYW5zLXNlcmlmIj48cmVjdCB3aWR0aD0iMTQwMCIgaGVpZ2h0PSIxMTIwIiBmaWxsPSIjZjVmOGZjIiByeD0iMjAiLz48cmVjdCB4PSIzNiIgeT0iMzQiIHdpZHRoPSI1IiBoZWlnaHQ9IjU2IiByeD0iMiIgZmlsbD0iIzIzNTlhOCIvPjx0ZXh0IHg9IjU4IiB5PSI1OSIgZm9udC1zaXplPSIyOCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjcwMCI+Q29kZVNlbnRyeSDmgLvkvZPmnrbmnoQ8L3RleHQ+PHRleHQgeD0iNTgiIHk9Ijg3IiBmb250LXNpemU9IjE2IiBmaWxsPSIjNjY3Yzk2IiBmb250LXdlaWdodD0iNDAwIj7mnKzlnLDmiavmj4/miafooYwgwrcg5bel5YW36L6F5Yqp5aSN5qC4IMK3IOS6uuW3peWIpOaWreS4juaVtOaUueaguOmqjDwvdGV4dD48cmVjdCB4PSIzNiIgeT0iMTIwIiB3aWR0aD0iMTMyOCIgaGVpZ2h0PSI4NjQiIHJ4PSIxNiIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjZDZlMGVlIi8+PHRleHQgeD0iNTgiIHk9IjE1MyIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjYwMCI+5pys5Zyw5a6h5qC4546v5aKDPC90ZXh0PjxnPjxyZWN0IHg9IjcwIiB5PSIxODAiIHdpZHRoPSIyNzAiIGhlaWdodD0iODIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZDdlMWVmIi8+PHRleHQgeD0iOTAiIHk9IjIxNCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+5Luj56CB5p2l5rqQPC90ZXh0Pjx0ZXh0IHg9IjkwIiB5PSIyNDEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuacrOWcsOS7k+W6kyAvIOWbuuWumiBDb21taXQg5b+r54WnPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI0NDAiIHk9IjE4MCIgd2lkdGg9IjM3MCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjMTczYTcwIiBzdHJva2U9IiMxNzNhNzAiLz48dGV4dCB4PSI0NjAiIHk9IjIxNCIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZmZmZiIgZm9udC13ZWlnaHQ9IjYwMCI+SmF2YSDlrqHmoLjmnI3liqE8L3RleHQ+PHRleHQgeD0iNDYwIiB5PSIyNDEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiNkM2UxZjciIGZvbnQtd2VpZ2h0PSI0MDAiPuS7k+W6k+euoeeQhiDCtyDku7vliqHnvJbmjpIgwrcg54q25oCB5LiO5pel5b+XPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI5MTAiIHk9IjE4MCIgd2lkdGg9IjQxMCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZWRmNGZmIiBzdHJva2U9IiNjMmQ1ZjQiLz48dGV4dCB4PSI5MzAiIHk9IjIxNCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3M2Y3OSIgZm9udC13ZWlnaHQ9IjYwMCI+VnVlIOaTjeS9nOWPsDwvdGV4dD48dGV4dCB4PSI5MzAiIHk9IjI0MSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5omr5o+PIMK3IOWPsOi0piDCtyDlrqHmoLggwrcg5oql5ZGKIMK3IOW3peWFt+mFjee9rjwvdGV4dD48L2c+PHBhdGggZD0iTTM0MCwyMjEgTDQ0MCwyMjEiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48cGF0aCBkPSJNOTEwLDIyMSBMODEwLDIyMSIgc3Ryb2tlPSIjODE5N2IyIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiICBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxwYXRoIGQ9Ik02MjUsMjYyIEw2MjUsMzAyIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHRleHQgeD0iNzAiIHk9IjMwNCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjYwMCI+MDEgIOW3peWFt+aJq+aPjzwvdGV4dD48Zz48cmVjdCB4PSI3MCIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9IjkwIiB5PSIzNTgiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxNzNmNzkiIGZvbnQtd2VpZ2h0PSI2MDAiPlNlbWdyZXA8L3RleHQ+PHRleHQgeD0iOTAiIHk9IjM4NSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5rqQ56CB5LiOIEpTUCDop4TliJk8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjMyMiIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9IjM0MiIgeT0iMzU4IiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczZjc5IiBmb250LXdlaWdodD0iNjAwIj5HaXRsZWFrczwvdGV4dD48dGV4dCB4PSIzNDIiIHk9IjM4NSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+55aR5Ly85Yet5o2u5rOE6ZyyPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI1NzQiIHk9IjMyNCIgd2lkdGg9IjI0MiIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZWRmNGZmIiBzdHJva2U9IiNjMmQ1ZjQiLz48dGV4dCB4PSI1OTQiIHk9IjM1OCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3M2Y3OSIgZm9udC13ZWlnaHQ9IjYwMCI+VHJpdnk8L3RleHQ+PHRleHQgeD0iNTk0IiB5PSIzODUiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuS+nei1liBDVkUgLyDlr4bpkqU8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjgyNiIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9Ijg0NiIgeT0iMzU4IiBmb250LXNpemU9IjE0IiBmaWxsPSIjMTczZjc5IiBmb250LXdlaWdodD0iNjAwIj5TcG90QnVncyAvIEZpbmRTZWNCdWdzPC90ZXh0Pjx0ZXh0IHg9Ijg0NiIgeT0iMzg1IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj5KYXZhIOWtl+iKgueggTwvdGV4dD48L2c+PGc+PHJlY3QgeD0iMTA3OCIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9IjEwOTgiIHk9IjM1OCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3M2Y3OSIgZm9udC13ZWlnaHQ9IjYwMCI+QWxpYmFiYSBQM0M8L3RleHQ+PHRleHQgeD0iMTA5OCIgeT0iMzg1IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj5KYXZhIOe8lueggeinhOiMgzwvdGV4dD48L2c+PHBhdGggZD0iTTcwMCw0MDYgTDcwMCw0NDQiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48Zz48cmVjdCB4PSI3MCIgeT0iNDUwIiB3aWR0aD0iMTI1MCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI5MCIgeT0iNDg0IiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczNjVmIiBmb250LXdlaWdodD0iNjAwIj4wMiAg57uT5p6c5qCH5YeG5YyW5LiO6Zeu6aKY5Y+w6LSmPC90ZXh0Pjx0ZXh0IHg9IjkwIiB5PSI1MTEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuaMh+e6ueWOu+mHjSDCtyDlhajph4/lhaXlupMgLyDlop7ph4/mr5TovoMgwrcg5L+d55WZ5YCZ6YCJ57uT5p6c5LiO5Y6f5aeL6K+B5o2uPC90ZXh0PjwvZz48cGF0aCBkPSJNMzYwLDUzMiBMMzYwLDU3MCIgc3Ryb2tlPSIjODE5N2IyIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiICBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxwYXRoIGQ9Ik0xMDMwLDUzMiBMMTAzMCw1NzAiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48Zz48cmVjdCB4PSI3MCIgeT0iNTc2IiB3aWR0aD0iNTkwIiBoZWlnaHQ9Ijg4IiByeD0iMTIiIGZpbGw9IiNlZGY4ZjUiIHN0cm9rZT0iI2JhZGZkNCIvPjx0ZXh0IHg9IjkwIiB5PSI2MTAiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxOTY0NGYiIGZvbnQtd2VpZ2h0PSI2MDAiPjAzICDlt6XlhbflpI3moLg8L3RleHQ+PHRleHQgeD0iOTAiIHk9IjYzNyIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5L6d6LWW5oyJ5paH5Lu244CB57uE5Lu25Y+K54mI5pys5b2S57uEIMK3IOWIneWuoSAvIOWkjeWuoSDCtyDlpLHotKXph43or5U8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjczMCIgeT0iNTc2IiB3aWR0aD0iNTkwIiBoZWlnaHQ9Ijg4IiByeD0iMTIiIGZpbGw9IiNlZGY4ZjUiIHN0cm9rZT0iI2JhZGZkNCIvPjx0ZXh0IHg9Ijc1MCIgeT0iNjEwIiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTk2NDRmIiBmb250LXdlaWdodD0iNjAwIj4wNCAg5Lq65bel5Luj56CB5a6h5qC4PC90ZXh0Pjx0ZXh0IHg9Ijc1MCIgeT0iNjM3IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7mupDnoIHmir3mn6Ugwrcg6LCD55So6ZO+5YiG5p6QIMK3IOadg+mZkOS4jumYsuaKpCDCtyDpo47pmannoa7orqQ8L3RleHQ+PC9nPjxwYXRoIGQ9Ik02NjAsNjIwIEw3MzAsNjIwIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHBhdGggZD0iTTM2MCw2NjQgTDM2MCw3MDIiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48cGF0aCBkPSJNMTAzMCw2NjQgTDEwMzAsNzAyIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PGc+PHJlY3QgeD0iNzAiIHk9IjcwOCIgd2lkdGg9IjEyNTAiIGhlaWdodD0iODgiIHJ4PSIxMiIgZmlsbD0iIzE3M2E3MCIgc3Ryb2tlPSIjMTczYTcwIi8+PHRleHQgeD0iOTAiIHk9Ijc0MiIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZmZmZiIgZm9udC13ZWlnaHQ9IjYwMCI+MDUgIOaKpeWRiuS4juaVtOaUueS6pOS7mDwvdGV4dD48dGV4dCB4PSI5MCIgeT0iNzY5IiBmb250LXNpemU9IjE1IiBmaWxsPSIjZDNlMWY3IiBmb250LXdlaWdodD0iNDAwIj7nu5/kuIDnrZvpgInkuI7nu5/orqEgwrcg5L6d6LWW5pW05pS55b2S57uEIMK3IOWMuuWIhuW3suehruiupOmjjumZqeS4juW+heS6uuW3peehruiupOmhuSDCtyDlnKjnur8gLyBXb3JkIC8gUERGPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI3MCIgeT0iODQwIiB3aWR0aD0iMzkwIiBoZWlnaHQ9IjEwNCIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI5MCIgeT0iODc0IiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczNjVmIiBmb250LXdlaWdodD0iNjAwIj5NeVNRTDwvdGV4dD48dGV4dCB4PSI5MCIgeT0iOTAxIiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7phY3nva4gwrcg5om55qyhIMK3IOmXrumimCDCtyDlpI3moLjorrDlvZU8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjQ5MCIgeT0iODQwIiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwNCIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI1MTAiIHk9Ijg3NCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+5pys5Zyw5paH5Lu25a2Y5YKoPC90ZXh0Pjx0ZXh0IHg9IjUxMCIgeT0iOTAxIiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7lv6vnhacgwrcg5Y6f5aeL5oql5ZGKIMK3IOinhOWImSDCtyDmvI/mtJ7lupM8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjkyMCIgeT0iODQwIiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwNCIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI5NDAiIHk9Ijg3NCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+54us56uL5ryP5rSe5bqT57u05oqkPC90ZXh0Pjx0ZXh0IHg9Ijk0MCIgeT0iOTAxIiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7mm7TmlrDohJrmnKzlt7Llrp7njrAgLyDlrprml7bosIPluqblvoXlrp7mlr08L3RleHQ+PC9nPjxwYXRoIGQ9Ik05MjAsODkyIEw4ODksODkyIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHRleHQgeD0iNTgiIHk9IjEwMjAiIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiMxNzM2NWYiIGZvbnQtd2VpZ2h0PSI2MDAiPuWklumDqOi/nuaOpei+ueeVjDwvdGV4dD48dGV4dCB4PSI1OCIgeT0iMTA1MiIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzM0NDY1ZiIgZm9udC13ZWlnaHQ9IjQwMCI+6L+c56iLIEdpdO+8muS7hSBjbG9uZSAvIGZldGNo77yb56S+5Yy66KeE5YiZ5LiO5ryP5rSe5bqT77ya5oyJ6YWN572u6IGU572R44CCPC90ZXh0Pjx0ZXh0IHg9IjU4IiB5PSIxMDgyIiBmb250LXNpemU9IjE3IiBmaWxsPSIjMzQ0NjVmIiBmb250LXdlaWdodD0iNDAwIj7lpJbpg6jlpI3moLjmnI3liqHvvJrnu4/mjojmnYPlj5HpgIHlv4XopoHmupDnoIHor4Hmja7vvJvkuZ/lj6/ov57mjqXmnKzlnLDmnI3liqHjgII8L3RleHQ+PC9nPjwvc3ZnPg==" alt="CodeSentry 总体架构"></p>
+<p><a href="../../docs/diagrams/codesentry-overall-architecture.png">查看高清 PNG</a></p>
+<p><a href="../../docs/diagrams/codesentry-overall-architecture.mmd">总体架构图源</a></p>
+<h2 id="5-各层职责">5. 各层职责</h2>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>技术与组件</th>
+<th>主要职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>展示层</td>
+<td>Vue 3、TypeScript、Vite</td>
+<td>仓库登记、发起扫描、查看进度、问题复核和报告导出</td>
+</tr>
+<tr>
+<td>产品服务层</td>
+<td>JDK 11、Spring Boot</td>
+<td>REST API、业务规则、任务状态、扫描编排和报告生成</td>
+</tr>
+<tr>
+<td>工具辅助复核层</td>
+<td>兼容工具接口、本地证据整理、初审与复审检查</td>
+<td>批量审核、单项重试、执行详情、冲突识别和复核建议</td>
+</tr>
+<tr>
+<td>Git 处理层</td>
+<td>标准 Git CLI</td>
+<td>分支解析、Commit 解析、merge-base、mirror clone/fetch、快照导出</td>
+</tr>
+<tr>
+<td>扫描执行层</td>
+<td>Semgrep、Gitleaks、Trivy、SpotBugs/FindSecBugs、Alibaba P3C</td>
+<td>代码规则、凭据、依赖漏洞、Java 字节码与编码规范检查</td>
+</tr>
+<tr>
+<td>数据层</td>
+<td>MySQL 5.7+</td>
+<td>项目、扫描批次、工具执行、问题实例和人工复核数据</td>
+</tr>
+<tr>
+<td>文件存储层</td>
+<td><code>~/.codesentry</code></td>
+<td>Git 镜像、current/baseline 快照、原始 JSON 报告和本地规则</td>
+</tr>
+<tr>
+<td>报告层</td>
+<td>Apache POI、OpenHTMLToPDF</td>
+<td>生成 HTML、DOCX 和 PDF 整改报告</td>
+</tr>
+</tbody></table>
+<h2 id="6-全量与增量扫描设计">6. 全量与增量扫描设计</h2>
+<h3 id="61-全量扫描">6.1 全量扫描</h3>
+<p>全量扫描对所选工作区或 Commit 快照执行所有可用扫描器，对结果进行标准化、指纹计算和去重，再将本批次问题登记为 <code>NEW</code>。</p>
+<h3 id="62-增量审查">6.2 增量审查</h3>
+<p>增量审查流程如下：</p>
+<ol>
+<li>解析扫描分支的目标 Commit。</li>
+<li>解析用户选择的基线分支 HEAD。</li>
+<li>计算两者的 <code>merge-base</code> 共同祖先。</li>
+<li>分别导出当前 Commit 和 merge-base 快照。</li>
+<li>使用同一组扫描器扫描两个版本。</li>
+<li>对标准化问题指纹进行集合比较。</li>
+<li>输出 <code>NEW</code>、<code>EXISTING</code>、<code>FIXED</code> 状态。</li>
+</ol>
+<p>使用 merge-base 可以避免把基线分支分叉后的新提交错误纳入扫描分支的变化范围。第一阶段采用双侧实际扫描，优先保证比较过程可解释；后续可通过基线缓存降低重复扫描成本。</p>
+<p>增量流程已实现，交付时需验证仓库相对路径归一化、同一问题跨快照匹配以及真实分支的新增/存量/修复判断；准确性以目标仓库验收结果为准。</p>
+<h2 id="7-扫描器选型">7. 扫描器选型</h2>
+<table>
+<thead>
+<tr>
+<th>扫描器</th>
+<th>当前作用</th>
+<th>选型原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Semgrep</td>
+<td>代码模式、常见漏洞和自定义规则</td>
+<td>多语言支持较好，规则可读，可建立本地规则库</td>
+</tr>
+<tr>
+<td>Gitleaks</td>
+<td>API Key、Token、私钥等硬编码凭据</td>
+<td>专注凭据泄露，扫描速度快，规则较成熟</td>
+</tr>
+<tr>
+<td>Trivy</td>
+<td>已知依赖漏洞与密钥检查</td>
+<td>识别组件版本及 CVE，定位具体依赖文件；读取本地漏洞库缓存</td>
+</tr>
+<tr>
+<td>SpotBugs / FindSecBugs</td>
+<td>Java 字节码安全检查</td>
+<td>利用已有 JAR 分析业务类，补充老项目缺少 Java 源码的检查能力</td>
+</tr>
+<tr>
+<td>Alibaba P3C-PMD</td>
+<td>Java 编码规范检查</td>
+<td>接入阿里巴巴 Java 开发规范规则；只检查 <code>.java</code> 源文件，规范问题需人工判断安全影响</td>
+</tr>
+</tbody></table>
+<p>扫描器通过统一 Java 适配器接口接入。新增扫描器时需要开发适配器、完成测试并重新发布产品，但无需重写仓库、批次、问题台账和报告模块。</p>
+<h3 id="71-老项目适配与范围">7.1 老项目适配与范围</h3>
+<p>JSP 由本地路径穿越、命令执行、开放重定向规则检查；已有 JAR 可交给 SpotBugs/FindSecBugs 分析，并由 Trivy 检查组件已知漏洞。Trivy 兼容 <code>.jar1</code> 等非标准归档名，扫描副本后将结果位置还原到原文件。依赖漏洞优先采用原始报告的 <code>PkgPath</code>，显示 JAR 路径和版本，不伪造源码行号。</p>
+<p>字节码检查需配置业务包范围；当前默认范围针对既有项目，迁移新项目时应调整。没有 Java 源文件时，P3C 返回零结果不代表规范全部通过，也不自动编译 JSP 或重建业务代码。</p>
+<p>本地规则共 16 条定义，包含原有 8 条 Java/JSP 规则及独立的 8 条前端专项规则。本地基线和综合规则集同时加载两个本地规则包；社区规则集只加载所配置的社区规则。<code>eval</code> 本地定义已移除，适配器与查询层过滤对应命中；直接 <code>innerHTML</code> 规则不重新启用。其他约定排除项以实际配置和回归结果为准。</p>
+<h3 id="72-前端专项规则与覆盖边界">7.2 前端专项规则与覆盖边界</h3>
+<table>
+<thead>
+<tr>
+<th>文件范围</th>
+<th>本地检查内容</th>
+<th>实现边界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>JS / TS / JSX / TSX</td>
+<td>postMessage 通配目标源、浏览器 URL 输入进入跳转、敏感凭据写入 localStorage、明文 HTTP 请求</td>
+<td>语法模式及单文件局部数据流，React 源码复用这些规则，不宣称完整组件语义分析</td>
+</tr>
+<tr>
+<td>Vue 单文件组件</td>
+<td>路由参数直接进入 v-html、路由参数直接跳转、通配 postMessage、敏感凭据持久化</td>
+<td>限定文本模式，不解析完整模板作用域或跨文件数据流，注释及复杂上下文可能需要人工排除</td>
+</tr>
+</tbody></table>
+<p>固定站内跳转、精确 postMessage 目标源、普通主题配置存储、HTTPS 和约定的回环开发地址设有安全样例。Vue 的净化后输出样例不命中直接路由参数规则；这不代表净化器或整段代码已通过安全验证。</p>
+<p>规则包为 <code>rules/codesentry-frontend.yml</code>，正反例及验证入口位于 <code>src/test/resources/frontend-rules</code>；使用本机 Semgrep 运行该目录中的 <code>verify.cjs</code> 可离线检查。压缩 JS、jQuery、Bootstrap、ECharts 等既有排除项保持不变。命中属于风险线索，尤其通配消息和存储规则需结合数据敏感度人工判断。</p>
+<h2 id="8-为什么采用该架构">8. 为什么采用该架构</h2>
+<h3 id="81-本地优先">8.1 本地优先</h3>
+<p>扫描执行、结构化结果和报告生成都在客户本地完成。启用外部复核工具时，必要源码证据会提交至配置接口；仅使用本地扫描器时按本地运行配置执行。</p>
+<p>远程 Git 拉取、Semgrep 社区规则、工具更新和 CLI 遥测可能产生网络访问，交付前需要根据客户要求核验访问域名、遥测配置和离线策略。</p>
+<h3 id="82-模块化单体">8.2 模块化单体</h3>
+<p>当前定位是单机本地产品，首期采用 Java 模块化单体，不引入微服务、消息队列和分布式扫描节点。</p>
+<p>主要原因：</p>
+<ul>
+<li>部署组件少，客户安装和问题排查更简单。</li>
+<li>符合现有 Java 团队的技术能力。</li>
+<li>当前仓库规模下无需承担分布式系统复杂度。</li>
+<li>内部模块边界清晰，未来仍可拆分扫描执行节点。</li>
+</ul>
+<h3 id="83-git-隔离快照">8.3 Git 隔离快照</h3>
+<p>分支扫描使用 <code>git archive</code> 导出指定 Commit：</p>
+<ul>
+<li>不切换用户当前分支。</li>
+<li>不修改用户工作区。</li>
+<li>不创建 worktree。</li>
+<li>便于记录和复现被扫描的源码版本。</li>
+</ul>
+<p>完整复现一次扫描还依赖扫描器版本、规则版本、执行参数和运行环境；这些信息需要在交付验收和后续版本治理中继续固化。</p>
+<p>当前工作区模式则允许直接扫描尚未提交的代码，并记录工作区是否存在未提交修改。</p>
+<h3 id="84-数据库与文件分离">8.4 数据库与文件分离</h3>
+<p>MySQL 保存便于查询的项目、批次、问题和人工复核数据；Git 镜像、快照和原始扫描报告保存到本地文件系统。</p>
+<p>这种方式避免把大型仓库和原始报告写入数据库，同时保留结构化查询和执行追踪能力。</p>
+<h3 id="85-自动扫描与人工复核结合">8.5 自动扫描与人工复核结合</h3>
+<p>人工职责贯穿准备、代码审核、报告审定和修复核验：确认代码与检查范围，抽查源码和调用链，判断输入、权限、防护及影响，记录风险或误报依据，再审定交付范围并核查修复效果。工具复核提供辅助建议，实际人工审核工作单独记录。</p>
+<p>自动规则只能识别已知风险模式，不能完整理解业务授权和设计上下文。CodeSentry 提供以下人工结论：</p>
+<ul>
+<li>确认风险。</li>
+<li>误报。</li>
+<li>接受风险。</li>
+<li>已整改，等待复扫验证。</li>
+</ul>
+<p>复核结果可以记录复核人、说明和风险接受有效期，从而形成扫描、确认、整改、复扫和报告的治理闭环。</p>
+<h3 id="86-工具复核与人工审核">8.6 工具复核与人工审核</h3>
+<p>工具根据扫描结果及必要源码证据提供初审、复审和综合建议；审核人员结合完整代码、调用链和业务条件确认风险，工具建议与人工结论分别保存。</p>
+<p>批量任务支持进度查询、逐项结果、真实失败原因、停止和失败重试。问题台账保留全部候选结果；报告只保留人工确认风险，或完整通过工具可信度门槛且非误报的待人工确认结果，两者在报告中标明人工状态。报告生成使用统一筛选、去重和统计逻辑，不修改原始数据。</p>
+<p>仓库与扫描执行在本地完成。启用外部复核工具时，必要真实源码证据会提交至所配置的接口，应符合项目约定。</p>
+<h3 id="87-依赖归组与调用复用">8.7 依赖归组与调用复用</h3>
+<p>按“依赖文件路径 + 组件坐标 + 安装版本”生成审核组，同组多个 CVE 共用一次初审和一次复审，结论写回各成员。非依赖问题、不同文件或版本分别处理。任务进度按审核组计数，台账按候选条目计数，报告统计按通过筛选的条目计数；再次执行依据最新复核状态跳过成功项，失败及中断项可重试。</p>
+<p>报告按相同标识合并展示依赖整改项，保留每个 CVE 的标题、证据和复核结果；合并展示不删除原始问题，导出仍为只读。</p>
+<h3 id="88-持久化配置与容器部署">8.8 持久化配置与容器部署</h3>
+<p>新增“工具管理”页面，支持服务配置增删改查、启停、默认工具切换、预设地址与自定义兼容接口。配置保存到 MySQL，接口密钥以 AES-GCM 加密入库，本地主密钥文件独立保存；重启后恢复配置，备份需包含数据库和存储目录。</p>
+<p>Docker Compose 编排前后端，后端镜像包含五类扫描工具、FindSecBugs 插件及中文字体，前端通过 Nginx 提供页面和接口代理。本地仓库以只读挂载方式提供，MySQL 仍连接主机既有实例。镜像集成版本见安装脚本，实际可用性应在部署后检查。</p>
+<p>Trivy 在扫描阶段开启离线和跳过库更新，复用持久化缓存。通过 <code>scripts/update-trivy-db.sh</code> 独立更新漏洞库与 Java 索引库，支持镜像源回退。Compose 默认扫描超时为 900 秒，直接本地启动配置默认仍为 180 秒，应按部署方式设置。该离线策略仅针对 Trivy，不代表 Semgrep 社区规则也已离线。</p>
+<h3 id="89-桌面操作与报告交付">8.9 桌面操作与报告交付</h3>
+<p>扫描记录可直接跳转对应批次台账；扫描列表和问题台账默认每页 20 条，可选 50、100、500 条并选择页数。台账紧凑展示并保留原始内容查看，支持勾选问题批量人工复核。扫描与工具复核均可停止，扫描停止状态显示“已停止”。</p>
+<p>报告支持在线查看、Word 和 PDF 下载，列表按扫描时间倒序，时间统一为东八区。Word/PDF 正文使用宋体，标题及表头使用黑体，并嵌入字体。</p>
+<h3 id="810-漏洞库维护与定时更新设计">8.10 漏洞库维护与定时更新设计</h3>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>状态</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>漏洞库独立更新</td>
+<td>已实现</td>
+<td>运行后端容器中的维护脚本，更新漏洞库和 Java 索引库</td>
+</tr>
+<tr>
+<td>扫描读取缓存</td>
+<td>已实现</td>
+<td>扫描跳过联网库更新，使用持久化缓存</td>
+</tr>
+<tr>
+<td>定时调度、互斥、状态记录与通知</td>
+<td>规划</td>
+<td>尚未接入自动调度器</td>
+</tr>
+</tbody></table>
+<p>已有维护入口：</p>
+<pre><code class="language-bash">./scripts/update-trivy-db.sh
+</code></pre>
+<p>脚本需要后端容器运行、缓存目录持久化及更新源可访问。计划通过本地调度器调用，建议每天在非扫描时段执行一次。具体时间、缓存有效期和联网窗口由部署环境确定。以下为待实施设计：</p>
+<ul>
+<li>调度层增加互斥控制，避免重复更新，并与扫描任务错峰；维护期间不启动依赖漏洞扫描。</li>
+<li>记录开始时间、结束时间、最近成功时间、执行结果及失败原因，失败后按配置重试并通知维护人员。</li>
+<li>更新失败时保留已有可用缓存；首次缺库或超过约定有效期时，扫描前应完成更新或明确覆盖限制。</li>
+<li>更新仅维护漏洞库，不自动重扫历史代码，不修改历史批次、人工结论或报告记录；使用新库检查需发起新批次。</li>
+</ul>
+<p>更新脚本本身尚不提供上述调度、通知或失败缓存回退保证，需在调度层和更新流程中补齐；扫描继续读取本地缓存。</p>
+<h2 id="9-主要优势">9. 主要优势</h2>
+<ol>
+<li><strong>成本可控</strong>：核心扫描能力来自开源工具，无商业平台按人数或代码量授权费用。</li>
+<li><strong>源码可控</strong>：扫描过程和结果保留在客户本地。</li>
+<li><strong>GitLab 解耦</strong>：只使用标准 Git 协议，不绑定 GitLab 平台功能。</li>
+<li><strong>接入灵活</strong>：支持已有本地仓库和远程 Git 镜像。</li>
+<li><strong>不干扰开发</strong>：Commit 快照不切换或修改开发者工作区。</li>
+<li><strong>过程可追踪</strong>：扫描批次、执行进度、工具状态和日志均可查询。</li>
+<li><strong>结果可治理</strong>：支持批次查询、本地源码上下文、工具建议、人工复核和风险接受。</li>
+<li><strong>失败可识别</strong>：扫描器不可用或失败时标记为部分完成，不伪装成零问题。</li>
+<li><strong>工具过程可追踪</strong>：支持批量进度、复核结果、失败原因和单项重试。</li>
+<li><strong>报告口径一致</strong>：报告列表与三种导出格式统一过滤、去重和统计，导出不修改原始记录。</li>
+<li><strong>交付可归档</strong>：支持导出 HTML、Word 和 PDF 整改报告。</li>
+<li><strong>便于扩展</strong>：可以逐步增加规则集、扫描器适配器和兼容工具服务。</li>
+</ol>
+<p>成本可控不等于零成本，仍需要承担部署升级、规则运营、误报治理、数据备份以及开源许可证核查工作。</p>
+<h2 id="10-实现与验收状态">10. 实现与验收状态</h2>
+<p>本节使用以下口径：</p>
+<ul>
+<li><strong>源码已实现</strong>：当前代码中已经存在相应模块和调用链。</li>
+<li><strong>专项检查通过</strong>：此前已执行过针对性检查，但不等于完整生产验收。</li>
+<li><strong>待交付验收</strong>：仍需在当前构建和客户代表性仓库上完成端到端验证。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>当前状态</th>
+<th>代码或检查依据</th>
+<th>仍需验证</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>本地/远程仓库登记与分支查询</td>
+<td>源码已实现</td>
+<td><code>project</code>、<code>GitRepositoryService</code></td>
+<td>私有仓库认证、大仓库拉取</td>
+</tr>
+<tr>
+<td>mirror clone/fetch、Commit、merge-base</td>
+<td>源码已实现</td>
+<td><code>GitRepositoryService</code></td>
+<td>客户 Git 服务兼容性</td>
+</tr>
+<tr>
+<td>不使用 worktree 的 Commit 快照</td>
+<td>源码已实现</td>
+<td><code>RepositorySnapshotService</code></td>
+<td>子模块、LFS、符号链接边界</td>
+</tr>
+<tr>
+<td>全量扫描流程</td>
+<td>源码已实现</td>
+<td><code>ScanOrchestrator</code></td>
+<td>当前版本端到端复跑</td>
+</tr>
+<tr>
+<td>增量扫描流程</td>
+<td>源码已实现、待关键验收</td>
+<td><code>ScanOrchestrator</code>、<code>FindingFingerprintService</code></td>
+<td>仓库相对路径归一化及 NEW/EXISTING/FIXED 回归</td>
+</tr>
+<tr>
+<td>五类扫描工具及 JSP/老项目适配</td>
+<td>源码已实现</td>
+<td>五个扫描器适配器、本地 JSP 规则</td>
+<td>业务包范围、字节码和源码覆盖范围</td>
+</tr>
+<tr>
+<td>本地/社区/综合规则集</td>
+<td>源码已实现</td>
+<td><code>RuleProfileService</code>、本地 YAML 规则</td>
+<td>社区规则版本、缓存和许可证条款</td>
+</tr>
+<tr>
+<td>扫描进度、工具状态和执行日志</td>
+<td>源码已实现</td>
+<td><code>scan_tool_run</code>、扫描详情页</td>
+<td>长任务、异常退出和恢复</td>
+</tr>
+<tr>
+<td>问题批次、代码片段和人工复核</td>
+<td>源码已实现，前端曾做专项检查</td>
+<td><code>FindingsView.vue</code>、<code>scan_triage</code></td>
+<td>当前构建复跑、复核历史</td>
+</tr>
+<tr>
+<td>本地源码上下文恢复</td>
+<td>源码已实现，专项单元测试覆盖</td>
+<td><code>SourceSnippetExtractor</code>、<code>FindingPersistenceService</code></td>
+<td>快照缺失、编码异常及敏感信息交付策略</td>
+</tr>
+<tr>
+<td>HTML、DOCX、PDF 报告</td>
+<td>源码已实现</td>
+<td><code>ReportController</code>、<code>RemediationReportService</code></td>
+<td>当前构建、中文字体和客户办公软件兼容性</td>
+</tr>
+<tr>
+<td>工具复核</td>
+<td>源码已实现，包含执行详情、失败原因和单项重试</td>
+<td>工具复核模块、工具复核数据、<code>FindingsView.vue</code></td>
+<td>经授权的实际工具端点与代表性代码联调</td>
+</tr>
+<tr>
+<td>工具配置与 Docker 部署</td>
+<td>源码已实现</td>
+<td>工具管理模块、Compose 和镜像安装脚本</td>
+<td>配置恢复、挂载与密钥文件备份</td>
+</tr>
+<tr>
+<td>依赖审核组与整改归组</td>
+<td>源码已实现</td>
+<td><code>DependencyFindingGrouping</code>、复核和报告服务</td>
+<td>分组边界、成员结论及条目统计</td>
+</tr>
+<tr>
+<td>漏洞库独立更新</td>
+<td>脚本已实现；定时调度规划中</td>
+<td><code>scripts/update-trivy-db.sh</code></td>
+<td>缓存可用性、库版本与后续调度设计</td>
+</tr>
+<tr>
+<td>报告误报过滤与统计一致性</td>
+<td>源码已实现，专项单元测试覆盖</td>
+<td><code>RemediationReportService</code>、<code>ReportsView.vue</code></td>
+<td>大批次报告性能及三种格式兼容性</td>
+</tr>
+</tbody></table>
+<p>已有开发验证包括后端专项测试、前端构建、实际扫描与报告导出。交付验收仍需针对实际部署版本和代表性仓库进行，历史通过结果不替代当前环境验收。</p>
+<h2 id="11-当前边界">11. 当前边界</h2>
+<table>
+<thead>
+<tr>
+<th>当前边界</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>本地规则按项目约定筛选，P3C 只检查 Java 源码</td>
+<td>不能代表已经覆盖全部行业规范和所有文件类型</td>
+</tr>
+<tr>
+<td>社区规则依赖外部 Registry</td>
+<td>网络或 TLS 异常可能导致社区规则执行失败</td>
+</tr>
+<tr>
+<td>增量指纹路径归一化尚待完善</td>
+<td>绝对路径差异可能影响 NEW/FIXED 判断</td>
+</tr>
+<tr>
+<td>当前采用单机线程池</td>
+<td>不适合大量仓库同时并发扫描</td>
+</tr>
+<tr>
+<td>当前为本地单用户产品</td>
+<td>暂无认证、RBAC 和完整审计日志</td>
+</tr>
+<tr>
+<td>Trivy 已接入依赖漏洞与密钥检查</td>
+<td>覆盖依赖于可识别的组件元数据和本地库版本，不能承诺完整 SCA 或漏洞可利用性</td>
+</tr>
+<tr>
+<td>Gitleaks 使用目录扫描</td>
+<td>不等于扫描完整 Git 提交历史</td>
+</tr>
+<tr>
+<td>快照不完整处理子模块、LFS 和符号链接</td>
+<td>特殊仓库需要制定额外策略</td>
+</tr>
+<tr>
+<td>人工复核保存最新状态</td>
+<td>尚未形成不可变的复核版本历史</td>
+</tr>
+<tr>
+<td>本地源码证据可能包含真实凭据</td>
+<td>需要限制页面、报告和存储目录访问，并在对外交付前按约定处理敏感值</td>
+</tr>
+<tr>
+<td>原始扫描报告可能含敏感证据</td>
+<td>必须限制本地存储目录权限和保留周期</td>
+</tr>
+</tbody></table>
+<h2 id="12-后续建设建议">12. 后续建设建议</h2>
+<h3 id="第一优先级完成交付验收">第一优先级：完成交付验收</h3>
+<ul>
+<li>修复增量指纹的仓库相对路径归一化。</li>
+<li>使用真实分支验证 <code>NEW</code>、<code>EXISTING</code>、<code>FIXED</code>。</li>
+<li>固定扫描器版本并记录规则版本。</li>
+<li>验证社区规则失败时的本地规则降级策略。</li>
+<li>验证 Word/PDF 中文字体和客户办公软件兼容性。</li>
+</ul>
+<h3 id="第二优先级扩大规则与治理能力">第二优先级：扩大规则与治理能力</h3>
+<ul>
+<li>建立通用、行业、客户自定义三级规则体系。</li>
+<li>增加规则版本、测试样例、白名单和回滚机制。</li>
+<li>增加复核历史、报告快照和操作审计。</li>
+<li>增加认证、角色和数据权限。</li>
+</ul>
+<h3 id="第三优先级提升规模化能力">第三优先级：提升规模化能力</h3>
+<ul>
+<li>增加基线扫描结果缓存。</li>
+<li>增加任务配额和更细的资源限制，完善已有取消机制。</li>
+<li>根据实际并发规模拆分独立扫描节点。</li>
+<li>扩大已有依赖漏洞检查范围，按需增加许可证、配置检查及更多语言扫描器。</li>
+</ul>
+<h2 id="13-总结">13. 总结</h2>
+<p>CodeSentry 选择的是一条“开源扫描引擎 + 自主治理平台”的路线。</p>
+<p>该架构把成熟开源工具负责的漏洞发现能力，与企业实际需要的仓库管理、扫描批次、增量比较、人工复核和整改报告结合起来。在不依赖商业平台和 GitLab 扩展能力的前提下，实现代码安全检查本地化、过程可追踪、结果可治理。</p>
+<p>现阶段最重要的不是继续增加架构复杂度，而是完成增量准确性、规则版本、离线能力和报告兼容性的交付验收，再根据客户规模逐步扩展规则、权限、审计和分布式执行能力。</p>
+<blockquote>
+<p>方案核心关键词：<strong>本地可控、增量可解释、结果可治理、能力可扩展。</strong></p>
+</blockquote>
+<div class="footer">CodeSentry · 本地代码安全审核技术文档</div></main></div></body></html>

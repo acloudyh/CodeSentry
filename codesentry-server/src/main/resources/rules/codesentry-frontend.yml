@@ -1,0 +1,124 @@
+rules:
+  - id: codesentry.frontend.postmessage-wildcard
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: postMessage 使用通配目标源，消息可能发送给非预期页面；请核查是否包含敏感信息。
+    metadata:
+      category: security
+      cwe: CWE-346
+      fix: 将 targetOrigin 固定为可信源，并检查接收方来源。
+    pattern-either:
+      - pattern: $WINDOW.postMessage($DATA, "*")
+      - pattern: $WINDOW.postMessage($DATA, "*", ...)
+      - pattern: |
+          $WINDOW.postMessage($DATA, {targetOrigin: "*", ...})
+
+  - id: codesentry.frontend.browser-input-redirect
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: 浏览器 URL 输入可能控制跳转地址；请核查协议、目标源及站内路径限制。
+    metadata:
+      category: security
+      cwe: CWE-601
+      fix: 使用服务端或客户端预定义目标映射，规范化后校验协议、来源及路径白名单。
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.search
+          - pattern: location.hash
+          - pattern: window.location.search
+          - pattern: window.location.hash
+          - pattern: document.location.search
+          - pattern: document.location.hash
+    pattern-sinks:
+      - pattern-either:
+          - pattern: location.assign($URL)
+          - pattern: location.replace($URL)
+          - pattern: window.location.assign($URL)
+          - pattern: window.location.replace($URL)
+          - pattern: location.href = $URL
+          - pattern: window.location.href = $URL
+          - pattern: window.open($URL, ...)
+
+  - id: codesentry.frontend.sensitive-browser-storage
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: 疑似令牌、密码或密钥被写入浏览器持久化存储；请核查跨站脚本场景下的泄露风险。
+    metadata:
+      category: security
+      cwe: CWE-922
+      fix: 避免在 localStorage 保存密码或长期凭据，按认证架构采用受保护的会话方案。
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, $VALUE)
+          - pattern: window.localStorage.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: '(?i)^["\x27](?:access[_-]?token|refresh[_-]?token|auth[_-]?token|password|passwd|api[_-]?key|client[_-]?secret)["\x27]$'
+
+  - id: codesentry.frontend.insecure-http-request
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: 前端请求使用明文 HTTP 地址；请确认是否会传输敏感信息或凭据。
+    metadata:
+      category: security
+      cwe: CWE-319
+      fix: 使用 HTTPS，并校验实际部署的接口地址；本地开发地址不作为此规则命中。
+    patterns:
+      - pattern-either:
+          - pattern: fetch($URL, ...)
+          - pattern: axios.get($URL, ...)
+          - pattern: axios.post($URL, ...)
+          - pattern: axios.put($URL, ...)
+          - pattern: axios.delete($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '^["\x27]http://(?!(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?[/"\x27])'
+
+  - id: codesentry.frontend.vue-route-html
+    languages: [generic]
+    paths:
+      include: ["**/*.vue"]
+    severity: ERROR
+    message: Vue v-html 直接使用路由参数，可能将不可信内容作为 HTML 输出。
+    metadata:
+      category: security
+      cwe: CWE-79
+      fix: 优先使用文本插值；确需 HTML 时采用经过验证的净化器，并人工核查完整数据流。
+    pattern-regex: '(?i)\bv-html\s*=\s*["\x27]\s*(?:\$route|route)\.(?:query|params)\.[A-Za-z_$][\w$]*(?:\s*["\x27])'
+
+  - id: codesentry.frontend.vue-route-redirect
+    languages: [generic]
+    paths:
+      include: ["**/*.vue"]
+    severity: WARNING
+    message: Vue 路由参数直接控制浏览器跳转，需核查目标白名单。
+    metadata:
+      category: security
+      cwe: CWE-601
+      fix: 使用预定义站内目标并校验路由参数，避免外部 URL 直接传入跳转函数。
+    pattern-regex: '(?:window\.)?location\.(?:assign|replace)\s*\(\s*(?:this\.)?(?:\$route|route)\.(?:query|params)\.[A-Za-z_$][\w$]*\s*\)'
+
+  - id: codesentry.frontend.vue-postmessage-wildcard
+    languages: [generic]
+    paths:
+      include: ["**/*.vue"]
+    severity: WARNING
+    message: Vue 文件中的 postMessage 使用通配目标源，需核查消息接收方与敏感数据。
+    metadata:
+      category: security
+      cwe: CWE-346
+      fix: 将 targetOrigin 固定为可信源，避免向任意来源发送敏感信息。
+    pattern-regex: '\bpostMessage\s*\([^,;\r\n]{1,300},\s*["\x27]\*["\x27]\s*(?:,|\))'
+
+  - id: codesentry.frontend.vue-sensitive-browser-storage
+    languages: [generic]
+    paths:
+      include: ["**/*.vue"]
+    severity: WARNING
+    message: Vue 文件疑似将令牌、密码或密钥写入 localStorage，需核查存储风险。
+    metadata:
+      category: security
+      cwe: CWE-922
+      fix: 避免持久化密码与长期凭据，结合认证架构选择受保护的会话方案。
+    pattern-regex: '(?i)\blocalStorage\.setItem\s*\(\s*["\x27](?:access[_-]?token|refresh[_-]?token|auth[_-]?token|password|passwd|api[_-]?key|client[_-]?secret)["\x27]\s*,'

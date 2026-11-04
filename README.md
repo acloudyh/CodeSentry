@@ -332,6 +332,18 @@ python3 scripts/triage-findings.py \
 
 ## 工具复核与人工审核
 
+### 本地前端安全规则
+
+本地基线及综合规则集加载 `codesentry-frontend.yml`，包含 8 条前端规则：JS/TS/JSX/TSX 的通配 postMessage、浏览器输入跳转、敏感凭据持久化及明文 HTTP，以及 Vue 文件的限定模式检查。社区模式不自动加载该本地包。React 复用 JS/TS 规则，Vue 不提供完整模板或跨文件分析；既有第三方库排除、`eval` 过滤及直接 `innerHTML` 不启用的约定不变。
+
+安装 Semgrep 后，可从项目根目录验证正反例：
+
+```bash
+node codesentry-server/src/test/resources/frontend-rules/verify.cjs
+```
+
+### 执行与复核
+
 在问题台账中执行“批量工具审核”，通过“执行详情”查看进度、初审与复审建议及真实失败原因。整批结束后会自动重试失败项一次，也支持手动重试。
 
 工具服务由后端配置启用，所需凭据由运行环境提供。启用外部工具时，必要真实源码证据会提交至配置接口，可能包含命中凭据。工具结论独立保存，不自动覆盖人工审核状态。

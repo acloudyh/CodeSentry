@@ -1,0 +1,565 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>本地代码安全审核技术调研与实施流程</title><style>
+:root{--navy:#173a70;--ink:#26384e;--muted:#6b7d92;--line:#dce4ef;--paper:#fff;--bg:#f3f6fb}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:30px}body{margin:0;background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.85}a{color:#225ba6;text-decoration:none}a:hover{text-decoration:underline}.shell{max-width:1540px;margin:auto;display:grid;grid-template-columns:260px minmax(0,1fr);gap:36px;padding:36px}.side{position:sticky;top:28px;height:calc(100vh - 56px);overflow:auto;padding:22px 14px}.brand{font-size:19px;letter-spacing:2px;font-weight:750;color:var(--navy);margin-bottom:8px}.caption{font-size:12px;letter-spacing:1px;color:var(--muted)}.docs{margin:24px 0;padding-bottom:20px;border-bottom:1px solid var(--line)}.docs a,.toc a{display:block;font-size:13px;line-height:1.6;padding:7px 10px;border-radius:6px}.docs a.active{background:#e3ecfa;color:#173a70;font-weight:600}.toc a.sub{padding-left:24px;font-size:12px;color:#687d96}main{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:46px 54px;box-shadow:0 8px 28px #173a7005}.topline{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:28px;color:var(--muted);font-size:12px}button{font:inherit;font-size:13px;background:white;border:1px solid #bccce0;border-radius:6px;padding:6px 13px;color:var(--navy);cursor:pointer}h1{font-size:30px;line-height:1.5;color:#14345e;margin:0 0 28px;letter-spacing:-.5px}h2{font-size:22px;color:#173a70;margin:44px 0 18px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:18px;color:#285180;margin-top:28px}p{margin:14px 0}li{margin:5px 0}blockquote{margin:20px 0;border-left:3px solid #4778b5;padding:12px 20px;background:#f2f6fc;color:#43607f}table{border-collapse:collapse;width:100%;font-size:14px;margin:20px 0;line-height:1.7}th{background:#ecf2fa;color:#22476f;text-align:left;font-weight:600}th,td{padding:12px 14px;border:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tr:nth-child(even) td{background:#fafcfe}pre{overflow:auto;padding:20px;background:#f2f5fa;border:1px solid var(--line);border-radius:8px;line-height:1.6;font-size:13px}code{font-family:Menlo,Consolas,monospace;font-size:.88em;overflow-wrap:anywhere}p code,li code{background:#edf2f8;padding:2px 5px;border-radius:4px}img{display:block;max-width:100%;height:auto;margin:22px auto;border:1px solid var(--line);border-radius:10px}figure{margin:20px 0}figcaption{text-align:center;font-size:12px;color:var(--muted)}.footer{margin-top:50px;border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--muted)}@media(max-width:1150px){.shell{grid-template-columns:210px minmax(0,1fr);gap:18px;padding:20px}main{padding:30px}}@media print{body{background:white;font-size:10.5pt}.shell{display:block;padding:0;max-width:none}.side,button{display:none}main{padding:0;border:0;box-shadow:none}h2,h3{break-after:avoid}tr,img{break-inside:avoid}.topline{margin:0 0 16px}.footer{margin-top:20px}@page{size:A4;margin:18mm 15mm}}</style></head><body><div class="shell"><aside class="side"><div class="brand">CODESENTRY</div><div class="caption">本地代码安全审核 · 技术文档</div><nav class="docs" aria-label="文档导航"><a class="active" href="代码安全审核技术调研与实施流程.html">代码安全审核技术调研与实施流程</a><a class="" href="工具复核与人工审核流程.html">工具复核与人工审核流程</a><a class="" href="CodeSentry-技术调研方案总结.html">技术调研方案总结</a><a class="" href="CodeSentry-技术调研与客户培训手册.html">技术调研与讲解手册</a></nav><nav class="toc" aria-label="章节目录"><a class="" href="#1-调研目标">1. 调研目标</a><a class="" href="#2-服务说明">2. 服务说明</a><a class="" href="#3-整体流程">3. 整体流程</a><a class="" href="#4-审核准备">4. 审核准备</a><a class="" href="#5-从-git-获取代码">5. 从 Git 获取代码</a><a class="sub" href="#51-客户需要提供">5.1 客户需要提供</a><a class="sub" href="#52-审核人员执行">5.2 审核人员执行</a><a class="sub" href="#53-源码安全要求">5.3 源码安全要求</a><a class="" href="#6-全量审核">6. 全量审核</a><a class="" href="#7-增量审核">7. 增量审核</a><a class="sub" href="#71-基线选择">7.1 基线选择</a><a class="sub" href="#72-检查范围">7.2 检查范围</a><a class="" href="#8-代码具体怎么审">8. 代码具体怎么审</a><a class="sub" href="#81-审核顺序">8.1 审核顺序</a><a class="sub" href="#82-使用工具">8.2 使用工具</a><a class="sub" href="#83-人工重点检查">8.3 人工重点检查</a><a class="sub" href="#84-人工复核判断">8.4 人工复核判断</a><a class="" href="#9-工具复核与人工确认">9. 工具复核与人工确认</a><a class="" href="#10-问题去重与分级">10. 问题去重与分级</a><a class="" href="#11-出具审核报告">11. 出具审核报告</a><a class="" href="#12-整改与核验">12. 整改与核验</a><a class="sub" href="#121-研发整改">12.1 研发整改</a><a class="sub" href="#122-审核人员核验">12.2 审核人员核验</a><a class="" href="#13-双方职责">13. 双方职责</a><a class="" href="#14-交付物">14. 交付物</a><a class="" href="#15-方法选择依据">15. 方法选择依据</a><a class="" href="#16-常见问题说明">16. 常见问题说明</a><a class="sub" href="#q1这是人工审核还是自动扫描">Q1：这是人工审核还是自动扫描？</a><a class="sub" href="#q2是否会人工逐行阅读所有代码">Q2：是否会人工逐行阅读所有代码？</a><a class="sub" href="#q3代码如何获取">Q3：代码如何获取？</a><a class="sub" href="#q4代码是否会上传到外部平台">Q4：代码是否会上传到外部平台？</a><a class="sub" href="#q5增量审核为什么需要基线">Q5：增量审核为什么需要基线？</a><a class="sub" href="#q6规则命中为什么没有写进报告">Q6：规则命中为什么没有写进报告？</a><a class="sub" href="#q7同一个问题在多个位置出现时如何计算">Q7：同一个问题在多个位置出现时如何计算？</a><a class="sub" href="#q8修复后规则不再提示是否就算通过">Q8：修复后规则不再提示，是否就算通过？</a><a class="sub" href="#q9暂时不能修复怎么办">Q9：暂时不能修复怎么办？</a><a class="sub" href="#q10代码审核能否替代渗透测试">Q10：代码审核能否替代渗透测试？</a></nav></aside><main><div class="topline"><span>TECHNICAL RESEARCH / 技术调研</span><button onclick="window.print()">打印 / 保存 PDF</button></div><h1 id="本地代码安全审核技术调研与实施流程">本地代码安全审核技术调研与实施流程</h1>
+<h2 id="1-调研目标">1. 调研目标</h2>
+<p>本次调研围绕以下问题明确实施方法：</p>
+<ul>
+<li>代码如何从 Git 仓库拉取并固定审核版本。</li>
+<li>全量审核和增量审核的区别。</li>
+<li>代码具体怎么检查，人工审核体现在哪里。</li>
+<li>问题如何确认、出具报告、整改和核验。</li>
+<li>审核结论的适用范围和双方职责。</li>
+</ul>
+<h2 id="2-服务说明">2. 服务说明</h2>
+<p>代码安全审核由审核人员在约定环境中，对客户指定版本的代码开展安全分析。</p>
+<p>审核人员先了解项目架构、业务流程和权限模型，再通过规则检查发现线索，对高风险模块和疑似问题进行人工代码阅读、调用链分析和必要验证。工具复核可辅助筛除满足严格条件的高可信误报，人工结论始终优先；正式报告只保留需要跟踪处置的问题。</p>
+<p>实施方案概述：</p>
+<blockquote>
+<p>本项目提供人工主导的代码安全审核服务。审核人员从客户授权的 Git 仓库拉取指定版本代码，通过全量或增量检查、重点代码抽查和调用链分析确认安全问题，给出整改建议，并在修复后进行核验。</p>
+</blockquote>
+<h2 id="3-整体流程">3. 整体流程</h2>
+<p><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAwIiBoZWlnaHQ9IjkwMCIgdmlld0JveD0iMCAwIDE2MDAgOTAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+Cjx0aXRsZSBpZD0idGl0bGUiPuS7o+eggeWuieWFqOWuoeaguOacjeWKoea1geeoizwvdGl0bGU+PGRlc2MgaWQ9ImRlc2MiPuS7jiBHaXQg5ouJ5Y+W5Luj56CB77yM5byA5bGV5YWo6YeP5oiW5aKe6YeP5qOA5p+l77yM5bel5YW35aSN5qC477yM5Lq65bel56Gu6K6k77yM5Lqk5LuY5oql5ZGK77yM56CU5Y+R5pW05pS577yM5L+u5aSN5qC46aqM44CC5qC46aqM6YCa6L+H5YWz6Zet6Zeu6aKY77yM5pyq6YCa6L+H6L+U5Zue5pW05pS577yM5b6F6aqM6K+B6KGl5YWF6K+B5o2u77yb5o6l5Y+X6aOO6Zmp55Sx5a6i5oi35a6h5om544CCPC9kZXNjPgo8ZGVmcz48bWFya2VyIGlkPSJhcnJvdyIgbWFya2VyV2lkdGg9IjgiIG1hcmtlckhlaWdodD0iOCIgcmVmWD0iNiIgcmVmWT0iNCIgb3JpZW50PSJhdXRvIj48cGF0aCBkPSJNMSAxIEw2IDQgTDEgNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQTRCM0MwIiBzdHJva2Utd2lkdGg9IjEuNSIvPjwvbWFya2VyPjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjE2MDAiIGhlaWdodD0iOTAwIiBmaWxsPSIjRjdGOUZDIi8+CjxnIGZvbnQtZmFtaWx5PSJQaW5nRmFuZyBTQywgTWljcm9zb2Z0IFlhSGVpLCBzYW5zLXNlcmlmIj4KPHJlY3QgeD0iNjgiIHk9IjY1IiB3aWR0aD0iNSIgaGVpZ2h0PSI0OCIgcng9IjIuNSIgZmlsbD0iIzE2N0I3MCIvPgo8dGV4dCB4PSI5NCIgeT0iMTAyIiBmb250LXNpemU9IjQwIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjMTcyRDQxIj7ku6PnoIHlronlhajlrqHmoLjmnI3liqHmtYHnqIs8L3RleHQ+Cjx0ZXh0IHg9Ijk0IiB5PSIxNDYiIGZvbnQtc2l6ZT0iMjEiIGZpbGw9IiM2ODdCOEMiPuS6uuW3peS4u+WvvOWuoeaguO+8jOS7juS7o+eggeeJiOacrOWIsOaVtOaUuee7k+iuuuWFqOeoi+WPr+i/vea6rzwvdGV4dD4KPHRleHQgeD0iMTUzMiIgeT0iOTEiIHRleHQtYW5jaG9yPSJlbmQiIGZvbnQtc2l6ZT0iMTYiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjNzI4MzkyIj7mioDmnK/osIPnoJQgwrcg5rWB56iL5oC76KeIPC90ZXh0Pgo8cmVjdCB4PSI2OCIgeT0iMjAyIiB3aWR0aD0iMjI0IiBoZWlnaHQ9IjQzIiByeD0iOCIgZmlsbD0iIzQ1NjY4RCIgZmlsbC1vcGFjaXR5PSIuMDgiLz48dGV4dCB4PSI4NiIgeT0iMjMwIiBmb250LXNpemU9IjE5IiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjNDU2NjhEIj7lrqHmoLjlh4blpIc8L3RleHQ+PHJlY3QgeD0iMzE2IiB5PSIyMDIiIHdpZHRoPSI3MjAiIGhlaWdodD0iNDMiIHJ4PSI4IiBmaWxsPSIjMTY3QjcwIiBmaWxsLW9wYWNpdHk9Ii4wOCIvPjx0ZXh0IHg9IjMzNCIgeT0iMjMwIiBmb250LXNpemU9IjE5IiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjMTY3QjcwIj7ku6PnoIHlrqHmoLg8L3RleHQ+PHJlY3QgeD0iMTA2MCIgeT0iMjAyIiB3aWR0aD0iNDcyIiBoZWlnaHQ9IjQzIiByeD0iOCIgZmlsbD0iI0ExNkMyNiIgZmlsbC1vcGFjaXR5PSIuMDgiLz48dGV4dCB4PSIxMDc4IiB5PSIyMzAiIGZvbnQtc2l6ZT0iMTkiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiNBMTZDMjYiPuaVtOaUueaguOmqjDwvdGV4dD48cmVjdCB4PSI2OCIgeT0iMjY3IiB3aWR0aD0iMjI0IiBoZWlnaHQ9IjI4MSIgcng9IjE0IiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNEREU1RUMiLz4KIDxyZWN0IHg9Ijg4IiB5PSIyODgiIHdpZHRoPSI0MyIgaGVpZ2h0PSIzOCIgcng9IjkiIGZpbGw9IiNFREYzRkEiLz4KIDx0ZXh0IHg9IjEwOS41IiB5PSIzMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMjAiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiM0NTY2OEQiPjAxPC90ZXh0PgogPHRleHQgeD0iMjcyIiB5PSIzMTIiIHRleHQtYW5jaG9yPSJlbmQiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM3Qjg5OTYiPuWuoeaguOaWuTwvdGV4dD4KIDx0ZXh0IHg9Ijg4IiB5PSIzNjkiIGZvbnQtc2l6ZT0iMjciIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiMxNzJENDEiPuS6uuW3peWuoeaguOWHhuWkhzwvdGV4dD4KIDxwYXRoIGQ9Ik04OCAzOTAgSDI3MiIgc3Ryb2tlPSIjRThFREYyIi8+CiA8dGV4dCB4PSI4OCIgeT0iNDI3IiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7noa7orqTojIPlm7TkuI7lj6ror7vmnYPpmZA8L3RleHQ+CiA8dGV4dCB4PSI4OCIgeT0iNDYxIiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7oh6rooYzku44gR2l0IOaLieWPluS7o+eggTwvdGV4dD4KIDx0ZXh0IHg9Ijg4IiB5PSI0OTUiIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM1MzY4N0IiPuWbuuWumuWuoeaguCBDb21taXQ8L3RleHQ+PHBhdGggZD0iTTI5NyA0MDMgSDMwOSIgc3Ryb2tlPSIjQTRCM0MwIiBzdHJva2Utd2lkdGg9IjEuOCIgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48cmVjdCB4PSIzMTYiIHk9IjI2NyIgd2lkdGg9IjIyNCIgaGVpZ2h0PSIyODEiIHJ4PSIxNCIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjRERFNUVDIi8+CiA8cmVjdCB4PSIzMzYiIHk9IjI4OCIgd2lkdGg9IjQzIiBoZWlnaHQ9IjM4IiByeD0iOSIgZmlsbD0iI0VBRjZGMiIvPgogPHRleHQgeD0iMzU3LjUiIHk9IjMxNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIyMCIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzE2N0I3MCI+MDI8L3RleHQ+CiA8dGV4dCB4PSI1MjAiIHk9IjMxMiIgdGV4dC1hbmNob3I9ImVuZCIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzdCODk5NiI+5a6h5qC45pa5PC90ZXh0PgogPHRleHQgeD0iMzM2IiB5PSIzNjkiIGZvbnQtc2l6ZT0iMjciIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiMxNzJENDEiPuW3peWFt+aJq+aPjzwvdGV4dD4KIDxwYXRoIGQ9Ik0zMzYgMzkwIEg1MjAiIHN0cm9rZT0iI0U4RURGMiIvPgogPHRleHQgeD0iMzM2IiB5PSI0MjciIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM1MzY4N0IiPuWFqOmHj++8mue6puWumuiMg+WbtOajgOafpTwvdGV4dD4KIDx0ZXh0IHg9IjMzNiIgeT0iNDYxIiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7lop7ph4/vvJrln7rnur/lt67lvILmo4Dmn6U8L3RleHQ+CiA8dGV4dCB4PSIzMzYiIHk9IjQ5NSIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzUzNjg3QiI+5bel5YW35aSN5qC45pW055CG6aOO6Zmp57q/57SiPC90ZXh0PjxwYXRoIGQ9Ik01NDUgNDAzIEg1NTciIHN0cm9rZT0iI0E0QjNDMCIgc3Ryb2tlLXdpZHRoPSIxLjgiIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHJlY3QgeD0iNTY0IiB5PSIyNjciIHdpZHRoPSIyMjQiIGhlaWdodD0iMjgxIiByeD0iMTQiIGZpbGw9IiNFQUY2RjIiIHN0cm9rZT0iIzE2N0I3MCIgc3Ryb2tlLXdpZHRoPSIyIi8+CiA8cmVjdCB4PSI1ODQiIHk9IjI4OCIgd2lkdGg9IjQzIiBoZWlnaHQ9IjM4IiByeD0iOSIgZmlsbD0iI0VBRjZGMiIvPgogPHRleHQgeD0iNjA1LjUiIHk9IjMxNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIyMCIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzE2N0I3MCI+MDM8L3RleHQ+CiA8dGV4dCB4PSI3NjgiIHk9IjMxMiIgdGV4dC1hbmNob3I9ImVuZCIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzdCODk5NiI+5a6h5qC45pa5PC90ZXh0PgogPHRleHQgeD0iNTg0IiB5PSIzNjkiIGZvbnQtc2l6ZT0iMjciIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiMxNjdCNzAiPuS6uuW3peS7o+eggeWuoeaguDwvdGV4dD4KIDxwYXRoIGQ9Ik01ODQgMzkwIEg3NjgiIHN0cm9rZT0iI0U4RURGMiIvPgogPHRleHQgeD0iNTg0IiB5PSI0MjciIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM1MzY4N0IiPuaKveafpea6kOeggeW5tui/vei4quiwg+eUqOmTvjwvdGV4dD4KIDx0ZXh0IHg9IjU4NCIgeT0iNDYxIiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7moLjmn6XmnYPpmZDjgIHpmLLmiqTkuI7lvbHlk408L3RleHQ+CiA8dGV4dCB4PSI1ODQiIHk9IjQ5NSIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzUzNjg3QiI+56Gu6K6k6aOO6Zmp44CB6K+v5oql5Y+K5L6d5o2uPC90ZXh0PjxwYXRoIGQ9Ik03OTMgNDAzIEg4MDUiIHN0cm9rZT0iI0E0QjNDMCIgc3Ryb2tlLXdpZHRoPSIxLjgiIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHJlY3QgeD0iODEyIiB5PSIyNjciIHdpZHRoPSIyMjQiIGhlaWdodD0iMjgxIiByeD0iMTQiIGZpbGw9IiNGRkZGRkYiIHN0cm9rZT0iI0RERTVFQyIvPgogPHJlY3QgeD0iODMyIiB5PSIyODgiIHdpZHRoPSI0MyIgaGVpZ2h0PSIzOCIgcng9IjkiIGZpbGw9IiNFQUY2RjIiLz4KIDx0ZXh0IHg9Ijg1My41IiB5PSIzMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMjAiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiMxNjdCNzAiPjA0PC90ZXh0PgogPHRleHQgeD0iMTAxNiIgeT0iMzEyIiB0ZXh0LWFuY2hvcj0iZW5kIiBmb250LXNpemU9IjE1IiBmaWxsPSIjN0I4OTk2Ij7lrqHmoLjmlrk8L3RleHQ+CiA8dGV4dCB4PSI4MzIiIHk9IjM2OSIgZm9udC1zaXplPSIyNyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzE3MkQ0MSI+5oql5ZGK5Lq65bel5a6h5a6aPC90ZXh0PgogPHBhdGggZD0iTTgzMiAzOTAgSDEwMTYiIHN0cm9rZT0iI0U4RURGMiIvPgogPHRleHQgeD0iODMyIiB5PSI0MjciIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM1MzY4N0IiPumXrumimOS9jee9ruS4juS7o+eggeivgeaNrjwvdGV4dD4KIDx0ZXh0IHg9IjgzMiIgeT0iNDYxIiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7lvbHlk43liIbmnpDkuI7kv67lpI3lu7rorq48L3RleHQ+CiA8dGV4dCB4PSI4MzIiIHk9IjQ5NSIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzUzNjg3QiI+5Yy65YiG5bey56Gu6K6k5LiO5b6F56Gu6K6k6aG5PC90ZXh0PjxwYXRoIGQ9Ik0xMDQxIDQwMyBIMTA1MyIgc3Ryb2tlPSIjQTRCM0MwIiBzdHJva2Utd2lkdGg9IjEuOCIgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48cmVjdCB4PSIxMDYwIiB5PSIyNjciIHdpZHRoPSIyMjQiIGhlaWdodD0iMjgxIiByeD0iMTQiIGZpbGw9IiNGRkZGRkYiIHN0cm9rZT0iI0RERTVFQyIvPgogPHJlY3QgeD0iMTA4MCIgeT0iMjg4IiB3aWR0aD0iNDMiIGhlaWdodD0iMzgiIHJ4PSI5IiBmaWxsPSIjRkJGM0U3Ii8+CiA8dGV4dCB4PSIxMTAxLjUiIHk9IjMxNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIyMCIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iI0ExNkMyNiI+MDU8L3RleHQ+CiA8dGV4dCB4PSIxMjY0IiB5PSIzMTIiIHRleHQtYW5jaG9yPSJlbmQiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM3Qjg5OTYiPueglOWPkeaWuTwvdGV4dD4KIDx0ZXh0IHg9IjEwODAiIHk9IjM2OSIgZm9udC1zaXplPSIyNyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzE3MkQ0MSI+56CU5Y+R5pW05pS5PC90ZXh0PgogPHBhdGggZD0iTTEwODAgMzkwIEgxMjY0IiBzdHJva2U9IiNFOEVERjIiLz4KIDx0ZXh0IHg9IjEwODAiIHk9IjQyNyIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzUzNjg3QiI+5L+u5pS56Zeu6aKY5Luj56CBPC90ZXh0PgogPHRleHQgeD0iMTA4MCIgeT0iNDYxIiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7lrozmiJDnm7jlhbPlip/og73oh6rmtYs8L3RleHQ+CiA8dGV4dCB4PSIxMDgwIiB5PSI0OTUiIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM1MzY4N0IiPuaPkOS6pOS/ruWkjSBDb21taXQ8L3RleHQ+PHBhdGggZD0iTTEyODkgNDAzIEgxMzAxIiBzdHJva2U9IiNBNEIzQzAiIHN0cm9rZS13aWR0aD0iMS44IiBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxyZWN0IHg9IjEzMDgiIHk9IjI2NyIgd2lkdGg9IjIyNCIgaGVpZ2h0PSIyODEiIHJ4PSIxNCIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjRERFNUVDIi8+CiA8cmVjdCB4PSIxMzI4IiB5PSIyODgiIHdpZHRoPSI0MyIgaGVpZ2h0PSIzOCIgcng9IjkiIGZpbGw9IiNGQkYzRTciLz4KIDx0ZXh0IHg9IjEzNDkuNSIgeT0iMzE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjIwIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjQTE2QzI2Ij4wNjwvdGV4dD4KIDx0ZXh0IHg9IjE1MTIiIHk9IjMxMiIgdGV4dC1hbmNob3I9ImVuZCIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzdCODk5NiI+5a6h5qC45pa5PC90ZXh0PgogPHRleHQgeD0iMTMyOCIgeT0iMzY5IiBmb250LXNpemU9IjI3IiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjMTcyRDQxIj7kurrlt6Xkv67lpI3moLjpqow8L3RleHQ+CiA8cGF0aCBkPSJNMTMyOCAzOTAgSDE1MTIiIHN0cm9rZT0iI0U4RURGMiIvPgogPHRleHQgeD0iMTMyOCIgeT0iNDI3IiBmb250LXNpemU9IjE3IiBmaWxsPSIjNTM2ODdCIj7mo4Dmn6XmoLnlm6DmmK/lkKbmtojpmaQ8L3RleHQ+CiA8dGV4dCB4PSIxMzI4IiB5PSI0NjEiIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM1MzY4N0IiPuWkjeafpeWFs+iBlOi3r+W+hOS4jue7lei/hzwvdGV4dD4KIDx0ZXh0IHg9IjEzMjgiIHk9IjQ5NSIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzUzNjg3QiI+5b2i5oiQ5qC46aqM57uT6K66PC90ZXh0Pgo8cmVjdCB4PSI2OCIgeT0iNTgyIiB3aWR0aD0iNzIwIiBoZWlnaHQ9IjIyMyIgcng9IjE0IiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNEREU1RUMiLz4KPHRleHQgeD0iOTQiIHk9IjYyMiIgZm9udC1zaXplPSIyMSIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzE3MkQ0MSI+5qOA5p+l5pa55byPPC90ZXh0Pgo8cmVjdCB4PSI5NCIgeT0iNjQzIiB3aWR0aD0iNTgiIGhlaWdodD0iMzAiIHJ4PSI2IiBmaWxsPSIjRUFGNkYyIi8+PHRleHQgeD0iMTIzIiB5PSI2NjQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiMxNjdCNzAiPuWFqOmHjzwvdGV4dD4KPHRleHQgeD0iMTY4IiB5PSI2NjUiIGZvbnQtc2l6ZT0iMTgiIGZpbGw9IiM0NjVFNzEiPummluasoeaIlumHjeWkp+eJiOacrO+8mue6puWumuiMg+WbtOajgOafpe+8i+mHjeeCueS6uuW3peWuoeafpTwvdGV4dD4KPHJlY3QgeD0iOTQiIHk9IjY5MCIgd2lkdGg9IjU4IiBoZWlnaHQ9IjMwIiByeD0iNiIgZmlsbD0iI0VERjNGQSIvPjx0ZXh0IHg9IjEyMyIgeT0iNzExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE2IiBmaWxsPSIjNDU2NjhEIj7lop7ph488L3RleHQ+Cjx0ZXh0IHg9IjE2OCIgeT0iNzEyIiBmb250LXNpemU9IjE4IiBmaWxsPSIjNDY1RTcxIj7lkI7nu63ov63ku6PvvJrln7rnur/lt67lvILvvIvkuIrkuIvmuLjlvbHlk43liIbmnpA8L3RleHQ+Cjx0ZXh0IHg9Ijk0IiB5PSI3NjYiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM3Qjg5OTYiPuW9k+WJjeeJiOacrOS4juavlOi+g+Wfuue6v+Wdh+iusOW9lSBDb21taXTvvIznoa7kv53lrqHmoLjnu5Pmnpzlj6/lpI3njrDjgII8L3RleHQ+Cgo8cmVjdCB4PSI4MTIiIHk9IjU4MiIgd2lkdGg9IjcyMCIgaGVpZ2h0PSIyMjMiIHJ4PSIxNCIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjRERFNUVDIi8+Cjx0ZXh0IHg9IjgzOCIgeT0iNjIyIiBmb250LXNpemU9IjIxIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjMTcyRDQxIj7moLjpqoznu5PmnpzkuI7lkI7nu63lpITnva48L3RleHQ+CjxjaXJjbGUgY3g9Ijg0NSIgY3k9IjY2MCIgcj0iNSIgZmlsbD0iIzE2N0I3MCIvPjx0ZXh0IHg9Ijg2MSIgeT0iNjY3IiBmb250LXNpemU9IjE4IiBmaWxsPSIjNDY1RTcxIj7pgJrov4cg4oaSIOWFs+mXremXrumimDwvdGV4dD4KPGNpcmNsZSBjeD0iMTExMCIgY3k9IjY2MCIgcj0iNSIgZmlsbD0iI0ExNkMyNiIvPjx0ZXh0IHg9IjExMjYiIHk9IjY2NyIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzQ2NUU3MSI+5pyq6YCa6L+HIOKGkiDov5Tlm57mlbTmlLk8L3RleHQ+CjxjaXJjbGUgY3g9Ijg0NSIgY3k9IjcwOCIgcj0iNSIgZmlsbD0iIzQ1NjY4RCIvPjx0ZXh0IHg9Ijg2MSIgeT0iNzE1IiBmb250LXNpemU9IjE4IiBmaWxsPSIjNDY1RTcxIj7lvoXpqozor4Eg4oaSIOihpeWFheivgeaNruWQjuWkjeaguDwvdGV4dD4KPHBhdGggZD0iTTgzOCA3MzkgSDE1MDYiIHN0cm9rZT0iI0U4RURGMiIvPgo8dGV4dCB4PSI4MzgiIHk9Ijc3MyIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzdCODk5NiI+5a6i5oi35o6l5Y+X6aOO6Zmp77ya5a6h5om577yL6KGl5YG/5o6q5pa977yL5aSN5a6h5pyf6ZmQ77yM5LiN562J5LqO5bey5L+u5aSN44CCPC90ZXh0Pgo8dGV4dCB4PSI2OCIgeT0iODUyIiBmb250LXNpemU9IjE2IiBmaWxsPSIjN0I4OTk2Ij7moLjlv4PkuqTku5jvvJrlrqHmoLjmiqXlkYogwrcg5pW05pS56Zeu6aKY5riF5Y2VIMK3IOaguOmqjOe7k+iuujwvdGV4dD4KPHRleHQgeD0iMTUzMiIgeT0iODUyIiB0ZXh0LWFuY2hvcj0iZW5kIiBmb250LXNpemU9IjE2IiBmaWxsPSIjN0I4OTk2Ij7lrqHmoLjojIPlm7TjgIHniYjmnKzkuI7or4Hmja7nm7jkupLlr7nlupQ8L3RleHQ+CjwvZz48L3N2Zz4K" alt="代码安全审核服务流程：人工准备、工具扫描、人工代码审核、报告人工审定、研发整改、人工修复核验"></p>
+<p><a href="../../docs/diagrams/人工代码审核流程.png">下载高清流程图</a> · <a href="../../docs/diagrams/人工代码审核流程.svg">查看矢量版</a></p>
+<p>流程分为三个阶段：</p>
+<p>人工贯穿审核准备、源码抽查与调用链分析、风险确认、报告审定及修复核验。工具扫描和工具复核用于提供线索与建议；图中“人工代码审核”是独立工作环节，实际完成的审核范围、人员和判断依据应记录在案。</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>核心工作</th>
+<th>阶段结果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>审核准备</td>
+<td>明确范围、取得 Git 权限、固定代码版本</td>
+<td>审核范围和版本基线</td>
+</tr>
+<tr>
+<td>代码审核</td>
+<td>全量或增量检查、人工分析、问题确认</td>
+<td>正式问题清单和审核报告</td>
+</tr>
+<tr>
+<td>风险处置</td>
+<td>研发修复、人工核验，或由客户审批接受风险</td>
+<td>核验结论和处置记录</td>
+</tr>
+</tbody></table>
+<h2 id="4-审核准备">4. 审核准备</h2>
+<p>项目开始前，双方确认以下信息：</p>
+<table>
+<thead>
+<tr>
+<th>确认项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>代码范围</td>
+<td>仓库、分支、模块、主要语言和框架</td>
+</tr>
+<tr>
+<td>审核版本</td>
+<td>当前审核分支或 Commit</td>
+</tr>
+<tr>
+<td>审核方式</td>
+<td>全量、增量或整改核验</td>
+</tr>
+<tr>
+<td>增量基线</td>
+<td>基线分支或上次已审核 Commit</td>
+</tr>
+<tr>
+<td>重点风险</td>
+<td>权限、数据、文件、命令、密钥等</td>
+</tr>
+<tr>
+<td>排除范围</td>
+<td>第三方库、生成代码、测试代码等</td>
+</tr>
+<tr>
+<td>交付要求</td>
+<td>报告格式、交付时间、整改周期</td>
+</tr>
+</tbody></table>
+<p>客户宜提供系统架构、角色权限、关键接口和敏感数据说明。这些资料有助于审核人员判断越权、跨租户访问和业务流程绕过问题。</p>
+<h2 id="5-从-git-获取代码">5. 从 Git 获取代码</h2>
+<h3 id="51-客户需要提供">5.1 客户需要提供</h3>
+<ul>
+<li>Git 仓库地址。</li>
+<li>只读访问权限或临时授权凭据。</li>
+<li>需要审核的分支或 Commit。</li>
+<li>增量审核使用的基线分支或 Commit。</li>
+<li>子模块、Git LFS 等特殊代码获取说明。</li>
+</ul>
+<h3 id="52-审核人员执行">5.2 审核人员执行</h3>
+<ol>
+<li>在约定的审核环境中自行拉取代码。</li>
+<li>校验目标分支和 Commit 是否与客户要求一致。</li>
+<li>记录仓库、分支、完整 Commit、拉取时间和审核批次。</li>
+<li>以固定 Commit 开展审核，避免审核期间代码变化影响结论。</li>
+<li>后续增量审核前更新仓库，并重新记录当前版本和基线版本。</li>
+</ol>
+<h3 id="53-源码安全要求">5.3 源码安全要求</h3>
+<ul>
+<li>代码只保存在双方约定的设备、目录或客户内网环境。</li>
+<li>Git 权限遵循最小授权原则，项目结束后回收临时凭据。</li>
+<li>未经客户书面授权，不向第三方网站、SaaS 或工具服务提交源码。</li>
+<li>本地复核可以查看必要的真实代码上下文；报告离开受控环境前，应按约定处理密码、令牌、私钥和其他敏感数据。</li>
+<li>按约定期限归档或清理代码副本、临时文件和审核证据。</li>
+</ul>
+<h2 id="6-全量审核">6. 全量审核</h2>
+<p>全量审核适用于首次审核、重大版本上线、系统重构或原基线不可信的场景。</p>
+<p>执行方式：</p>
+<ol>
+<li>使用双方确认的规则集，检查纳入范围且受支持的文件。</li>
+<li>梳理接口入口、认证授权、数据流和敏感操作。</li>
+<li>人工审查高风险模块和关键业务流程。</li>
+<li>对疑似问题追踪调用链并确认风险条件。</li>
+<li>对问题去重、分级，形成正式清单。</li>
+</ol>
+<p>全量审核不等于人工逐行阅读全部文件。报告应明确规则覆盖范围、人工抽查模块、排除项和未覆盖内容。</p>
+<h2 id="7-增量审核">7. 增量审核</h2>
+<p>增量审核适用于日常迭代、功能分支合入、紧急修复和整改复查。</p>
+<h3 id="71-基线选择">7.1 基线选择</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐基线</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>功能分支审核</td>
+<td>功能分支与目标分支的共同祖先</td>
+</tr>
+<tr>
+<td>日常版本迭代</td>
+<td>上一次已经审核的 Commit</td>
+</tr>
+<tr>
+<td>整改核验</td>
+<td>上次审核报告对应的 Commit</td>
+</tr>
+<tr>
+<td>紧急修复</td>
+<td>修复前的生产版本或双方指定 Commit</td>
+</tr>
+</tbody></table>
+<p>分支名称可能变化，最终应记录实际比较的 Commit。</p>
+<h3 id="72-检查范围">7.2 检查范围</h3>
+<ul>
+<li>新增、修改和删除的代码。</li>
+<li>变更代码涉及的上下游调用。</li>
+<li>受公共组件、权限方法或配置变化影响的代码。</li>
+<li>新增依赖和依赖版本变化。</li>
+<li>上次问题在当前版本中的状态。</li>
+</ul>
+<p>增量审核不能只看差异行。例如公共权限方法发生变化时，还要检查所有受影响的接口。</p>
+<h2 id="8-代码具体怎么审">8. 代码具体怎么审</h2>
+<h3 id="81-审核顺序">8.1 审核顺序</h3>
+<ol>
+<li>阅读项目目录、构建文件和主要配置。</li>
+<li>识别接口、任务、消息和文件处理入口。</li>
+<li>梳理认证、授权、租户隔离和敏感数据流。</li>
+<li>通过规则检查定位风险线索。</li>
+<li>人工阅读重点代码并追踪调用链。</li>
+<li>核查输入、权限、防护、可达性和影响。</li>
+<li>去除误报和重复线索，形成正式问题。</li>
+</ol>
+<h3 id="82-使用工具">8.2 使用工具</h3>
+<p>本地审核当前使用以下开源工具，并由审核人员对结果进行复核：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>主要用途</th>
+<th>当前使用范围</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Semgrep</td>
+<td>静态代码规则检查</td>
+<td>使用社区通用规则、本地 OWASP/CWE 规则和项目自定义规则，定位注入、危险函数、鉴权缺陷、不安全配置等风险线索</td>
+</tr>
+<tr>
+<td>Gitleaks</td>
+<td>凭据泄露检查</td>
+<td>检查源码和配置文件中的 API Key、Token、私钥及其他疑似硬编码凭据；当前针对审核快照目录，不代表覆盖完整 Git 提交历史</td>
+</tr>
+<tr>
+<td>Trivy</td>
+<td>依赖漏洞与敏感信息检查</td>
+<td>读取本地漏洞库，识别 JAR 等依赖的已知漏洞，记录组件、版本、CVE 和依赖文件位置；同时提供密钥检查</td>
+</tr>
+<tr>
+<td>SpotBugs / FindSecBugs</td>
+<td>Java 字节码安全检查</td>
+<td>分析已有 JAR 中的业务字节码，补充缺少 Java 源文件的老项目检查；分析包范围需要按项目配置</td>
+</tr>
+<tr>
+<td>Alibaba P3C-PMD</td>
+<td>Java 编码规范检查</td>
+<td>按阿里巴巴 Java 开发规范检查 <code>.java</code> 源文件；不直接检查 JSP，也不将规范问题直接等同于漏洞</td>
+</tr>
+</tbody></table>
+<p>五类工具分别产生独立执行记录。工具不可用、超时或执行失败时，批次应标记为部分完成并保留日志，不得把未执行解释为未发现问题。审核时应记录规则版本、工具版本、执行参数和排除范围，以便复查；当前系统未完整固化的信息由实施记录补充。主动停止的任务显示“已停止”。</p>
+<p>老项目按文件类型组合检查：JSP 使用本地路径穿越、命令执行、开放重定向规则；已有 JAR 由字节码检查和依赖漏洞检查补充覆盖。没有 <code>.java</code> 源文件时，P3C 没有结果不能证明该项目符合全部编码规范。当前不会自动编译 JSP 或补建业务项目。</p>
+<p>前端检查使用独立本地规则包：JS、TS、JSX、TSX 检查跨窗口消息、浏览器输入跳转、敏感凭据持久化及明文 HTTP 请求；Vue 补充路由参数直出 HTML、直接跳转等限定模式。选择本地基线或综合规则集时加载，社区模式不自动加载本地包。Vue 模式及 React 源码规则不代表完整框架或跨文件分析；压缩 JS 和部分第三方库按现有排除配置处理，直接 <code>innerHTML</code> 与 <code>eval</code> 规则不重新启用。</p>
+<p>Trivy 扫描读取本地缓存，漏洞库及 Java 索引库独立维护。更新脚本已实现，定时调度待实施；实施前确认缓存可用及更新责任人。完整维护要求见<a href="CodeSentry-技术调研方案总结.html#810-漏洞库维护与定时更新设计">漏洞库维护与定时更新设计</a>。</p>
+<p>规则覆盖及排除项在审核准备时确认，并在报告中说明。指定规则被忽略仅代表检查范围调整，不代表对应风险不存在。具体规则范围及待验证项见<a href="CodeSentry-技术调研方案总结.html#71-老项目适配与范围">技术总结</a>。</p>
+<h3 id="83-人工重点检查">8.3 人工重点检查</h3>
+<table>
+<thead>
+<tr>
+<th>风险领域</th>
+<th>重点内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>身份与权限</td>
+<td>登录、令牌、接口权限、数据权限、租户隔离</td>
+</tr>
+<tr>
+<td>输入与执行</td>
+<td>参数校验、反序列化、表达式、命令和脚本</td>
+</tr>
+<tr>
+<td>数据安全</td>
+<td>SQL、敏感字段、日志、输出脱敏</td>
+</tr>
+<tr>
+<td>文件安全</td>
+<td>上传、下载、路径拼接、压缩解压</td>
+</tr>
+<tr>
+<td>外部通信</td>
+<td>URL、重定向、证书校验、内部服务访问</td>
+</tr>
+<tr>
+<td>密码密钥</td>
+<td>硬编码凭据、弱算法、密钥存储</td>
+</tr>
+<tr>
+<td>依赖配置</td>
+<td>高风险依赖、调试配置、不安全默认值</td>
+</tr>
+</tbody></table>
+<h3 id="84-人工复核判断">8.4 人工复核判断</h3>
+<p>每个疑似问题需要回答：</p>
+<ul>
+<li>输入是否能够被外部人员或低权限用户控制？</li>
+<li>代码路径是否真实可达，需要什么身份和权限？</li>
+<li>是否已经存在有效的校验、编码、白名单或隔离措施？</li>
+<li>问题可能影响哪些账户、数据、租户或系统？</li>
+<li>多条线索是否属于同一根因？</li>
+<li>建议的修复方式是否适合当前项目？</li>
+</ul>
+<p>复核结果分为：</p>
+<table>
+<thead>
+<tr>
+<th>结论</th>
+<th>处理方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>已确认问题</td>
+<td>进入正式整改清单</td>
+</tr>
+<tr>
+<td>待验证风险</td>
+<td>单独列出，不计入已确认问题数量</td>
+</tr>
+<tr>
+<td>误报或不适用</td>
+<td>不进入正式整改清单</td>
+</tr>
+<tr>
+<td>接受风险</td>
+<td>保留问题，由客户审批并设定复审期限</td>
+</tr>
+</tbody></table>
+<h2 id="9-工具复核与人工确认">9. 工具复核与人工确认</h2>
+<p>工具扫描完成后，先整理命中位置、必要源码上下文和复核建议，再由审核人员结合完整代码、调用链、权限与部署条件确认风险。</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>输出</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>工具扫描</td>
+<td>风险线索、规则与代码位置</td>
+</tr>
+<tr>
+<td>工具复核</td>
+<td>初审、复审与综合建议，任务进度及失败原因</td>
+</tr>
+<tr>
+<td>人工审核</td>
+<td>确认风险、误报、接受风险或整改待验证，并记录人员与依据</td>
+</tr>
+<tr>
+<td>整改核验</td>
+<td>修复版本、核验结论和处置记录</td>
+</tr>
+</tbody></table>
+<p>台账保留候选结果用于复核。报告区分“人工已确认风险”与“符合工具门槛、待人工确认项”，后者不能称为人工已确认漏洞。工具失败或证据不足时，应补充证据并重新复核。</p>
+<p>启用外部复核工具时，必要真实源码证据会提交至配置接口，应符合项目约定。工具不会覆盖人工结论；报告生成不修改任何原始记录。</p>
+<p>依赖漏洞在工具复核前按“依赖文件路径 + 组件坐标 + 安装版本”形成审核组。同组多个 CVE 共用一次初审和一次复审，结论写回组内成员；不同文件、版本或非依赖类问题分别处理。执行进度按审核组统计，问题台账仍按漏洞条目展示。再次执行时跳过最新已成功复核的记录，失败或中断项可重试。</p>
+<p>审核人员可在台账中逐条复核，或仅对勾选问题执行批量人工复核。执行、重试和停止步骤见<a href="工具复核与人工审核流程.html">工具复核与人工审核流程</a>。</p>
+<h2 id="10-问题去重与分级">10. 问题去重与分级</h2>
+<p>同一根因、同一代码位置被多次识别时，只保留一个正式问题；同一根因影响多个位置时，在一个问题中列出全部影响位置。不同模块需要独立修改，或影响范围明显不同的，应分别记录。</p>
+<p>依赖漏洞报告按相同依赖文件、组件坐标和版本合并展示整改项，例如一个 POI 版本的多个 CVE 可以统一安排升级。合并项保留各 CVE、风险说明、证据和复核结果；统计仍按通过报告筛选的原始漏洞条目计算，不能把“整改组数”当成“漏洞数”。</p>
+<p>风险等级由审核人员根据可利用性、所需权限、影响范围和数据敏感度综合判断：</p>
+<table>
+<thead>
+<tr>
+<th>等级</th>
+<th>判断参考</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>严重</td>
+<td>可能导致核心系统失陷、大范围敏感数据泄露或关键权限失控</td>
+</tr>
+<tr>
+<td>高危</td>
+<td>利用条件较现实，可能影响重要数据、账户或服务器</td>
+</tr>
+<tr>
+<td>中危</td>
+<td>需要特定条件，但仍存在明确安全影响</td>
+</tr>
+<tr>
+<td>低危</td>
+<td>影响有限、利用困难或属于安全加固项</td>
+</tr>
+</tbody></table>
+<h2 id="11-出具审核报告">11. 出具审核报告</h2>
+<p>正式报告建议包含：</p>
+<ul>
+<li>审核范围、当前 Commit 和增量基线。</li>
+<li>审核方法、规则范围和人工抽查范围。</li>
+<li>风险概况和优先整改建议。</li>
+<li>问题位置、必要的本地代码证据和人工分析。</li>
+<li>问题成立条件、影响和整改建议。</li>
+<li>排除项、未覆盖内容和审核限制。</li>
+</ul>
+<p>报告列表、在线查看及 Word/PDF 导出使用相同的筛选、归组和统计口径：</p>
+<table>
+<thead>
+<tr>
+<th>结果类型</th>
+<th>报告处理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>人工已确认风险</td>
+<td>纳入，标明人工确认状态</td>
+</tr>
+<tr>
+<td>工具初审、复审完整完成，各自可信度均大于 65% 且非误报</td>
+<td>可纳入，尚未经人工确认时标为待人工确认项</td>
+</tr>
+<tr>
+<td>人工误报</td>
+<td>不纳入</td>
+</tr>
+<tr>
+<td>未审核、工具失败或未达到门槛</td>
+<td>不自动纳入，留在台账继续复核</td>
+</tr>
+</tbody></table>
+<p>可信度门槛是产品筛选条件，不是漏洞成立概率。对外交付前，审核人员核查待人工确认项；如交付范围只包含已确认漏洞，应先完成相应人工确认。人工其他处置状态按实际结论展示，不能改称已确认风险。</p>
+<p>生成报告只读取记录；重新导出会读取当时的复核状态，因此交付文件需独立归档。完整筛选与统计说明见<a href="工具复核与人工审核流程.html#4-台账与报告">工具复核流程</a>。</p>
+<p>每项问题至少包含：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>问题编号与名称</td>
+<td>唯一编号和易理解的标题</td>
+</tr>
+<tr>
+<td>风险等级</td>
+<td>严重、高危、中危或低危</td>
+</tr>
+<tr>
+<td>代码位置</td>
+<td>仓库相对路径、方法、接口和行号</td>
+</tr>
+<tr>
+<td>代码证据</td>
+<td>必要的本地代码上下文；对外交付时按约定处理敏感值</td>
+</tr>
+<tr>
+<td>人工分析</td>
+<td>输入来源、调用链、防护和判断依据</td>
+</tr>
+<tr>
+<td>成立条件与影响</td>
+<td>所需权限、触发条件和影响范围</td>
+</tr>
+<tr>
+<td>整改建议</td>
+<td>适合当前项目的修改方向</td>
+</tr>
+</tbody></table>
+<p>源码问题展示文件与行号；依赖漏洞展示具体 JAR 路径、组件和版本，并标注“依赖组件漏洞，无源码行号”。历史记录如果缺少路径，不会凭空补全，应以新批次结果或原始报告核查。</p>
+<p>报告支持在线查看及 Word、PDF 下载，列表展示扫描时间并倒序排列。时间统一按东八区展示；Word 和 PDF 正文采用宋体，标题及表头采用黑体并嵌入字体。</p>
+<h2 id="12-整改与核验">12. 整改与核验</h2>
+<h3 id="121-研发整改">12.1 研发整改</h3>
+<p>研发人员按问题编号反馈：</p>
+<ul>
+<li>修复方案和修改说明。</li>
+<li>修复分支及完整 Commit。</li>
+<li>影响范围和自测结果。</li>
+<li>暂不修复时的原因、补偿措施和审批结论。</li>
+</ul>
+<h3 id="122-审核人员核验">12.2 审核人员核验</h3>
+<p>审核人员重新拉取修复版本，并逐项检查：</p>
+<ol>
+<li>修复 Commit 是否包含对应修改。</li>
+<li>问题根因是否已经消除。</li>
+<li>是否存在旁路或其他相同调用。</li>
+<li>本次修复及其受影响调用是否引入明显的新风险。</li>
+<li>相关规则复查和必要验证是否符合预期。</li>
+</ol>
+<p>规则不再提示不能单独作为核验通过的依据。</p>
+<p>默认以代码和配置复查为主。需要编译、运行代码、执行验证用例或访问测试环境时，双方应提前确认授权范围、账号、数据和允许的操作。</p>
+<p>技术核验结论包括：</p>
+<table>
+<thead>
+<tr>
+<th>结论</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>通过</td>
+<td>根因已消除，未发现明显绕过路径</td>
+</tr>
+<tr>
+<td>未通过</td>
+<td>原问题仍存在、修复不完整或可以绕过</td>
+</tr>
+<tr>
+<td>待验证</td>
+<td>需要环境、配置、数据或业务人员配合</td>
+</tr>
+</tbody></table>
+<p>如客户决定暂不整改，应由客户履行接受风险审批，并记录补偿措施、责任人和复审期限。审核方负责记录该处置决定，不代替客户作出风险接受决策。</p>
+<h2 id="13-双方职责">13. 双方职责</h2>
+<table>
+<thead>
+<tr>
+<th>客户</th>
+<th>审核方</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>提供 Git 地址、只读权限和准确版本</td>
+<td>按授权范围拉取并保护代码</td>
+</tr>
+<tr>
+<td>提供架构、权限和业务说明</td>
+<td>制定审核计划并执行检查</td>
+</tr>
+<tr>
+<td>确认问题业务背景和整改计划</td>
+<td>人工复核、去重、分级并给出建议</td>
+</tr>
+<tr>
+<td>完成修复并提供修复 Commit</td>
+<td>对修复版本开展核验</td>
+</tr>
+<tr>
+<td>审批接受风险事项</td>
+<td>记录证据、范围和核验结论</td>
+</tr>
+</tbody></table>
+<h2 id="14-交付物">14. 交付物</h2>
+<table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>内容</th>
+<th>形式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>代码安全审核报告</td>
+<td>范围、方法、风险概况、问题和建议</td>
+<td>PDF 或 Word</td>
+</tr>
+<tr>
+<td>整改问题清单</td>
+<td>问题、等级、责任人、状态和计划</td>
+<td>表格</td>
+</tr>
+<tr>
+<td>整改核验报告</td>
+<td>修复版本、核验证据、结论和遗留项</td>
+<td>PDF 或 Word</td>
+</tr>
+</tbody></table>
+<p>具体交付物、文件形式、交付时间、整改轮次和核验轮次，以合同或项目实施计划为准。</p>
+<h2 id="15-方法选择依据">15. 方法选择依据</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>选择原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Git 拉取与固定 Commit</td>
+<td>直接取得授权代码，明确审核版本，便于复查和比较</td>
+</tr>
+<tr>
+<td>本地执行检查</td>
+<td>在约定环境中处理源码与证据，便于控制访问范围</td>
+</tr>
+<tr>
+<td>全量与增量结合</td>
+<td>首次建立审核基线，后续重点分析代码变化及其影响</td>
+</tr>
+<tr>
+<td>工具扫描与人工审核</td>
+<td>工具定位线索并提供复核建议，人工结合业务、权限和调用链确认问题</td>
+</tr>
+<tr>
+<td>整改后再次核验</td>
+<td>检查修复是否消除根因，形成有证据的处置结论</td>
+</tr>
+</tbody></table>
+<h2 id="16-常见问题说明">16. 常见问题说明</h2>
+<h3 id="q1这是人工审核还是自动扫描">Q1：这是人工审核还是自动扫描？</h3>
+<p>这是人工主导的代码安全审核。规则检查提供风险线索，审核人员负责业务理解、调用链分析、问题确认、风险分级和整改建议。</p>
+<h3 id="q2是否会人工逐行阅读所有代码">Q2：是否会人工逐行阅读所有代码？</h3>
+<p>不会做不符合实际的逐行承诺。规则检查覆盖双方确认的范围，人工审核重点覆盖高风险模块、关键业务流程和疑似问题。报告会列明实际人工抽查范围。</p>
+<h3 id="q3代码如何获取">Q3：代码如何获取？</h3>
+<p>客户提供 Git 地址、只读权限和目标版本，审核人员在约定环境中自行拉取并记录完整 Commit。后续审核和核验也以明确 Commit 为准。</p>
+<h3 id="q4代码是否会上传到外部平台">Q4：代码是否会上传到外部平台？</h3>
+<p>代码在约定环境中处理。未经客户书面授权，不向第三方网站、SaaS 或工具服务提交源码和审核证据。</p>
+<h3 id="q5增量审核为什么需要基线">Q5：增量审核为什么需要基线？</h3>
+<p>基线用于判断本次新增、持续存在和已经修复的问题。分支名称可能变化，因此需要记录实际参与比较的 Commit。</p>
+<h3 id="q6规则命中为什么没有写进报告">Q6：规则命中为什么没有写进报告？</h3>
+<p>规则可能因测试代码、不可达路径、固定常量或已有防护产生误报。人工确认的误报以及满足严格条件的工具高可信误报不会进入正式报告；冲突、证据不足或审核失败的结果仍需人工处理。</p>
+<h3 id="q7同一个问题在多个位置出现时如何计算">Q7：同一个问题在多个位置出现时如何计算？</h3>
+<p>同一根因通常作为一个问题，并列出全部影响位置；不同模块需要独立整改或影响不同的，则分别记录。</p>
+<h3 id="q8修复后规则不再提示是否就算通过">Q8：修复后规则不再提示，是否就算通过？</h3>
+<p>不一定。审核人员还需要确认根因已经消除，并检查关联调用和绕过路径。</p>
+<h3 id="q9暂时不能修复怎么办">Q9：暂时不能修复怎么办？</h3>
+<p>客户可以落实补偿措施并履行接受风险审批，同时明确责任人和复审期限。接受风险不等于问题已修复。</p>
+<h3 id="q10代码审核能否替代渗透测试">Q10：代码审核能否替代渗透测试？</h3>
+<p>不能完全替代。代码审核侧重实现逻辑和调用链，渗透测试侧重运行环境和真实攻击路径，两者关注点不同。</p>
+<div class="footer">CodeSentry · 本地代码安全审核技术文档</div></main></div></body></html>

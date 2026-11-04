@@ -1,0 +1,237 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CodeSentry 技术调研与讲解手册</title><style>
+:root{--navy:#173a70;--ink:#26384e;--muted:#6b7d92;--line:#dce4ef;--paper:#fff;--bg:#f3f6fb}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:30px}body{margin:0;background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.85}a{color:#225ba6;text-decoration:none}a:hover{text-decoration:underline}.shell{max-width:1540px;margin:auto;display:grid;grid-template-columns:260px minmax(0,1fr);gap:36px;padding:36px}.side{position:sticky;top:28px;height:calc(100vh - 56px);overflow:auto;padding:22px 14px}.brand{font-size:19px;letter-spacing:2px;font-weight:750;color:var(--navy);margin-bottom:8px}.caption{font-size:12px;letter-spacing:1px;color:var(--muted)}.docs{margin:24px 0;padding-bottom:20px;border-bottom:1px solid var(--line)}.docs a,.toc a{display:block;font-size:13px;line-height:1.6;padding:7px 10px;border-radius:6px}.docs a.active{background:#e3ecfa;color:#173a70;font-weight:600}.toc a.sub{padding-left:24px;font-size:12px;color:#687d96}main{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:46px 54px;box-shadow:0 8px 28px #173a7005}.topline{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:28px;color:var(--muted);font-size:12px}button{font:inherit;font-size:13px;background:white;border:1px solid #bccce0;border-radius:6px;padding:6px 13px;color:var(--navy);cursor:pointer}h1{font-size:30px;line-height:1.5;color:#14345e;margin:0 0 28px;letter-spacing:-.5px}h2{font-size:22px;color:#173a70;margin:44px 0 18px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:18px;color:#285180;margin-top:28px}p{margin:14px 0}li{margin:5px 0}blockquote{margin:20px 0;border-left:3px solid #4778b5;padding:12px 20px;background:#f2f6fc;color:#43607f}table{border-collapse:collapse;width:100%;font-size:14px;margin:20px 0;line-height:1.7}th{background:#ecf2fa;color:#22476f;text-align:left;font-weight:600}th,td{padding:12px 14px;border:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tr:nth-child(even) td{background:#fafcfe}pre{overflow:auto;padding:20px;background:#f2f5fa;border:1px solid var(--line);border-radius:8px;line-height:1.6;font-size:13px}code{font-family:Menlo,Consolas,monospace;font-size:.88em;overflow-wrap:anywhere}p code,li code{background:#edf2f8;padding:2px 5px;border-radius:4px}img{display:block;max-width:100%;height:auto;margin:22px auto;border:1px solid var(--line);border-radius:10px}figure{margin:20px 0}figcaption{text-align:center;font-size:12px;color:var(--muted)}.footer{margin-top:50px;border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--muted)}@media(max-width:1150px){.shell{grid-template-columns:210px minmax(0,1fr);gap:18px;padding:20px}main{padding:30px}}@media print{body{background:white;font-size:10.5pt}.shell{display:block;padding:0;max-width:none}.side,button{display:none}main{padding:0;border:0;box-shadow:none}h2,h3{break-after:avoid}tr,img{break-inside:avoid}.topline{margin:0 0 16px}.footer{margin-top:20px}@page{size:A4;margin:18mm 15mm}}</style></head><body><div class="shell"><aside class="side"><div class="brand">CODESENTRY</div><div class="caption">本地代码安全审核 · 技术文档</div><nav class="docs" aria-label="文档导航"><a class="" href="代码安全审核技术调研与实施流程.html">代码安全审核技术调研与实施流程</a><a class="" href="工具复核与人工审核流程.html">工具复核与人工审核流程</a><a class="" href="CodeSentry-技术调研方案总结.html">技术调研方案总结</a><a class="active" href="CodeSentry-技术调研与客户培训手册.html">技术调研与讲解手册</a></nav><nav class="toc" aria-label="章节目录"><a class="" href="#1-方案定位">1. 方案定位</a><a class="" href="#2-总体架构">2. 总体架构</a><a class="" href="#3-审核实施流程">3. 审核实施流程</a><a class="" href="#4-五类工具如何分工">4. 五类工具如何分工</a><a class="" href="#5-问题审核组与整改组">5. 问题、审核组与整改组</a><a class="" href="#6-报告如何形成">6. 报告如何形成</a><a class="" href="#7-页面操作顺序">7. 页面操作顺序</a><a class="" href="#8-配置与运行维护">8. 配置与运行维护</a><a class="" href="#9-讲解安排">9. 讲解安排</a><a class="" href="#10-常见问题">10. 常见问题</a><a class="" href="#11-当前能力与交付确认">11. 当前能力与交付确认</a></nav></aside><main><div class="topline"><span>TECHNICAL RESEARCH / 技术调研</span><button onclick="window.print()">打印 / 保存 PDF</button></div><h1 id="codesentry-技术调研与讲解手册">CodeSentry 技术调研与讲解手册</h1>
+<p>本文用于讲解本地代码安全审核的方法与产品操作。完整技术依据见<a href="CodeSentry-技术调研方案总结.html">技术调研方案总结</a>，实施与核验要求见<a href="代码安全审核技术调研与实施流程.html">本地代码安全审核技术调研与实施流程</a>。</p>
+<h2 id="1-方案定位">1. 方案定位</h2>
+<p>从已有本地仓库或标准 Git 地址取得代码，固定审核版本，组合使用开源工具发现风险线索，再由审核人员结合业务、调用链和部署条件确认问题，形成整改与核验记录。</p>
+<p>产品采用 Java 模块化单体、Vue 操作台、MySQL 和本地文件存储。选择这一架构的原因是部署组件少、适合现有 Java 团队维护，并且能自主控制批次、复核与报告流程。GitLab 仅提供代码，不依赖其流水线和安全能力。</p>
+<p>扫描和结果存储在本地完成。启用外部复核服务时，必要源码证据会提交到配置接口，应按项目约定执行。</p>
+<h2 id="2-总体架构">2. 总体架构</h2>
+<p><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDAwIiBoZWlnaHQ9IjExMjAiIHZpZXdCb3g9IjAgMCAxNDAwIDExMjAiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0iQ29kZVNlbnRyeSDmgLvkvZPmnrbmnoQiPjxkZWZzPjxtYXJrZXIgaWQ9ImFycm93IiBtYXJrZXJXaWR0aD0iOCIgbWFya2VySGVpZ2h0PSI4IiByZWZYPSI3IiByZWZZPSI0IiBvcmllbnQ9ImF1dG8iPjxwYXRoIGQ9Ik0wLDAgTDgsNCBMMCw4IiBmaWxsPSIjODE5N2IyIi8+PC9tYXJrZXI+PC9kZWZzPjxnIGZvbnQtZmFtaWx5PSJQaW5nRmFuZyBTQyxNaWNyb3NvZnQgWWFIZWksTm90byBTYW5zIENKSyBTQyxzYW5zLXNlcmlmIj48cmVjdCB3aWR0aD0iMTQwMCIgaGVpZ2h0PSIxMTIwIiBmaWxsPSIjZjVmOGZjIiByeD0iMjAiLz48cmVjdCB4PSIzNiIgeT0iMzQiIHdpZHRoPSI1IiBoZWlnaHQ9IjU2IiByeD0iMiIgZmlsbD0iIzIzNTlhOCIvPjx0ZXh0IHg9IjU4IiB5PSI1OSIgZm9udC1zaXplPSIyOCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjcwMCI+Q29kZVNlbnRyeSDmgLvkvZPmnrbmnoQ8L3RleHQ+PHRleHQgeD0iNTgiIHk9Ijg3IiBmb250LXNpemU9IjE2IiBmaWxsPSIjNjY3Yzk2IiBmb250LXdlaWdodD0iNDAwIj7mnKzlnLDmiavmj4/miafooYwgwrcg5bel5YW36L6F5Yqp5aSN5qC4IMK3IOS6uuW3peWIpOaWreS4juaVtOaUueaguOmqjDwvdGV4dD48cmVjdCB4PSIzNiIgeT0iMTIwIiB3aWR0aD0iMTMyOCIgaGVpZ2h0PSI4NjQiIHJ4PSIxNiIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjZDZlMGVlIi8+PHRleHQgeD0iNTgiIHk9IjE1MyIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjYwMCI+5pys5Zyw5a6h5qC4546v5aKDPC90ZXh0PjxnPjxyZWN0IHg9IjcwIiB5PSIxODAiIHdpZHRoPSIyNzAiIGhlaWdodD0iODIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZDdlMWVmIi8+PHRleHQgeD0iOTAiIHk9IjIxNCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+5Luj56CB5p2l5rqQPC90ZXh0Pjx0ZXh0IHg9IjkwIiB5PSIyNDEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuacrOWcsOS7k+W6kyAvIOWbuuWumiBDb21taXQg5b+r54WnPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI0NDAiIHk9IjE4MCIgd2lkdGg9IjM3MCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjMTczYTcwIiBzdHJva2U9IiMxNzNhNzAiLz48dGV4dCB4PSI0NjAiIHk9IjIxNCIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZmZmZiIgZm9udC13ZWlnaHQ9IjYwMCI+SmF2YSDlrqHmoLjmnI3liqE8L3RleHQ+PHRleHQgeD0iNDYwIiB5PSIyNDEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiNkM2UxZjciIGZvbnQtd2VpZ2h0PSI0MDAiPuS7k+W6k+euoeeQhiDCtyDku7vliqHnvJbmjpIgwrcg54q25oCB5LiO5pel5b+XPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI5MTAiIHk9IjE4MCIgd2lkdGg9IjQxMCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZWRmNGZmIiBzdHJva2U9IiNjMmQ1ZjQiLz48dGV4dCB4PSI5MzAiIHk9IjIxNCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3M2Y3OSIgZm9udC13ZWlnaHQ9IjYwMCI+VnVlIOaTjeS9nOWPsDwvdGV4dD48dGV4dCB4PSI5MzAiIHk9IjI0MSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5omr5o+PIMK3IOWPsOi0piDCtyDlrqHmoLggwrcg5oql5ZGKIMK3IOW3peWFt+mFjee9rjwvdGV4dD48L2c+PHBhdGggZD0iTTM0MCwyMjEgTDQ0MCwyMjEiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48cGF0aCBkPSJNOTEwLDIyMSBMODEwLDIyMSIgc3Ryb2tlPSIjODE5N2IyIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiICBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxwYXRoIGQ9Ik02MjUsMjYyIEw2MjUsMzAyIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHRleHQgeD0iNzAiIHk9IjMwNCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjYwMCI+MDEgIOW3peWFt+aJq+aPjzwvdGV4dD48Zz48cmVjdCB4PSI3MCIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9IjkwIiB5PSIzNTgiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxNzNmNzkiIGZvbnQtd2VpZ2h0PSI2MDAiPlNlbWdyZXA8L3RleHQ+PHRleHQgeD0iOTAiIHk9IjM4NSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5rqQ56CB5LiOIEpTUCDop4TliJk8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjMyMiIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9IjM0MiIgeT0iMzU4IiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczZjc5IiBmb250LXdlaWdodD0iNjAwIj5HaXRsZWFrczwvdGV4dD48dGV4dCB4PSIzNDIiIHk9IjM4NSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+55aR5Ly85Yet5o2u5rOE6ZyyPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI1NzQiIHk9IjMyNCIgd2lkdGg9IjI0MiIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZWRmNGZmIiBzdHJva2U9IiNjMmQ1ZjQiLz48dGV4dCB4PSI1OTQiIHk9IjM1OCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3M2Y3OSIgZm9udC13ZWlnaHQ9IjYwMCI+VHJpdnk8L3RleHQ+PHRleHQgeD0iNTk0IiB5PSIzODUiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuS+nei1liBDVkUgLyDlr4bpkqU8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjgyNiIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9Ijg0NiIgeT0iMzU4IiBmb250LXNpemU9IjE0IiBmaWxsPSIjMTczZjc5IiBmb250LXdlaWdodD0iNjAwIj5TcG90QnVncyAvIEZpbmRTZWNCdWdzPC90ZXh0Pjx0ZXh0IHg9Ijg0NiIgeT0iMzg1IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj5KYXZhIOWtl+iKgueggTwvdGV4dD48L2c+PGc+PHJlY3QgeD0iMTA3OCIgeT0iMzI0IiB3aWR0aD0iMjQyIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY0ZmYiIHN0cm9rZT0iI2MyZDVmNCIvPjx0ZXh0IHg9IjEwOTgiIHk9IjM1OCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3M2Y3OSIgZm9udC13ZWlnaHQ9IjYwMCI+QWxpYmFiYSBQM0M8L3RleHQ+PHRleHQgeD0iMTA5OCIgeT0iMzg1IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj5KYXZhIOe8lueggeinhOiMgzwvdGV4dD48L2c+PHBhdGggZD0iTTcwMCw0MDYgTDcwMCw0NDQiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48Zz48cmVjdCB4PSI3MCIgeT0iNDUwIiB3aWR0aD0iMTI1MCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI5MCIgeT0iNDg0IiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczNjVmIiBmb250LXdlaWdodD0iNjAwIj4wMiAg57uT5p6c5qCH5YeG5YyW5LiO6Zeu6aKY5Y+w6LSmPC90ZXh0Pjx0ZXh0IHg9IjkwIiB5PSI1MTEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuaMh+e6ueWOu+mHjSDCtyDlhajph4/lhaXlupMgLyDlop7ph4/mr5TovoMgwrcg5L+d55WZ5YCZ6YCJ57uT5p6c5LiO5Y6f5aeL6K+B5o2uPC90ZXh0PjwvZz48cGF0aCBkPSJNMzYwLDUzMiBMMzYwLDU3MCIgc3Ryb2tlPSIjODE5N2IyIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiICBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxwYXRoIGQ9Ik0xMDMwLDUzMiBMMTAzMCw1NzAiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48Zz48cmVjdCB4PSI3MCIgeT0iNTc2IiB3aWR0aD0iNTkwIiBoZWlnaHQ9Ijg4IiByeD0iMTIiIGZpbGw9IiNlZGY4ZjUiIHN0cm9rZT0iI2JhZGZkNCIvPjx0ZXh0IHg9IjkwIiB5PSI2MTAiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxOTY0NGYiIGZvbnQtd2VpZ2h0PSI2MDAiPjAzICDlt6XlhbflpI3moLg8L3RleHQ+PHRleHQgeD0iOTAiIHk9IjYzNyIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5L6d6LWW5oyJ5paH5Lu244CB57uE5Lu25Y+K54mI5pys5b2S57uEIMK3IOWIneWuoSAvIOWkjeWuoSDCtyDlpLHotKXph43or5U8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjczMCIgeT0iNTc2IiB3aWR0aD0iNTkwIiBoZWlnaHQ9Ijg4IiByeD0iMTIiIGZpbGw9IiNlZGY4ZjUiIHN0cm9rZT0iI2JhZGZkNCIvPjx0ZXh0IHg9Ijc1MCIgeT0iNjEwIiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTk2NDRmIiBmb250LXdlaWdodD0iNjAwIj4wNCAg5Lq65bel5Luj56CB5a6h5qC4PC90ZXh0Pjx0ZXh0IHg9Ijc1MCIgeT0iNjM3IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7mupDnoIHmir3mn6Ugwrcg6LCD55So6ZO+5YiG5p6QIMK3IOadg+mZkOS4jumYsuaKpCDCtyDpo47pmannoa7orqQ8L3RleHQ+PC9nPjxwYXRoIGQ9Ik02NjAsNjIwIEw3MzAsNjIwIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHBhdGggZD0iTTM2MCw2NjQgTDM2MCw3MDIiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48cGF0aCBkPSJNMTAzMCw2NjQgTDEwMzAsNzAyIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PGc+PHJlY3QgeD0iNzAiIHk9IjcwOCIgd2lkdGg9IjEyNTAiIGhlaWdodD0iODgiIHJ4PSIxMiIgZmlsbD0iIzE3M2E3MCIgc3Ryb2tlPSIjMTczYTcwIi8+PHRleHQgeD0iOTAiIHk9Ijc0MiIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZmZmZiIgZm9udC13ZWlnaHQ9IjYwMCI+MDUgIOaKpeWRiuS4juaVtOaUueS6pOS7mDwvdGV4dD48dGV4dCB4PSI5MCIgeT0iNzY5IiBmb250LXNpemU9IjE1IiBmaWxsPSIjZDNlMWY3IiBmb250LXdlaWdodD0iNDAwIj7nu5/kuIDnrZvpgInkuI7nu5/orqEgwrcg5L6d6LWW5pW05pS55b2S57uEIMK3IOWMuuWIhuW3suehruiupOmjjumZqeS4juW+heS6uuW3peehruiupOmhuSDCtyDlnKjnur8gLyBXb3JkIC8gUERGPC90ZXh0PjwvZz48Zz48cmVjdCB4PSI3MCIgeT0iODQwIiB3aWR0aD0iMzkwIiBoZWlnaHQ9IjEwNCIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI5MCIgeT0iODc0IiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczNjVmIiBmb250LXdlaWdodD0iNjAwIj5NeVNRTDwvdGV4dD48dGV4dCB4PSI5MCIgeT0iOTAxIiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7phY3nva4gwrcg5om55qyhIMK3IOmXrumimCDCtyDlpI3moLjorrDlvZU8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjQ5MCIgeT0iODQwIiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwNCIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI1MTAiIHk9Ijg3NCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+5pys5Zyw5paH5Lu25a2Y5YKoPC90ZXh0Pjx0ZXh0IHg9IjUxMCIgeT0iOTAxIiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7lv6vnhacgwrcg5Y6f5aeL5oql5ZGKIMK3IOinhOWImSDCtyDmvI/mtJ7lupM8L3RleHQ+PC9nPjxnPjxyZWN0IHg9IjkyMCIgeT0iODQwIiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwNCIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSI5NDAiIHk9Ijg3NCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+54us56uL5ryP5rSe5bqT57u05oqkPC90ZXh0Pjx0ZXh0IHg9Ijk0MCIgeT0iOTAxIiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7mm7TmlrDohJrmnKzlt7Llrp7njrAgLyDlrprml7bosIPluqblvoXlrp7mlr08L3RleHQ+PC9nPjxwYXRoIGQ9Ik05MjAsODkyIEw4ODksODkyIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PHRleHQgeD0iNTgiIHk9IjEwMjAiIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiMxNzM2NWYiIGZvbnQtd2VpZ2h0PSI2MDAiPuWklumDqOi/nuaOpei+ueeVjDwvdGV4dD48dGV4dCB4PSI1OCIgeT0iMTA1MiIgZm9udC1zaXplPSIxNyIgZmlsbD0iIzM0NDY1ZiIgZm9udC13ZWlnaHQ9IjQwMCI+6L+c56iLIEdpdO+8muS7hSBjbG9uZSAvIGZldGNo77yb56S+5Yy66KeE5YiZ5LiO5ryP5rSe5bqT77ya5oyJ6YWN572u6IGU572R44CCPC90ZXh0Pjx0ZXh0IHg9IjU4IiB5PSIxMDgyIiBmb250LXNpemU9IjE3IiBmaWxsPSIjMzQ0NjVmIiBmb250LXdlaWdodD0iNDAwIj7lpJbpg6jlpI3moLjmnI3liqHvvJrnu4/mjojmnYPlj5HpgIHlv4XopoHmupDnoIHor4Hmja7vvJvkuZ/lj6/ov57mjqXmnKzlnLDmnI3liqHjgII8L3RleHQ+PC9nPjwvc3ZnPg==" alt="CodeSentry 总体架构"></p>
+<p><a href="../../docs/diagrams/codesentry-overall-architecture.png">查看高清 PNG</a></p>
+<p><a href="../../docs/diagrams/codesentry-overall-architecture.mmd">总体架构图源</a></p>
+<p>讲解时抓住四个关系：Git 固定输入版本，扫描工具提供线索，工具复核与人工审核分别保存结论，报告按统一口径筛选结果。</p>
+<h2 id="3-审核实施流程">3. 审核实施流程</h2>
+<p>人工审核有独立环节：抽查源码、追踪调用链、检查权限与防护，确认风险或误报并记录依据；准备、报告审定和修复核验也由人员完成。工具复核只提供辅助建议，不能代替这些工作记录。</p>
+<p><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDUwIiBoZWlnaHQ9IjExMDAiIHZpZXdCb3g9IjAgMCAxMDUwIDExMDAiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0i5pys5Zyw5Luj56CB5a6J5YWo5a6h5qC45rWB56iLIj48ZGVmcz48bWFya2VyIGlkPSJhcnJvdyIgbWFya2VyV2lkdGg9IjgiIG1hcmtlckhlaWdodD0iOCIgcmVmWD0iNyIgcmVmWT0iNCIgb3JpZW50PSJhdXRvIj48cGF0aCBkPSJNMCwwIEw4LDQgTDAsOCIgZmlsbD0iIzgxOTdiMiIvPjwvbWFya2VyPjwvZGVmcz48ZyBmb250LWZhbWlseT0iUGluZ0ZhbmcgU0MsTWljcm9zb2Z0IFlhSGVpLE5vdG8gU2FucyBDSksgU0Msc2Fucy1zZXJpZiI+PHJlY3Qgd2lkdGg9IjEwNTAiIGhlaWdodD0iMTEwMCIgZmlsbD0iI2Y1ZjhmYyIgcng9IjIwIi8+PHJlY3QgeD0iMzYiIHk9IjM0IiB3aWR0aD0iNSIgaGVpZ2h0PSI1NiIgcng9IjIiIGZpbGw9IiMyMzU5YTgiLz48dGV4dCB4PSI1OCIgeT0iNTkiIGZvbnQtc2l6ZT0iMjgiIGZpbGw9IiMxNzM2NWYiIGZvbnQtd2VpZ2h0PSI3MDAiPuacrOWcsOS7o+eggeWuieWFqOWuoeaguOa1geeoizwvdGV4dD48dGV4dCB4PSI1OCIgeT0iODciIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2NjdjOTYiIGZvbnQtd2VpZ2h0PSI0MDAiPuWHhuWkhyDihpIg5qOA5p+l5LiO5aSN5qC4IOKGkiDmiqXlkYrkuI7mlbTmlLkg4oaSIOS/ruWkjeaguOmqjDwvdGV4dD48Zz48cmVjdCB4PSIxMDAiIHk9IjEzMiIgd2lkdGg9Ijg1MCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSIxMjAiIHk9IjE2NiIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+MDEgIOS6uuW3peWuoeaguOWHhuWkhzwvdGV4dD48dGV4dCB4PSIxMjAiIHk9IjE5MyIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+56Gu6K6k6IyD5Zu044CB5Y+q6K+75p2D6ZmQ44CB55uu5qCH54mI5pys5LiO5o6S6Zmk6aG5PC90ZXh0PjwvZz48cGF0aCBkPSJNNTI1LDIxNCBMNTI1LDIzMyIgc3Ryb2tlPSIjODE5N2IyIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiICBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxnPjxyZWN0IHg9IjEwMCIgeT0iMjM4IiB3aWR0aD0iODUwIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iI2Q3ZTFlZiIvPjx0ZXh0IHg9IjEyMCIgeT0iMjcyIiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTczNjVmIiBmb250LXdlaWdodD0iNjAwIj4wMiAg5Zu65a6a5Luj56CBPC90ZXh0Pjx0ZXh0IHg9IjEyMCIgeT0iMjk5IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7mnKzlnLDnm67lvZXmiJYgR2l0IOaLieWPliDCtyDorrDlvZUgQ29tbWl0IOS4juWfuue6vzwvdGV4dD48L2c+PHBhdGggZD0iTTUyNSwzMjAgTDUyNSwzMzkiIHN0cm9rZT0iIzgxOTdiMiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiAgbWFya2VyLWVuZD0idXJsKCNhcnJvdykiLz48Zz48cmVjdCB4PSIxMDAiIHk9IjM0NCIgd2lkdGg9Ijg1MCIgaGVpZ2h0PSI4MiIgcng9IjEyIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiNkN2UxZWYiLz48dGV4dCB4PSIxMjAiIHk9IjM3OCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+MDMgIOW3peWFt+aJq+aPjzwvdGV4dD48dGV4dCB4PSIxMjAiIHk9IjQwNSIgZm9udC1zaXplPSIxNSIgZmlsbD0iIzYxNzM4YiIgZm9udC13ZWlnaHQ9IjQwMCI+5YWo6YeP77ya5b2T5YmN54mI5pys77yb5aKe6YeP77ya5b2T5YmN5LiOIG1lcmdlLWJhc2U8L3RleHQ+PC9nPjxwYXRoIGQ9Ik01MjUsNDI2IEw1MjUsNDQ1IiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PGc+PHJlY3QgeD0iMTAwIiB5PSI0NTAiIHdpZHRoPSI4NTAiIGhlaWdodD0iODIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZDdlMWVmIi8+PHRleHQgeD0iMTIwIiB5PSI0ODQiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxNzM2NWYiIGZvbnQtd2VpZ2h0PSI2MDAiPjA0ICDlt6XlhbflpI3moLjkuI7nur/ntKLmlbTnkIY8L3RleHQ+PHRleHQgeD0iMTIwIiB5PSI1MTEiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuWPsOi0puS/neeVmeWAmemAieadoeebriDCtyDkvp3otZblvZLnu4Qgwrcg5bel5YW36L6F5Yqp5bu66K6uPC90ZXh0PjwvZz48cGF0aCBkPSJNNTI1LDUzMiBMNTI1LDU1MSIgc3Ryb2tlPSIjODE5N2IyIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiICBtYXJrZXItZW5kPSJ1cmwoI2Fycm93KSIvPjxnPjxyZWN0IHg9IjEwMCIgeT0iNTU2IiB3aWR0aD0iODUwIiBoZWlnaHQ9IjgyIiByeD0iMTIiIGZpbGw9IiNlZGY4ZjUiIHN0cm9rZT0iI2JhZGZkNCIvPjx0ZXh0IHg9IjEyMCIgeT0iNTkwIiBmb250LXNpemU9IjIwIiBmaWxsPSIjMTk2NDRmIiBmb250LXdlaWdodD0iNjAwIj4wNSAg5Lq65bel5Luj56CB5a6h5qC4PC90ZXh0Pjx0ZXh0IHg9IjEyMCIgeT0iNjE3IiBmb250LXNpemU9IjE1IiBmaWxsPSIjNjE3MzhiIiBmb250LXdlaWdodD0iNDAwIj7mir3mn6XmupDnoIEgwrcg6L+96Liq6LCD55So6ZO+IMK3IOaguOafpeadg+mZkOS4jumYsuaKpCDCtyDnoa7orqTpo47pmanlj4rkvp3mja48L3RleHQ+PC9nPjxwYXRoIGQ9Ik01MjUsNjM4IEw1MjUsNjU3IiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PGc+PHJlY3QgeD0iMTAwIiB5PSI2NjIiIHdpZHRoPSI4NTAiIGhlaWdodD0iODIiIHJ4PSIxMiIgZmlsbD0iIzE3M2E3MCIgc3Ryb2tlPSIjMTczYTcwIi8+PHRleHQgeD0iMTIwIiB5PSI2OTYiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiNmZmZmZmYiIGZvbnQtd2VpZ2h0PSI2MDAiPjA2ICDmiqXlkYrkurrlt6XlrqHlrprkuI7kuqTku5g8L3RleHQ+PHRleHQgeD0iMTIwIiB5PSI3MjMiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiNkM2UxZjciIGZvbnQtd2VpZ2h0PSI0MDAiPuWMuuWIhuW3suehruiupOS4juW+heehruiupOmhuSDCtyDlrqHlrpror4Hmja7lkozlu7rorq4gwrcg5L+d55WZIENWRSDmmI7nu4Y8L3RleHQ+PC9nPjxwYXRoIGQ9Ik01MjUsNzQ0IEw1MjUsNzYzIiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PGc+PHJlY3QgeD0iMTAwIiB5PSI3NjgiIHdpZHRoPSI4NTAiIGhlaWdodD0iODIiIHJ4PSIxMiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZDdlMWVmIi8+PHRleHQgeD0iMTIwIiB5PSI4MDIiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxNzM2NWYiIGZvbnQtd2VpZ2h0PSI2MDAiPjA3ICDnoJTlj5Hkv67lpI08L3RleHQ+PHRleHQgeD0iMTIwIiB5PSI4MjkiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuaPkOS6pOS/ruWkjeivtOaYjuOAgUNvbW1pdCDkuI7oh6rmtYvnu5Pmnpw8L3RleHQ+PC9nPjxwYXRoIGQ9Ik01MjUsODUwIEw1MjUsODY5IiBzdHJva2U9IiM4MTk3YjIiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIi8+PGc+PHJlY3QgeD0iMTAwIiB5PSI4NzQiIHdpZHRoPSI4NTAiIGhlaWdodD0iODIiIHJ4PSIxMiIgZmlsbD0iI2VkZjhmNSIgc3Ryb2tlPSIjYmFkZmQ0Ii8+PHRleHQgeD0iMTIwIiB5PSI5MDgiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMxOTY0NGYiIGZvbnQtd2VpZ2h0PSI2MDAiPjA4ICDkurrlt6Xkv67lpI3moLjpqow8L3RleHQ+PHRleHQgeD0iMTIwIiB5PSI5MzUiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM2MTczOGIiIGZvbnQtd2VpZ2h0PSI0MDAiPuWkjeafpeagueWboOOAgeWFs+iBlOi3r+W+hOWSjOe7lei/h+adoeS7tiDCtyDorrDlvZXmoLjpqoznu5Porro8L3RleHQ+PC9nPjx0ZXh0IHg9IjEwMCIgeT0iMTAyMCIgZm9udC1zaXplPSIxOSIgZmlsbD0iIzE3MzY1ZiIgZm9udC13ZWlnaHQ9IjYwMCI+5qC46aqM5pyq6YCa6L+HIOKGkiDov5Tlm57noJTlj5Hkv67lpI3vvJvpgJrov4cg4oaSIOiusOW9leaguOmqjOe7k+iuuuW5tuW9kuaho+OAgjwvdGV4dD48dGV4dCB4PSIxMDAiIHk9IjEwNTQiIGZvbnQtc2l6ZT0iMTciIGZpbGw9IiM2NjdjOTYiIGZvbnQtd2VpZ2h0PSI0MDAiPuW3peWFt+WRveS4reaYr+e6v+e0ou+8jOW3peWFt+WPr+S/oeW6puS4jeetieS6jua8j+a0nuaIkOeri+amgueOh+OAgjwvdGV4dD48L2c+PC9zdmc+" alt="本地代码安全审核流程"></p>
+<p><a href="../../docs/diagrams/codesentry-scan-flow.png">查看高清 PNG</a></p>
+<p><a href="../../docs/diagrams/codesentry-scan-flow.mmd">执行流程图源</a></p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>主要工作</th>
+<th>形成结果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>准备</td>
+<td>确认范围、取得只读权限、固定 Commit</td>
+<td>审核版本与排除范围</td>
+</tr>
+<tr>
+<td>检查</td>
+<td>全量或增量扫描、工具复核、人工抽查与调用链分析</td>
+<td>候选结果与人工判断依据</td>
+</tr>
+<tr>
+<td>交付</td>
+<td>筛选报告、依赖整改归组、列明确认状态</td>
+<td>整改清单与报告</td>
+</tr>
+<tr>
+<td>核验</td>
+<td>拉取修复版本，复查根因与关联路径</td>
+<td>通过、未通过或待验证结论</td>
+</tr>
+</tbody></table>
+<p>全量用于首次审核或重大变更；增量分别扫描当前版本与所选分支的共同祖先，再比较新增、存量及已修复条目。增量检查仍需人工关注变更影响的上下游，规则不再命中也不能单独证明修复完成。</p>
+<p>分支快照使用 <code>git archive</code>，不切换原仓库分支。当前工作区模式可以包含未提交内容，两种方式均须说明实际输入范围。</p>
+<h2 id="4-五类工具如何分工">4. 五类工具如何分工</h2>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>检查对象</th>
+<th>主要作用与边界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Semgrep</td>
+<td>源码、配置、JSP 等受规则支持的文件</td>
+<td>代码模式与自定义规则；覆盖范围取决于规则包</td>
+</tr>
+<tr>
+<td>Gitleaks</td>
+<td>工作目录或扫描快照</td>
+<td>疑似硬编码凭据；不代表扫描完整 Git 历史</td>
+</tr>
+<tr>
+<td>Trivy</td>
+<td>可识别依赖与文件</td>
+<td>组件版本、已知 CVE、密钥；依赖本地漏洞库及组件元数据</td>
+</tr>
+<tr>
+<td>SpotBugs / FindSecBugs</td>
+<td>已有 JAR 中的 Java 字节码</td>
+<td>补充老项目检查；需配置业务包范围</td>
+</tr>
+<tr>
+<td>Alibaba P3C-PMD</td>
+<td>Java 源文件</td>
+<td>阿里编码规范检查；规范问题不直接等同于安全漏洞</td>
+</tr>
+</tbody></table>
+<p>JSP 本地规则包括路径穿越、命令执行和开放重定向。没有 Java 源文件时，P3C 零结果不代表规范全部通过；当前不会自动编译 JSP 或重建业务项目。</p>
+<p>前端有独立的本地专项规则包：JS/TS/JSX/TSX 检查跨窗口消息、浏览器输入跳转、敏感凭据存储和明文 HTTP；Vue 以限定模式检查路由参数直出 HTML、跳转、消息及凭据存储。它随本地及综合规则集执行，React 复用 JS/TS 源码规则，Vue 不提供完整跨文件分析。压缩与部分第三方脚本仍排除，<code>eval</code> 和直接 <code>innerHTML</code> 规则不重新启用。</p>
+<p>规则覆盖和排除清单在扫描前确认。指定规则被忽略不代表相关风险不存在。当前规则范围与待验证项集中见<a href="CodeSentry-技术调研方案总结.html#71-老项目适配与范围">技术总结</a>。</p>
+<h2 id="5-问题审核组与整改组">5. 问题、审核组与整改组</h2>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>含义</th>
+<th>计数用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>候选问题条目</td>
+<td>扫描结果，经复核后可能是风险或误报</td>
+<td>台账查询</td>
+</tr>
+<tr>
+<td>审核组</td>
+<td>相同依赖文件、组件坐标和安装版本的 CVE 集合</td>
+<td>工具复核执行进度</td>
+</tr>
+<tr>
+<td>报告漏洞条目</td>
+<td>通过报告筛选的条目，不代表全部经人工确认</td>
+<td>报告统计，结合人工状态解读</td>
+</tr>
+<tr>
+<td>整改组</td>
+<td>报告中合并展示的同文件、同组件版本问题</td>
+<td>组织升级动作与整改展示</td>
+</tr>
+</tbody></table>
+<p>例如：同一 POI JAR 的 6 个 CVE 可形成 1 个审核组，共用一次初审和一次复审；若 6 条均通过报告筛选，则报告统计仍为 6 条，展示为 1 个整改组，并保留各 CVE、证据和结论。不同文件或版本分别处理，非依赖代码问题不按组件归组。</p>
+<p>再次执行工具复核时按最新状态跳过成功项；失败或中断项可重试。任务支持停止，失败显示实际原因。人工可逐条复核，也可只对已勾选的问题执行批量人工复核。</p>
+<h2 id="6-报告如何形成">6. 报告如何形成</h2>
+<p>报告区分两种结果：</p>
+<ul>
+<li><strong>已确认风险</strong>：审核人员已提交确认结论。</li>
+<li><strong>待人工确认项</strong>：工具初审和复审完整完成、每次可信度均大于 65% 且未判为误报，但尚未人工确认。</li>
+</ul>
+<p>人工误报不进入报告。未审核、执行失败、恰好 65% 或低于门槛的工具结果不自动进入报告，保留在台账继续处理。工具门槛是筛选条件，不是漏洞成立概率，也不替代人工确认。</p>
+<p>正式对外交付前，审核人员检查待确认项并明确交付范围；如只交付已确认漏洞，应先完成确认。产品当前允许符合工具门槛的待确认项进入报告，讲解时须说明其状态。</p>
+<p>报告支持在线查看、Word 和 PDF 下载，列表按扫描时间倒序排列。源码问题展示文件与行号；依赖漏洞展示 JAR、组件版本及 CVE，并注明无源码行号。Word/PDF 正文用宋体，标题和表头用黑体并嵌入字体。</p>
+<p>报告生成不修改原始记录，但重新导出会读取当时的复核状态；需要保留交付版本时，应归档已导出的文件。</p>
+<h2 id="7-页面操作顺序">7. 页面操作顺序</h2>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>建议操作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>仪表盘</td>
+<td>查看仓库、扫描与风险概况</td>
+</tr>
+<tr>
+<td>代码仓库</td>
+<td>登记或编辑本地目录、远程地址及默认分支</td>
+</tr>
+<tr>
+<td>扫描规则</td>
+<td>确认本地、社区或综合规则集及排除范围</td>
+</tr>
+<tr>
+<td>发起扫描</td>
+<td>选择全量或增量、工作区或快照、目标及基线</td>
+</tr>
+<tr>
+<td>扫描记录</td>
+<td>查看详情、日志、工具状态，跳转对应批次台账，必要时停止</td>
+</tr>
+<tr>
+<td>问题台账</td>
+<td>按批次筛选，查看原始内容，执行工具复核和人工复核</td>
+</tr>
+<tr>
+<td>整改报告</td>
+<td>检查统计与确认状态，在线查看或下载</td>
+</tr>
+<tr>
+<td>工具管理</td>
+<td>维护复核服务配置、启停及默认工具</td>
+</tr>
+<tr>
+<td>系统设置</td>
+<td>查看节点与扫描器配置状态</td>
+</tr>
+</tbody></table>
+<p>扫描记录和台账默认每页 20 条，可选 50、100、500 条并选择页数。工具批量审核面向当前批次，人工批量复核只处理已勾选的问题。</p>
+<h2 id="8-配置与运行维护">8. 配置与运行维护</h2>
+<p>工具管理支持配置增删改查。服务配置存入 MySQL，接口密钥加密保存且不回显明文；备份与恢复应同时覆盖数据库及本地加密主密钥文件。“已配置”只代表配置存在，是否可调用以实际接口响应为准。</p>
+<p>Docker Compose 编排前后端，后端镜像集成扫描工具、插件和字体，前端由 Nginx 提供服务；MySQL 连接主机既有实例。仓库只读挂载，快照、报告、漏洞库等持久化。时间统一按东八区处理。</p>
+<p>Trivy 扫描读取本地缓存，漏洞库与 Java 索引库通过独立脚本维护。<strong>脚本已实现，定时调度、互斥和通知待实施</strong>。更新周期、失败重试与缓存要求统一见<a href="CodeSentry-技术调研方案总结.html#810-漏洞库维护与定时更新设计">漏洞库维护设计</a>。</p>
+<h2 id="9-讲解安排">9. 讲解安排</h2>
+<table>
+<thead>
+<tr>
+<th>时间</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>5 分钟</td>
+<td>本地审核的目标、范围和数据流向</td>
+</tr>
+<tr>
+<td>10 分钟</td>
+<td>总体架构与五类工具分工</td>
+</tr>
+<tr>
+<td>12 分钟</td>
+<td>仓库登记、全量/增量扫描、执行日志</td>
+</tr>
+<tr>
+<td>10 分钟</td>
+<td>候选条目、审核组、人工确认与整改组</td>
+</tr>
+<tr>
+<td>8 分钟</td>
+<td>报告交付、修复核验和常见问题</td>
+</tr>
+</tbody></table>
+<h2 id="10-常见问题">10. 常见问题</h2>
+<p><strong>工具命中就是漏洞吗？</strong><br>不是。需要判断版本、可达路径、输入控制、权限、现有防护和部署条件。P3C 还可能给出编码规范问题。</p>
+<p><strong>合并依赖问题是否丢失 CVE？</strong><br>审核和报告按组处理，仍保留成员 CVE、位置和复核证据；组数与漏洞条目数分别解释。</p>
+<p><strong>完全离线能否检查？</strong><br>需预先准备工具、本地规则与漏洞库，并使用本地复核服务。社区规则和外部复核接口的网络要求应单独确认。</p>
+<p><strong>停止、失败是否等于没有问题？</strong><br>停止表示任务未完整执行；部分完成表示部分工具没有成功。应结合日志与覆盖范围解释结果。</p>
+<p><strong>更新漏洞库会自动改变旧报告吗？</strong><br>不会自动重扫历史代码。使用新库检查应发起新批次；历史交付文件应独立归档。</p>
+<p><strong>修复后规则不再命中是否算通过？</strong><br>还需人工核查根因、关联路径与绕过条件，形成明确核验结论。</p>
+<h2 id="11-当前能力与交付确认">11. 当前能力与交付确认</h2>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>范围</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>已实现</td>
+<td>五类工具适配、批次与日志、工具复核、人工复核、依赖归组、报告生成、容器部署及独立漏洞库更新脚本</td>
+</tr>
+<tr>
+<td>待验证</td>
+<td>目标仓库全量与增量准确性、业务包范围、规则覆盖、实际服务连接及办公软件兼容性</td>
+</tr>
+<tr>
+<td>规划</td>
+<td>漏洞库定时调度及通知、不可变复核历史、报告快照、多人权限和规模化执行</td>
+</tr>
+</tbody></table>
+<p>交付时确认代码版本、规则及漏洞库范围，核查完整执行状态，完成代表性全量和增量验证，再归档报告与修复核验证据。技术依据和验收范围见<a href="CodeSentry-技术调研方案总结.html#10-实现与验收状态">技术调研方案总结</a>。</p>
+<div class="footer">CodeSentry · 本地代码安全审核技术文档</div></main></div></body></html>
