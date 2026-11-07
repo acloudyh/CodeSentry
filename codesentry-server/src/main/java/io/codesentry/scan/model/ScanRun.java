@@ -12,6 +12,9 @@ public class ScanRun {
 
     private ScanMode scanMode;
     private WorkspaceMode workspaceMode;
+    private String artifactPath;
+    public String getArtifactPath() { return artifactPath; }
+    public void setArtifactPath(String value) { artifactPath = value; }
     private String scanRef;
     private String baselineRef;
     private String ruleProfile;

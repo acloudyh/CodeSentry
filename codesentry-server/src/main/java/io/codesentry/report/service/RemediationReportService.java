@@ -80,6 +80,17 @@ public class RemediationReportService {
         return buildHtml(load(runId, true)).getBytes(StandardCharsets.UTF_8);
     }
 
+    public List<Long> includedFindingIds(Long runId) {
+        return load(runId, false).findings.stream().map(FindingView::getId).collect(Collectors.toList());
+    }
+
+    public String exportFileName(Long runId, String extension) {
+        ScanRun run = scanRunService.requireById(runId);
+        String projectName = projectService.requireById(run.getProjectId()).getProjectName();
+        String safeName = projectName.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
+        return safeName + "-代码安全扫描." + extension;
+    }
+
     public List<RemediationReportSummary> recent(int limit) {
         List<RemediationReportSummary> reports = new ArrayList<>();
         for (ScanRun run : scanRunService.recent(limit)) {

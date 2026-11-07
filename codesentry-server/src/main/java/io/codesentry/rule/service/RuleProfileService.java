@@ -38,8 +38,26 @@ public class RuleProfileService {
 
     private final CodeSentryProperties properties;
 
-    public RuleProfileService(CodeSentryProperties properties) {
-        this.properties = properties;
+    private final CommunityRuleLibraryService community;
+
+    public RuleProfileService(CodeSentryProperties properties, CommunityRuleLibraryService community) {
+        this.properties = properties; this.community = community;
+    }
+
+    private String communityConfig() {
+        String configured = properties.getScanners().getSemgrep().getConfig();
+        if (configured != null && !configured.isBlank() && !"auto".equals(configured)) {
+            try {
+                Path local = Path.of(configured);
+                if (Files.isRegularFile(local) || Files.isDirectory(local)) return local.toAbsolutePath().toString();
+            } catch (java.nio.file.InvalidPathException ignored) { }
+        }
+        return community.requireSnapshot().toString();
+    }
+
+    private boolean communityReady() {
+        try { communityConfig(); return true; }
+        catch (BusinessException unavailable) { return false; }
     }
 
     public List<RuleProfileView> list() {
@@ -50,15 +68,15 @@ public class RuleProfileService {
                         Arrays.asList("Semgrep", "Gitleaks", "Trivy 漏洞/密钥", "SpotBugs/FindSecBugs", "Alibaba P3C"),
                         LOCAL_RULES, true),
                 new RuleProfileView(COMMUNITY_GENERAL, "Semgrep 社区通用规则",
-                        "使用 Semgrep auto 根据仓库语言匹配社区规则，首次使用可能需要访问规则仓库。",
+                        "使用已同步到本地的 Semgrep 社区规则；更新时需要联网，执行扫描时不从远程加载规则。",
                         Arrays.asList("Semgrep Registry", "OWASP", "CWE", "Alibaba Java Coding Guidelines"),
                         Arrays.asList("Semgrep", "Gitleaks", "Trivy 漏洞/密钥", "SpotBugs/FindSecBugs", "Alibaba P3C"),
-                        Collections.emptyList(), false),
+                        Collections.emptyList(), communityReady()),
                 new RuleProfileView(COMPREHENSIVE, "综合深度审计",
-                        "同时执行本地基线和 Semgrep 社区规则，覆盖面更大，扫描时间也更长。",
+                        "同时使用本地基线与本地社区规则快照，覆盖面更大；更新社区规则时需要联网。",
                         Arrays.asList("OWASP Top 10", "CWE", "CERT", "Semgrep Registry", "Alibaba Java Coding Guidelines"),
                         Arrays.asList("Semgrep", "Gitleaks", "Trivy 漏洞/密钥", "SpotBugs/FindSecBugs", "Alibaba P3C"),
-                        LOCAL_RULES, false)
+                        LOCAL_RULES, communityReady())
         );
     }
 
@@ -72,12 +90,12 @@ public class RuleProfileService {
     public List<String> semgrepConfigs(String profile) {
         validate(profile);
         if (COMMUNITY_GENERAL.equals(profile)) {
-            return Collections.singletonList(properties.getScanners().getSemgrep().getConfig());
+            return Collections.singletonList(communityConfig());
         }
         String local = materializeLocalRules("codesentry-owasp-cwe.yml").toString();
         String frontend = materializeLocalRules("codesentry-frontend.yml").toString();
         if (COMPREHENSIVE.equals(profile)) {
-            return Arrays.asList(local, frontend, properties.getScanners().getSemgrep().getConfig());
+            return Arrays.asList(local, frontend, communityConfig());
         }
         return Arrays.asList(local, frontend);
     }

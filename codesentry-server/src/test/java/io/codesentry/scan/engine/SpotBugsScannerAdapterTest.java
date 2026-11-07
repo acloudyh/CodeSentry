@@ -16,6 +16,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -77,6 +78,54 @@ class SpotBugsScannerAdapterTest {
                 WorkspaceMode.CURRENT, temp, temp, temp, "commit", null, "current", "GENERAL");
 
         assertDoesNotThrow(() -> adapter.scan(context));
+    }
+
+    @Test
+    void uploadedBootJarIgnoresLegacyPackageFilterAndUsesDependencyClasspath() throws Exception {
+        Path archive = temp.resolve("app.jar");
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
+            for (String name : List.of("BOOT-INF/classes/com/harmonycloud/App.class", "BOOT-INF/lib/dep.jar")) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(name)); zip.write(new byte[]{1,2,3}); zip.closeEntry();
+            }
+        }
+        CodeSentryProperties props = new CodeSentryProperties();
+        props.getScanners().getSpotbugs().setInclude("com.srtech.*");
+        props.getScanners().getSpotbugs().setConfig(Files.createFile(temp.resolve("plugin.dat")).toString());
+        CommandExecutor commands = mock(CommandExecutor.class);
+        when(commands.execute(any(), anyList(), any(Duration.class))).thenAnswer(invocation -> {
+            List<String> arguments = invocation.getArgument(1);
+            assertTrue(arguments.indexOf("-auxclasspathFromFile") > arguments.indexOf("-project"));
+            assertFalse(arguments.contains("-onlyAnalyze"));
+            assertTrue(arguments.contains("SECURITY"));
+            String project = Files.readString(Path.of(arguments.get(arguments.indexOf("-project") + 1)));
+            assertTrue(project.contains("BOOT-INF/classes"));
+            assertFalse(project.contains("dep.jar"));
+            Files.writeString(Path.of(arguments.get(arguments.indexOf("-output") + 1)), "<BugCollection/>");
+            return new CommandResult(0, "");
+        });
+        new SpotBugsScannerAdapter(commands, props).scan(new ScanContext(1L, new ScanProject(), ScanMode.FULL,
+                WorkspaceMode.JAR_UPLOAD, temp, temp, temp.resolve("reports"), "hash", null, "current", "GENERAL"));
+    }
+
+    @Test
+    void uploadedJarRetriesMinimalLauncherOnlyForUnsupportedHeapSwitch() throws Exception {
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(temp.resolve("app.jar")))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("com/example/App.class")); zip.write(new byte[]{1}); zip.closeEntry();
+        }
+        CodeSentryProperties props = new CodeSentryProperties();
+        props.getScanners().getSpotbugs().setConfig(Files.createFile(temp.resolve("plugin.dat")).toString());
+        CommandExecutor commands = mock(CommandExecutor.class);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        when(commands.execute(any(), anyList(), any(Duration.class))).thenAnswer(invocation -> {
+            List<String> arguments = invocation.getArgument(1);
+            if (calls.getAndIncrement() == 0) return new CommandResult(1, "Unknown option: -maxHeap");
+            assertFalse(arguments.contains("-maxHeap"));
+            Files.writeString(Path.of(arguments.get(arguments.indexOf("-output") + 1)), "<BugCollection/>");
+            return new CommandResult(0, "");
+        });
+        new SpotBugsScannerAdapter(commands, props).scan(new ScanContext(1L, new ScanProject(), ScanMode.FULL,
+                WorkspaceMode.JAR_UPLOAD, temp, temp, temp.resolve("reports"), "hash", null, "current", "GENERAL"));
+        assertEquals(2, calls.get());
     }
 
     @Test

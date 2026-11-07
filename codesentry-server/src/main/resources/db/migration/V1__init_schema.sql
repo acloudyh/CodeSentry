@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS scan_run (
     scan_mode VARCHAR(24) NOT NULL,
     workspace_mode VARCHAR(24) NOT NULL,
     scan_ref VARCHAR(255) NULL,
+    artifact_path VARCHAR(1024) NULL,
     baseline_ref VARCHAR(255) NULL,
     rule_profile VARCHAR(64) NOT NULL DEFAULT 'COMMUNITY_GENERAL',
     scan_commit VARCHAR(64) NULL,

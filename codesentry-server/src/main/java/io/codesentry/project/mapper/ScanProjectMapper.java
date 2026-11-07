@@ -17,6 +17,9 @@ public interface ScanProjectMapper {
     @Select("SELECT * FROM scan_project WHERE id = #{id}")
     ScanProject findById(@Param("id") Long id);
 
+    @Select("SELECT * FROM scan_project WHERE id = #{id} FOR UPDATE")
+    ScanProject findByIdForUpdate(@Param("id") Long id);
+
     @Insert("INSERT INTO scan_project(project_name, source_type, local_path, remote_url, managed_path, " +
             "default_branch, target_java_version, enabled, created_at, updated_at) VALUES(#{projectName}, #{sourceType}, " +
             "#{localPath}, #{remoteUrl}, #{managedPath}, #{defaultBranch}, #{targetJavaVersion}, #{enabled}, #{createdAt}, #{updatedAt})")

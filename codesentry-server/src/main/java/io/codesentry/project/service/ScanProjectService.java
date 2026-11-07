@@ -41,6 +41,9 @@ public class ScanProjectService {
 
     @Transactional
     public ScanProject create(CreateProjectRequest request) {
+        if (request.getSourceType() == ProjectSourceType.JAR_UPLOAD) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "请通过 JAR 上传入口创建扫描任务");
+        }
         ScanProject project = new ScanProject();
         project.setProjectName(request.getProjectName().trim());
         project.setTargetJavaVersion(request.getTargetJavaVersion());
@@ -66,6 +69,7 @@ public class ScanProjectService {
 
     public List<BranchView> listBranches(Long id, boolean refresh) {
         ScanProject project = requireById(id);
+        if (project.getSourceType() == ProjectSourceType.JAR_UPLOAD) return List.of();
         if (refresh) {
             repositoryService.refresh(project);
         }
@@ -75,6 +79,9 @@ public class ScanProjectService {
     @Transactional
     public ScanProject update(Long id, CreateProjectRequest request) {
         ScanProject project = requireById(id);
+        if (project.getSourceType() == ProjectSourceType.JAR_UPLOAD) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "请通过 JAR 项目编辑入口修改信息或替换文件");
+        }
         if (!Boolean.TRUE.equals(project.getEnabled())) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "已移除的仓库不能编辑");
         }

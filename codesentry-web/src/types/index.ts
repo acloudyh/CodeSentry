@@ -1,6 +1,6 @@
-export type SourceType = 'LOCAL' | 'GIT'
+export type SourceType = 'LOCAL' | 'GIT' | 'JAR_UPLOAD'
 export type ScanMode = 'FULL' | 'INCREMENTAL'
-export type WorkspaceMode = 'CURRENT' | 'BRANCH_SNAPSHOT'
+export type WorkspaceMode = 'CURRENT' | 'BRANCH_SNAPSHOT' | 'JAR_UPLOAD'
 export type ScanStatus = 'PENDING' | 'PREPARING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
 
 export interface ApiResponse<T> {
@@ -210,4 +210,13 @@ export interface ReportAcceptance {
   history: ScanRun[]
   counts: Record<string, number>
   items: Array<{ finding: FindingView; status: string; triageStatus?: string; comment?: string; reviewer?: string }>
+}
+
+export interface RuleLibraryStatus {
+  state: string
+  available: boolean
+  version: string | null
+  updatedAt: string | null
+  ruleCount: number | null
+  message: string
 }

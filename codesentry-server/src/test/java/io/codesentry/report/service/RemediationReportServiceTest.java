@@ -268,6 +268,36 @@ class RemediationReportServiceTest {
         assertEquals("升级到修复版本。",poi.getRecommendation());
     }
 
+    @Test
+    void actionableJarAdviceIsRenderedInHtmlAndWordWithoutChangingScannerEvidence() throws Exception {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
+        ScanRun run = reportRun(8L, LocalDateTime.of(2026,11,6,10,0));
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("JAR 整改"); project.setTargetJavaVersion(8);
+        FindingView dependency = dependencyFinding(204L, "CVE-2023-34462", "Netty TLS", "app.jar/BOOT-INF/lib/nacos-client-2.2.0.jar", "io.netty:netty-handler@4.1.48.Final");
+        dependency.setRecommendation("升级到修复版本：4.1.94.Final");
+        when(runs.requireById(8L)).thenReturn(run); when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(dependency)); when(reviews.latestForRun(8L)).thenReturn(List.of());
+        String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
+        assertTrue(html.contains("需升级或重建外层包"));
+        assertFalse(html.contains("整改实施步骤 · 问题组"));
+        assertFalse(html.contains("class=\"remediation-row\""));
+        assertTrue(html.contains("外层包 nacos-client-2.2.0.jar"));
+        assertTrue(html.contains("仅修改业务侧依赖版本无效"));
+        assertTrue(html.contains("上传新包全量复扫"));
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(
+                new java.io.ByteArrayInputStream(service.exportDocx(8L)))) {
+            String xml = document.getDocument().xmlText();
+            assertTrue(xml.contains("需升级或重建外层包"));
+            assertTrue(xml.contains("外层包 nacos-client-2.2.0.jar"));
+            assertTrue(xml.contains("TLS 握手"));
+        }
+        assertEquals("升级到修复版本：4.1.94.Final", dependency.getRecommendation());
+    }
+
     private FindingView log4jFinding(Long id, String ruleId, String title) {
         FindingView finding = finding(id, title, "CONFIRMED");
         finding.setScanner("Trivy");

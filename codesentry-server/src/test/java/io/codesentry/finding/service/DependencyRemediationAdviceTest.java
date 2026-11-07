@@ -84,6 +84,47 @@ class DependencyRemediationAdviceTest {
         assertTrue(ledger.contains("ServiceFactory.getService"));
         assertTrue(ledger.contains("未计划发布本漏洞的 1.x 修复版"));
     }
+    @Test void standaloneJarAdviceStaysConciseAndRetainsTargetAndValidation() {
+        FindingView f = finding("commons-collections:commons-collections@3.2.1", "CVE-2015-7501", "升级到修复版本：3.2.2");
+        f.setFilePath("app.jar/BOOT-INF/lib/commons-collections-3.2.1.jar");
+        String advice = DependencyRemediationAdvice.compact(java.util.List.of(f), 8);
+        assertTrue(advice.contains("候选版本：3.2.2"));
+        assertTrue(advice.contains("pom.xml"));
+        assertTrue(advice.length() < 350);
+        assertTrue(advice.contains("dependencyManagement"));
+        assertTrue(advice.contains("重新打包"));
+        assertTrue(advice.contains("Java 8"));
+        assertTrue(advice.contains("勿开启危险反序列化"));
+        assertTrue(advice.contains("上传新包全量复扫"));
+        assertFalse(advice.contains("组件记录位于外层包"));
+    }
+    @Test void nestedNettyDoesNotRecommendOnlyOverridingBusinessDependency() {
+        FindingView f = finding("io.netty:netty-handler@4.1.48.Final", "CVE-2023-34462", "升级到修复版本：4.1.94.Final");
+        f.setFilePath("app.jar/BOOT-INF/lib/nacos-client-2.2.0.jar");
+        String advice = DependencyRemediationAdvice.compact(java.util.List.of(f), 8);
+        assertTrue(advice.contains("外层包 nacos-client-2.2.0.jar"));
+        assertTrue(advice.length() < 350);
+        assertTrue(advice.contains("仅修改业务侧依赖版本无效"));
+        assertTrue(advice.contains("需升级或重建外层包"));
+        assertTrue(advice.contains("TLS 握手"));
+        assertFalse(advice.contains("若为直接依赖"));
+    }
+    @Test void incompleteHutoolFixesRemainUnresolvedRatherThanAnInventedUnifiedTarget() {
+        FindingView a = finding("cn.hutool:hutool-json@5.3.8", "CVE-2022-45688", "升级到修复版本：5.8.25");
+        FindingView b = finding("cn.hutool:hutool-json@5.3.8", "CVE-2023-42276", "升级到修复版本：请查阅漏洞公告");
+        String advice = DependencyRemediationAdvice.compact(java.util.List.of(a, b), 8);
+        assertTrue(advice.contains("CVE-2023-42276"));
+        assertTrue(advice.contains("不能视为全部修复"));
+        assertTrue(advice.contains("hutool-*"));
+        assertTrue(advice.contains("JSON 解析及异常输入"));
+        assertFalse(advice.contains("候选版本："));
+    }
+    @Test void historicalFixRecordsDoNotRecommendDowngradingAnAlreadyNewerVersion() {
+        FindingView f = finding("io.netty:netty-handler@4.1.101.Final", "CVE-2023-34462", "升级到修复版本：4.1.94.Final");
+        String advice = DependencyRemediationAdvice.compact(java.util.List.of(f), 8);
+        assertTrue(advice.contains("CVE-2023-34462：4.1.94.Final"));
+        assertFalse(advice.contains("候选版本："));
+    }
     private FindingView finding(String signature, String cve, String recommendation) {
         FindingView f = new FindingView(); f.setScanner("Trivy"); f.setCategory("VULNERABILITY");
         f.setCodeSnippet(signature); f.setRuleId(cve); f.setRecommendation(recommendation); return f;

@@ -52,6 +52,7 @@ public class ScanRunService {
 
         ScanRun run = new ScanRun();
         run.setProjectId(project.getId());
+        if (request.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD) run.setArtifactPath(project.getLocalPath());
         run.setSourceReportRunId(request.getSourceReportRunId());
         run.setScanMode(request.getScanMode());
         run.setWorkspaceMode(request.getWorkspaceMode());
@@ -109,6 +110,17 @@ public class ScanRunService {
     }
 
     private void validate(ScanProject project, CreateScanRunRequest request) {
+        if (project.getSourceType() == ProjectSourceType.JAR_UPLOAD || request.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD) {
+            if (project.getSourceType() != ProjectSourceType.JAR_UPLOAD
+                    || request.getWorkspaceMode() != WorkspaceMode.JAR_UPLOAD || request.getScanMode() != ScanMode.FULL
+                    || request.getSourceReportRunId() != null) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "JAR 项目仅支持独立全量扫描，请选择已有 JAR 项目发起扫描");
+            }
+            request.setScanRef(java.nio.file.Path.of(project.getLocalPath()).getFileName().toString());
+            request.setBaselineRef(null);
+            request.setRefreshRemote(false);
+        }
+
         if (request.getSourceReportRunId() != null) {
             ScanRun source = requireById(request.getSourceReportRunId());
             if (!project.getId().equals(source.getProjectId()) || request.getScanMode() != ScanMode.FULL

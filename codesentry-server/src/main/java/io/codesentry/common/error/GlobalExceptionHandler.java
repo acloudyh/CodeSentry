@@ -34,6 +34,19 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure("名称已存在，请使用其他名称"));
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(Exception exception) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.failure("上传文件过大，单个 JAR 最大支持 2 GB（2048 MB）"));
+    }
+
+    @ExceptionHandler({org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(Exception exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.failure("请提供完整的上传参数和 JAR 文件"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception exception) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

@@ -2,6 +2,7 @@ package io.codesentry.scan.model;
 
 public enum WorkspaceMode {
     CURRENT,
-    BRANCH_SNAPSHOT
+    BRANCH_SNAPSHOT,
+    JAR_UPLOAD
 }
 

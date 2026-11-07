@@ -12,6 +12,23 @@ const branches = ref<BranchView[]>([])
 const loadingBranches = ref(false)
 const submitting = ref(false)
 const error = ref('')
+const source = ref<'repository' | 'jar'>(route.query.source === 'jar' ? 'jar' : 'repository')
+const jarProjectId = ref(0)
+const repositoryProjects = computed(() => projects.value.filter((project) => project.sourceType !== 'JAR_UPLOAD'))
+const jarProjects = computed(() => projects.value.filter((project) => project.sourceType === 'JAR_UPLOAD'))
+const selectedJar = computed(() => jarProjects.value.find((project) => project.id === jarProjectId.value))
+function projectName(project: ScanProject) {
+  return project.projectName.replace(/ · [0-9a-f]{8}-[0-9a-f-]{27}$/i, '')
+}
+async function submitJar() {
+  if (!selectedJar.value || submitting.value) return
+  submitting.value = true; error.value = ''
+  try {
+    const run = await api.startScan({ projectId: selectedJar.value.id, scanMode: 'FULL', workspaceMode: 'JAR_UPLOAD', refreshRemote: false, ruleProfile: 'COMMUNITY_GENERAL' })
+    await router.push(`/scans/${run.id}`)
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : '扫描启动失败' }
+  finally { submitting.value = false }
+}
 const ruleProfiles = ref<RuleProfile[]>([])
 const form = reactive({
   projectId: 0,
@@ -24,17 +41,25 @@ const form = reactive({
 const selectedProject = computed(() => projects.value.find((item) => item.id === form.projectId))
 const canCurrentWorkspace = computed(() => selectedProject.value?.sourceType === 'LOCAL')
 
-watch(() => form.projectId, async (id) => {
-  if (!id) return
+let branchRequest = 0
+async function loadBranches(id: number) {
+  const requestId = ++branchRequest
+  branches.value = []
+  if (!id || source.value !== 'repository') { loadingBranches.value = false; return }
   if (!canCurrentWorkspace.value && form.workspaceMode === 'CURRENT') form.workspaceMode = 'BRANCH_SNAPSHOT'
   loadingBranches.value = true; error.value = ''
   try {
-    branches.value = await api.branches(id, false)
+    const result = await api.branches(id, false)
+    if (requestId !== branchRequest || source.value !== 'repository') return
+    branches.value = result
     const defaultBranch = selectedProject.value?.defaultBranch ?? 'main'
-    form.baselineRef = branches.value.some((item) => item.name === defaultBranch) ? defaultBranch : branches.value[0]?.name ?? ''
-    form.scanRef = branches.value[0]?.name ?? ''
-  } catch (reason) { error.value = reason instanceof Error ? reason.message : '分支读取失败' } finally { loadingBranches.value = false }
-})
+    form.baselineRef = result.some((item) => item.name === defaultBranch) ? defaultBranch : result[0]?.name ?? ''
+    form.scanRef = result[0]?.name ?? ''
+  } catch (reason) { if (requestId === branchRequest && source.value === 'repository') error.value = reason instanceof Error ? reason.message : '分支读取失败' }
+  finally { if (requestId === branchRequest) loadingBranches.value = false }
+}
+watch(() => form.projectId, loadBranches)
+watch(source, () => loadBranches(form.projectId))
 
 async function submit() {
   submitting.value = true; error.value = ''
@@ -55,19 +80,38 @@ onMounted(async () => {
       form.projectId = source.projectId
       form.ruleProfile = source.ruleProfile
       form.scanMode = 'FULL'
-    } else form.projectId = projects.value[0]?.id ?? 0
+    } else {
+      const requestedProject = projects.value.find((project) => project.id === Number(route.query.projectId))
+      if (requestedProject) source.value = requestedProject.sourceType === 'JAR_UPLOAD' ? 'jar' : 'repository'
+      form.projectId = requestedProject?.sourceType !== 'JAR_UPLOAD' && requestedProject ? requestedProject.id : repositoryProjects.value[0]?.id ?? 0
+      jarProjectId.value = requestedProject?.sourceType === 'JAR_UPLOAD' ? requestedProject.id : jarProjects.value[0]?.id ?? 0
+    }
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '项目或规则集加载失败' }
 })
 </script>
 
 <template>
   <div class="page-stack">
-    <section class="section-heading"><div><h2>扫描任务配置</h2><p>选择代码来源、扫描版本和基线分支。增量模式会自动计算共同祖先（merge-base）。</p></div><span class="section-code">扫描配置</span></section>
+    <section class="section-heading"><div><h2>扫描任务配置</h2><p>选择已登记的代码仓库或 JAR 项目，发起安全扫描。</p></div><span class="section-code">扫描配置</span></section>
     <div v-if="error" class="error-banner">{{ error }}</div>
     <div v-if="sourceReportRunId" class="notice">正在为报告 CSR-{{ String(sourceReportRunId).padStart(6, '0') }} 创建验收复扫。已锁定原项目、原规则集和全量模式，请选择整改后的代码。</div>
-    <form class="panel panel-pad" @submit.prevent="submit">
+    <div v-if="!sourceReportRunId" class="segmented source-tabs" aria-label="扫描来源">
+      <button type="button" :disabled="submitting" :class="{ active: source === 'repository' }" @click="source = 'repository'; error = ''">代码仓库扫描</button>
+      <button type="button" :disabled="submitting" :class="{ active: source === 'jar' }" @click="source = 'jar'; error = ''">JAR 项目扫描</button>
+    </div>
+    <form v-if="source === 'jar'" class="panel panel-pad jar-panel" @submit.prevent="submitJar">
+      <div class="jar-heading"><span class="section-code">JAR 安全扫描</span><h3>选择已有 JAR 项目</h3><p class="muted">使用项目中已保存的 JAR，检查依赖已知漏洞与业务字节码安全问题，无需重复上传。</p></div>
       <div class="form-grid">
-        <div class="field span-2"><label>目标项目</label><select v-model.number="form.projectId" :disabled="Boolean(sourceReportRunId)" class="select" required><option :value="0" disabled>请选择仓库</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.projectName }} · {{ project.sourceType === 'LOCAL' ? '本地' : '远程' }}</option></select></div>
+        <div class="field span-2"><label for="jar-project">目标 JAR 项目</label><select id="jar-project" v-model.number="jarProjectId" class="select" :disabled="submitting" required><option :value="0" disabled>请选择 JAR 项目</option><option v-for="project in jarProjects" :key="project.id" :value="project.id">{{ projectName(project) }}</option></select><small v-if="!jarProjects.length">暂无 JAR 项目，请先新增并上传文件。</small></div>
+        <div v-if="selectedJar" class="field span-2 jar-picker"><span class="muted">当前文件</span><strong class="jar-filename">{{ selectedJar.localPath?.split('/').pop() }}</strong><small>业务系统 Java 版本：{{ selectedJar.targetJavaVersion ? `Java ${selectedJar.targetJavaVersion}` : '未确认' }}。如需更新文件或项目信息，请到“扫描项目”中编辑。</small></div>
+        <div class="field span-2 jar-checks"><div><strong>依赖已知漏洞</strong><p>识别 JAR 及内嵌依赖的组件漏洞。</p></div><div><strong>业务代码安全问题</strong><p>分析字节码中的注入、不安全调用等风险。</p></div></div>
+        <div class="field span-2 notice">JAR 项目使用全量扫描。每次扫描固定使用创建任务时的文件版本，历史结果保留。</div>
+        <div class="form-actions field span-2"><RouterLink :to="{ path: '/projects', query: { type: 'jar', new: 'jar' } }" class="button secondary">新增 JAR 项目</RouterLink><RouterLink to="/projects?type=jar" class="button secondary">管理 JAR 项目</RouterLink><button class="button primary" :disabled="submitting || !selectedJar">{{ submitting ? '正在创建任务…' : '启动扫描' }}</button></div>
+      </div>
+    </form>
+    <form v-else class="panel panel-pad" @submit.prevent="submit">
+      <div class="form-grid">
+        <div class="field span-2"><label for="repository-project">目标项目</label><select id="repository-project" v-model.number="form.projectId" :disabled="Boolean(sourceReportRunId)" class="select" required><option :value="0" disabled>请选择仓库</option><option v-for="project in repositoryProjects" :key="project.id" :value="project.id">{{ project.projectName }} · {{ project.sourceType === 'LOCAL' ? '本地' : '远程' }}</option></select></div>
         <div class="field"><label>扫描模式</label><div class="segmented"><button type="button" :disabled="Boolean(sourceReportRunId)" :class="{active:form.scanMode==='FULL'}" @click="form.scanMode='FULL'">全量扫描</button><button type="button" :disabled="Boolean(sourceReportRunId)" :class="{active:form.scanMode==='INCREMENTAL'}" @click="form.scanMode='INCREMENTAL'">增量扫描</button></div></div>
         <div class="field"><label>代码读取方式</label><div class="segmented"><button type="button" :disabled="!canCurrentWorkspace" :class="{active:form.workspaceMode==='CURRENT'}" @click="form.workspaceMode='CURRENT'">当前工作区</button><button type="button" :class="{active:form.workspaceMode==='BRANCH_SNAPSHOT'}" @click="form.workspaceMode='BRANCH_SNAPSHOT'">分支快照</button></div></div>
         <div v-if="form.workspaceMode === 'BRANCH_SNAPSHOT'" class="field"><label>待扫描分支</label><select v-model="form.scanRef" class="select" required><option v-for="branch in branches" :key="branch.name" :value="branch.name">{{ branch.name }} · {{ branch.commit.slice(0,8) }}</option></select><small>{{ loadingBranches ? '正在读取分支…' : '通过 git archive 导出，不切换原仓库分支。' }}</small></div>
@@ -80,3 +124,18 @@ onMounted(async () => {
     </form>
   </div>
 </template>
+
+<style scoped>
+.source-tabs { align-self: flex-start; }
+.jar-panel .field { align-content: start; }
+.jar-panel .input, .jar-panel .select { height: 44px; min-height: 44px; }
+.jar-heading { margin-bottom: 24px; }
+.jar-heading h3 { margin: 12px 0 8px; }
+.jar-picker { padding: 24px; border: 1px dashed var(--line, #aaa); border-radius: 12px; background: var(--surface-soft, #f7f8fa); }
+.jar-picker input { max-width: 100%; padding: 12px 0; }
+.jar-filename { overflow-wrap: anywhere; }
+.jar-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.jar-checks > div { padding: 16px; border: 1px solid var(--line, #ddd); border-radius: 10px; }
+.jar-checks p { margin: 8px 0 0; color: var(--muted, #666); }
+@media (max-width: 640px) { .jar-checks { grid-template-columns: 1fr; } }
+</style>

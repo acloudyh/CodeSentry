@@ -12,9 +12,9 @@ import java.util.List;
 
 public interface ScanRunMapper {
 
-    @Insert("INSERT INTO scan_run(source_report_run_id, project_id, scan_mode, workspace_mode, scan_ref, baseline_ref, rule_profile, " +
+    @Insert("INSERT INTO scan_run(artifact_path, source_report_run_id, project_id, scan_mode, workspace_mode, scan_ref, baseline_ref, rule_profile, " +
             "repository_dirty, status, total_findings, new_findings, fixed_findings, created_at) " +
-            "VALUES(#{sourceReportRunId}, #{projectId}, #{scanMode}, #{workspaceMode}, #{scanRef}, #{baselineRef}, #{ruleProfile}, " +
+            "VALUES(#{artifactPath}, #{sourceReportRunId}, #{projectId}, #{scanMode}, #{workspaceMode}, #{scanRef}, #{baselineRef}, #{ruleProfile}, " +
             "#{repositoryDirty}, #{status}, #{totalFindings}, #{newFindings}, #{fixedFindings}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScanRun scanRun);

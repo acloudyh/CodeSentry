@@ -35,6 +35,12 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
                 "ALTER TABLE scan_project ADD COLUMN target_java_version INT NULL");
         ensureColumn("scan_run", "source_report_run_id",
                 "ALTER TABLE scan_run ADD COLUMN source_report_run_id BIGINT NULL");
+        ensureColumn("scan_run", "artifact_path",
+                "ALTER TABLE scan_run ADD COLUMN artifact_path VARCHAR(1024) NULL");
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE scan_run r JOIN scan_project p ON p.id = r.project_id "
+                    + "SET r.artifact_path = p.local_path WHERE r.workspace_mode = 'JAR_UPLOAD' AND r.artifact_path IS NULL");
+        }
         alterColumn("ALTER TABLE scan_finding MODIFY COLUMN cwe VARCHAR(512) NULL");
         alterColumn("ALTER TABLE scan_ai_review MODIFY COLUMN prompt_version VARCHAR(128) NOT NULL");
         failInterruptedRuns();

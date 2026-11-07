@@ -4,12 +4,14 @@ import { useRoute } from 'vue-router'
 import { currentTheme, setTheme, themes } from '@/utils/theme'
 import { formatChinaDate } from '@/utils/datetime'
 
+const previewLabel = import.meta.env.VITE_CODESENTRY_PREVIEW_LABEL
+const originalUrl = import.meta.env.VITE_CODESENTRY_ORIGINAL_URL
 const route = useRoute()
 const pageTitle = computed(() => String(route.meta.title ?? 'CodeSentry'))
 
 const navigation = [
   { label: '仪表盘', to: '/', glyph: '⌁' },
-  { label: '代码仓库', to: '/projects', glyph: '◇' },
+  { label: '扫描项目', to: '/projects', glyph: '◇' },
   { label: '发起扫描', to: '/scans/new', glyph: '↗' },
   { label: '扫描记录', to: '/scans', glyph: '▤' },
   { label: '问题台账', to: '/findings', glyph: '!' },
@@ -63,6 +65,10 @@ const navigation = [
       </header>
 
       <main class="content-stage">
+        <div v-if="previewLabel" class="notice" role="status" style="margin-bottom: 20px">
+          <strong>{{ previewLabel }}</strong> · 此页面仅包含独立验证数据。
+          <a v-if="originalUrl" :href="originalUrl">打开原服务，查看原有项目与历史记录</a>
+        </div>
         <RouterView v-slot="{ Component }">
           <Transition name="page" mode="out-in">
             <component :is="Component" />

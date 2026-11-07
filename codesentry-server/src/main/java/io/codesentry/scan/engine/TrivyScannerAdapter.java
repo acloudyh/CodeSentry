@@ -56,6 +56,7 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
 
         String scanners = properties.getScanners().getTrivy().getConfig();
         if (scanners == null || scanners.isBlank()) scanners = "vuln,secret";
+        if (context.getWorkspaceMode() == io.codesentry.scan.model.WorkspaceMode.JAR_UPLOAD) scanners = "vuln";
         int timeoutSeconds = Math.max(1, properties.getScanners().getTrivy().getTimeoutSeconds());
         scanTarget(context.getWorkspace(), report, scanners, timeoutSeconds);
 

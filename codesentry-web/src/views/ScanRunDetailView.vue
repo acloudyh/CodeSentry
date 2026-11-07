@@ -39,7 +39,7 @@ const shortCommit = (value?: string) => value ? value.slice(0, 12) : '-'
 const phaseLabel = (phase: string) => phase === 'baseline' ? '基线快照' : phase === 'availability' ? '可用性检查' : '扫描快照'
 const logText = (item: ScanToolRun) => item.outputLog || item.errorMessage || '暂无命令输出。'
 const scanModeLabel = computed(() => run.value?.scanMode === 'FULL' ? '全量扫描' : '增量扫描')
-const workspaceLabel = computed(() => run.value?.workspaceMode === 'CURRENT' ? '当前工作区' : '分支快照')
+const workspaceLabel = computed(() => run.value?.workspaceMode === 'JAR_UPLOAD' ? 'JAR 上传' : run.value?.workspaceMode === 'CURRENT' ? '当前工作区' : '分支快照')
 
 async function load() {
   if (stopping.value) return
@@ -102,10 +102,10 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
           <div class="kv-grid">
             <span>扫描模式</span><b>{{ scanModeLabel }}</b>
             <span>工作区</span><b>{{ workspaceLabel }}</b>
-            <span>扫描分支</span><b>{{ run.scanRef ?? '当前工作区' }}</b>
+            <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '上传文件' : '扫描分支' }}</span><b>{{ run.scanRef ?? '当前工作区' }}</b>
             <span>基线分支</span><b>{{ run.baselineRef ?? '无基线' }}</b>
             <span>扫描规则集</span><b :title="run.ruleProfile">{{ ruleProfileLabel(run.ruleProfile) }}</b>
-            <span>扫描提交</span><b class="mono">{{ shortCommit(run.scanCommit) }}</b>
+            <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '文件 SHA-256' : '扫描提交' }}</span><b class="mono">{{ shortCommit(run.scanCommit) }}</b>
             <span>共同祖先提交</span><b class="mono">{{ shortCommit(run.mergeBaseCommit) }}</b>
             <span>开始时间</span><b>{{ formatTime(run.startedAt) }}</b>
             <span>结束时间</span><b>{{ formatTime(run.finishedAt) }}</b>

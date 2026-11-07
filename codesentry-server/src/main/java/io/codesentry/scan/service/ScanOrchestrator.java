@@ -85,14 +85,16 @@ public class ScanOrchestrator {
             prepareRun(project, run);
             if (scanRunMapper.updatePrepared(run) == 0) return;
 
-            Path repository = gitRepositoryService.repositoryPath(project);
+            Path repository = run.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD
+                    ? jarPath(project, run).getParent() : gitRepositoryService.repositoryPath(project);
             Path currentWorkspace = resolveCurrentWorkspace(project, run);
             Path reportDirectory = prepareReportDirectory(runId);
             List<ScannerAdapter> enabledAdapters = scannerAdapters.stream()
-                    .filter(ScannerAdapter::enabled)
+                    .filter(adapter -> run.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD
+                            ? List.of("Trivy", "SpotBugs-FindSecBugs").contains(adapter.name()) : adapter.enabled())
                     .collect(Collectors.toList());
             List<ScannerAdapter> activeAdapters = enabledAdapters.stream()
-                    .filter(ScannerAdapter::available)
+                    .filter(adapter -> adapter.enabled() && adapter.available())
                     .collect(Collectors.toList());
             int unavailableTools = enabledAdapters.size() - activeAdapters.size();
             enabledAdapters.stream()
@@ -101,7 +103,7 @@ public class ScanOrchestrator {
 
             if (activeAdapters.isEmpty()) {
                 finish(run, ScanRunStatus.PARTIAL, 0, 0, 0,
-                        "未检测到可用扫描器，请安装并配置 Semgrep、Gitleaks 或 Trivy");
+                        "未检测到可用扫描器，请检查扫描器安装与启用配置");
                 return;
             }
 
@@ -156,7 +158,16 @@ public class ScanOrchestrator {
         }
     }
 
-    private void prepareRun(ScanProject project, ScanRun run) {
+    private void prepareRun(ScanProject project, ScanRun run) throws IOException {
+        if (run.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD) {
+            if (project.getSourceType() != ProjectSourceType.JAR_UPLOAD || run.getScanMode() != ScanMode.FULL) {
+                throw new IllegalArgumentException("JAR 上传仅支持全量扫描");
+            }
+            run.setScanCommit(JarUploadService.sha256(jarPath(project, run)));
+            run.setRepositoryDirty(false);
+            run.setStatus(ScanRunStatus.RUNNING);
+            return;
+        }
         if (run.getWorkspaceMode() == WorkspaceMode.CURRENT) {
             if (project.getSourceType() != ProjectSourceType.LOCAL) {
                 throw new IllegalArgumentException("远程托管仓库不支持当前工作区扫描");
@@ -176,7 +187,12 @@ public class ScanOrchestrator {
         run.setStatus(ScanRunStatus.RUNNING);
     }
 
+    private Path jarPath(ScanProject project, ScanRun run) {
+        return Path.of(run.getArtifactPath() == null ? project.getLocalPath() : run.getArtifactPath()).toAbsolutePath();
+    }
+
     private Path resolveCurrentWorkspace(ScanProject project, ScanRun run) {
+        if (run.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD) return jarPath(project, run).getParent();
         if (run.getWorkspaceMode() == WorkspaceMode.CURRENT) {
             return gitRepositoryService.repositoryPath(project);
         }

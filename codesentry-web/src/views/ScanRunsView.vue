@@ -30,7 +30,7 @@ let timer: number | undefined
 const projectName = (id: number) => projects.value.find((item) => item.id === id)?.projectName ?? `项目-${id}`
 const formatTime = formatChinaTime
 const modeLabel = (run: ScanRun) => run.scanMode === 'FULL' ? '全量扫描' : '增量扫描'
-const workspaceLabel = (run: ScanRun) => run.workspaceMode === 'CURRENT' ? '当前工作区' : '分支快照'
+const workspaceLabel = (run: ScanRun) => run.workspaceMode === 'JAR_UPLOAD' ? 'JAR 上传' : run.workspaceMode === 'CURRENT' ? '当前工作区' : '分支快照'
 
 async function load() {
   if (stopping.value !== null) return

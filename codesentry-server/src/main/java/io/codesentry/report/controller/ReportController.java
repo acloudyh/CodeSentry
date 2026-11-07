@@ -30,11 +30,16 @@ public class ReportController {
         return ApiResponse.success(service.recent(limit));
     }
 
+    @GetMapping("/scan-runs/{runId}/included-finding-ids")
+    public ApiResponse<List<Long>> includedFindingIds(@PathVariable Long runId) {
+        return ApiResponse.success(service.includedFindingIds(runId));
+    }
+
     @GetMapping(value = "/scan-runs/{runId}/html", produces = "text/html;charset=UTF-8")
     public ResponseEntity<byte[]> exportHtml(@PathVariable Long runId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(new MediaType("text", "html", StandardCharsets.UTF_8));
-        headers.setContentDisposition(ContentDisposition.inline().filename("codesentry-report-" + runId + ".html").build());
+        headers.setContentDisposition(ContentDisposition.inline().filename(service.exportFileName(runId, "html"), StandardCharsets.UTF_8).build());
         // Source snippets are untrusted input; the report is view-only even if escaping regresses.
         headers.set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
         headers.set("X-Content-Type-Options", "nosniff");
@@ -45,20 +50,20 @@ public class ReportController {
     @GetMapping(value = "/scan-runs/{runId}/docx",
             produces = "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     public ResponseEntity<byte[]> exportDocx(@PathVariable Long runId) {
-        return download(service.exportDocx(runId), "codesentry-report-" + runId + ".docx",
+        return download(service.exportDocx(runId), service.exportFileName(runId, "docx"),
                 MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
     }
 
     @GetMapping(value = "/scan-runs/{runId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> exportPdf(@PathVariable Long runId) {
-        return download(service.exportPdf(runId), "codesentry-report-" + runId + ".pdf",
+        return download(service.exportPdf(runId), service.exportFileName(runId, "pdf"),
                 MediaType.APPLICATION_PDF);
     }
 
     private ResponseEntity<byte[]> download(byte[] content, String fileName, MediaType mediaType) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(mediaType);
-        headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
+        headers.setContentDisposition(ContentDisposition.attachment().filename(fileName, StandardCharsets.UTF_8).build());
         return ResponseEntity.ok().headers(headers).body(content);
     }
 }

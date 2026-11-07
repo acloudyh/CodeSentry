@@ -64,6 +64,8 @@ public class SemgrepScannerAdapter extends AbstractCliScannerAdapter {
             command.add("--exclude");
             command.add(excluded);
         }
+        command.add("--metrics=off");
+        command.add("--disable-version-check");
         command.add("--no-rewrite-rule-ids");
         command.add("--json");
         command.add("--output");

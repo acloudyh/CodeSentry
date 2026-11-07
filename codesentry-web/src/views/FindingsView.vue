@@ -9,6 +9,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, FindingView, ScanProject, ScanRun, TriageStatus } from '@/types'
 
 const findings = ref<FindingView[]>([])
+const includedFindingIds = ref<number[]>([])
 const route = useRoute()
 const runs = ref<ScanRun[]>([])
 const projects = ref<ScanProject[]>([])
@@ -16,6 +17,7 @@ const selectedProjectId = ref<number | null>(null)
 const selectedRunId = ref<number | null>(null)
 const severity = ref('ALL')
 const state = ref('ALL')
+const reportState = ref('ALL')
 const keyword = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -42,6 +44,7 @@ async function stopAiReview() {
     aiJob.value = await api.cancelAiReview(aiJob.value.id)
     if (aiPollTimer) window.clearTimeout(aiPollTimer)
     await loadAiReviews(aiJob.value.scanRunId)
+    await loadReportStatus(aiJob.value.scanRunId)
     if (aiDetailsOpen.value) await loadAiJobRecords(aiJob.value!.id)
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '停止工具审核失败' }
   finally { stoppingAi.value = false }
@@ -67,6 +70,12 @@ const selectedProject = computed(() => projects.value.find((item) => item.id ===
 const selectedRun = computed(() => runs.value.find((item) => item.id === selectedRunId.value))
 const batchNewCount = computed(() => findings.value.filter((item) => item.resultStatus === 'NEW' || item.resultStatus === 'REOPENED').length)
 const batchFixedCount = computed(() => findings.value.filter((item) => item.resultStatus === 'FIXED').length)
+const includedIdSet = computed(() => new Set(includedFindingIds.value))
+const reportStatus = (item: FindingView) => includedIdSet.value.has(item.id)
+  ? '已采纳' : item.triageStatus || aiReviews.value[item.id] ? '未采纳' : '待审核'
+async function loadReportStatus(runId: number) {
+  includedFindingIds.value = await api.reportIncludedFindingIds(runId)
+}
 const batchNumber = (id: number) => `#${String(id).padStart(5, '0')}`
 const formatTime = formatChinaTime
 const modeLabel = (run: ScanRun) => run.scanMode === 'FULL' ? '全量扫描' : '增量扫描'
@@ -135,7 +144,10 @@ async function reviewWithAi(item: FindingView) {
   try {
     const summary = await api.aiReviewFinding(item.id)
     aiReviews.value = { ...aiReviews.value, [item.id]: summary }
-    if (selectedRunId.value) findings.value = await api.runFindings(selectedRunId.value)
+    if (selectedRunId.value) {
+      findings.value = await api.runFindings(selectedRunId.value)
+      await loadReportStatus(selectedRunId.value)
+    }
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '工具审核失败' }
   finally { aiReviewingId.value = null }
 }
@@ -157,7 +169,10 @@ function pollAiJob(jobId: number) {
     try {
       aiJob.value = await api.aiReviewJob(jobId)
       if (selectedRunId.value) await loadAiReviews(selectedRunId.value)
-      if (selectedRunId.value) findings.value = await api.runFindings(selectedRunId.value)
+      if (selectedRunId.value) {
+        findings.value = await api.runFindings(selectedRunId.value)
+        await loadReportStatus(selectedRunId.value)
+      }
       if (aiDetailsOpen.value) await loadAiJobRecords(jobId)
       if (aiJob.value.status === 'PENDING' || aiJob.value.status === 'RUNNING') pollAiJob(jobId)
     } catch (reason) { error.value = reason instanceof Error ? reason.message : '工具审核进度加载失败' }
@@ -182,7 +197,10 @@ async function saveReview() {
       ...review, expiresAt: review.expiresAt || undefined,
     })
     localStorage.setItem('codesentry-reviewer', review.reviewer)
-    if (selectedRunId.value) findings.value = await api.runFindings(selectedRunId.value)
+    if (selectedRunId.value) {
+      findings.value = await api.runFindings(selectedRunId.value)
+      await loadReportStatus(selectedRunId.value)
+    }
     selected.value = null
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '人工复核保存失败' }
   finally { saving.value = false }
@@ -192,6 +210,7 @@ const filtered = computed(() => findings.value.filter((item) => {
   const text = `${item.title} ${item.description ?? ''} ${item.filePath} ${item.ruleId} ${item.cwe ?? ''}`.toLowerCase()
   return (severity.value === 'ALL' || item.severity === severity.value)
     && (state.value === 'ALL' || item.resultStatus === state.value)
+    && (reportState.value === 'ALL' || reportStatus(item) === reportState.value)
     && (!keyword.value || text.includes(keyword.value.toLowerCase()))
 }))
 const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
@@ -235,6 +254,7 @@ async function saveBatchReview() {
     })
     localStorage.setItem('codesentry-reviewer', batchReview.reviewer)
     findings.value = await api.runFindings(selectedRunId.value)
+    await loadReportStatus(selectedRunId.value)
     batchReviewResult.value = `已完成 ${result.matched} 条人工复核${result.unmatched ? `，${result.unmatched} 条未匹配` : ''}`
     selectedFindingIds.value = []
     window.setTimeout(() => { batchReviewOpen.value = false; batchReviewResult.value = '' }, 900)
@@ -242,7 +262,7 @@ async function saveBatchReview() {
   finally { batchReviewSaving.value = false }
 }
 
-watch([severity, state, keyword, selectedRunId, selectedProjectId], () => { page.value = 1 })
+watch([severity, state, reportState, keyword, selectedRunId, selectedProjectId], () => { page.value = 1 })
 watch(pageSize, () => { page.value = 1 })
 watch(totalPages, (maximum) => { if (page.value > maximum) page.value = maximum })
 watch(selectedProjectId, () => {
@@ -257,11 +277,12 @@ watch(selectedRunId, async (runId) => {
   aiDetailsOpen.value = false
   aiJobRecords.value = []
   aiExecutionFindings.value = []
-  if (runId === null) { findings.value = []; return }
+  if (runId === null) { findings.value = []; includedFindingIds.value = []; return }
   loading.value = true; error.value = ''
   try {
     findings.value = await api.runFindings(runId)
     await loadAiReviews(runId)
+    await loadReportStatus(runId)
     if (aiJob.value && (aiJob.value.status === 'PENDING' || aiJob.value.status === 'RUNNING')) {
       pollAiJob(aiJob.value.id)
     }
@@ -299,6 +320,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
         <div class="field"><label>扫描批次</label><select v-model.number="selectedRunId" class="select" :disabled="!projectRuns.length"><option v-for="run in projectRuns" :key="run.id" :value="run.id">{{ runOptionLabel(run) }}</option></select><small>{{ selectedProject?.projectName ?? '当前项目' }}共有 {{ projectRuns.length }} 个批次。</small></div>
         <div class="field"><label>检索问题或文件</label><input v-model="keyword" class="input" placeholder="输入规则、标题或文件路径" /></div>
         <div class="field"><label>风险等级</label><select v-model="severity" class="select"><option value="ALL">全部等级</option><option v-for="item in ['CRITICAL','HIGH','MEDIUM','LOW','INFO']" :key="item" :value="item">{{ statusLabel(item) }}</option></select></div>
+        <div class="field"><label>报告状态</label><select v-model="reportState" class="select"><option value="ALL">全部</option><option>已采纳</option><option>未采纳</option><option>待审核</option></select></div>
         <div class="field"><label>变化状态</label><select v-model="state" class="select"><option value="ALL">全部状态</option><option v-for="item in ['NEW','EXISTING','FIXED','REOPENED']" :key="item" :value="item">{{ statusLabel(item) }}</option></select></div>
       </div>
       <div v-if="selectedRun" class="batch-context"><div><span>当前批次</span><strong>{{ batchNumber(selectedRun.id) }}</strong></div><div><span>扫描时间</span><strong>{{ formatTime(selectedRun.createdAt) }}</strong></div><div><span>扫描类型</span><strong>{{ modeLabel(selectedRun) }}</strong></div><div><span>批次状态</span><StatusBadge :value="selectedRun.status" /></div><div><span>台账统计</span><strong>{{ findings.length }} 当前 / {{ batchNewCount }} 新增 / {{ batchFixedCount }} 修复</strong></div></div>
@@ -316,7 +338,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       <div v-if="loading" class="empty-state compact-empty"><h3>正在加载扫描批次</h3><p>正在读取 {{ selectedRunId ? batchNumber(selectedRunId) : '' }} 的问题明细。</p></div>
       <div v-else-if="filtered.length" class="table-scroll findings-table">
         <table class="data-table">
-          <thead><tr><th class="selection-column"><input type="checkbox" aria-label="选择当前页全部问题" :checked="allPageSelected" @change="togglePageSelection" /></th><th>扫描批次</th><th>等级</th><th>问题</th><th>位置</th><th>扫描器 / 规则</th><th>变化</th><th>工具建议</th><th>人工结论</th><th>操作</th></tr></thead>
+          <thead><tr><th class="selection-column"><input type="checkbox" aria-label="选择当前页全部问题" :checked="allPageSelected" @change="togglePageSelection" /></th><th>扫描批次</th><th>等级</th><th>问题</th><th>位置</th><th>扫描器 / 规则</th><th>变化</th><th>工具建议</th><th>人工结论</th><th>报告状态</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="item in pagedFindings" :key="`${item.scanRunId}-${item.id}`" :class="{ 'is-selected': selectedFindingIds.includes(item.id) }">
               <td class="selection-column"><input type="checkbox" :aria-label="`选择问题 ${findingTitle(item)}`" :checked="selectedFindingIds.includes(item.id)" @change="toggleFindingSelection(item.id)" /></td>
@@ -328,6 +350,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
               <td><StatusBadge :value="item.resultStatus" /></td>
               <td><div v-if="aiReviews[item.id]" class="ai-review-cell"><strong>{{ aiVerdictLabel(aiReviews[item.id].consolidatedVerdict) }}</strong><span v-if="aiReviews[item.id].confidenceAvailable">可信度 {{ aiConfidence(aiReviews[item.id].confidence) }}</span><small v-if="aiReviews[item.id].errorMessage">{{ aiReviews[item.id].errorMessage }}</small><small v-if="aiReviews[item.id].disagreement">工具结果存在分歧，必须人工处理</small><button v-if="aiReviews[item.id].status !== 'FAILED'" type="button" class="snippet-trigger" @click="applyAiSuggestion(item)">带入人工复核</button><button v-else type="button" class="snippet-trigger" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '重试中…' : '重新审核' }}</button></div><button v-else-if="aiConfig.enabled" class="button secondary compact" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '审核中…' : '工具初审' }}</button><span v-else class="muted">未启用</span></td>
               <td><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else class="muted">等待复核</span><div v-if="item.reviewer" class="mono finding-reviewer">复核人：{{ item.reviewer }}</div></td>
+              <td><strong>{{ reportStatus(item) }}</strong></td>
               <td><button class="button secondary compact" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button></td>
             </tr>
           </tbody>
@@ -339,7 +362,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
           <h3>{{ findingTitle(item) }}</h3>
           <p v-if="findingTitle(item) !== item.title" class="muted">{{ item.title }}</p>
           <code>{{ findingLocation(item) }}</code>
-          <dl><div><dt>扫描器</dt><dd>{{ scannerLabel(item.scanner) }}</dd></div><div><dt>规则编号</dt><dd>{{ item.ruleId }}</dd></div><div><dt>工具建议</dt><dd>{{ aiVerdictLabel(aiReviews[item.id]?.consolidatedVerdict) }} / {{ aiConfidence(aiReviews[item.id]?.confidence) }}</dd></div><div><dt>人工结论</dt><dd><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else>等待复核</span></dd></div></dl>
+          <dl><div><dt>扫描器</dt><dd>{{ scannerLabel(item.scanner) }}</dd></div><div><dt>规则编号</dt><dd>{{ item.ruleId }}</dd></div><div><dt>工具建议</dt><dd>{{ aiVerdictLabel(aiReviews[item.id]?.consolidatedVerdict) }} / {{ aiConfidence(aiReviews[item.id]?.confidence) }}</dd></div><div><dt>报告状态</dt><dd>{{ reportStatus(item) }}</dd></div><div><dt>人工结论</dt><dd><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else>等待复核</span></dd></div></dl>
           <button v-if="aiConfig.enabled && !aiReviews[item.id]" class="button secondary" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '工具审核中…' : '工具初审' }}</button>
           <button v-if="aiReviews[item.id]" class="button secondary" @click="applyAiSuggestion(item)">将工具建议带入人工复核</button>
           <button class="button secondary" @click="snippetFinding = item">查看原始内容</button>

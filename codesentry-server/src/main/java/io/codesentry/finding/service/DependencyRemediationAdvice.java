@@ -124,10 +124,14 @@ public final class DependencyRemediationAdvice {
         }
         lines.addAll(explicit);
         if (!fixes.isEmpty() || !missing.isEmpty()) {
-            lines.add(fixes.isEmpty()
-                    ? "处理：优先移除未使用依赖；必须使用时，核实官方补丁或迁移方案。"
-                    : "处理：选择覆盖全部所列漏洞的受维护版本，同步核对相关组件，排除旧包后替换。");
-            lines.add("验证：兼容测试后复扫。");
+            if (missing.isEmpty() && explicit.isEmpty() && fixes.size() == 1) {
+                String target = fixes.keySet().iterator().next();
+                if (newerNumericRelease(target, installed)) {
+                    lines.add("候选版本：" + target + "（仅针对本组所列漏洞，需验证兼容性）。");
+                }
+            }
+            lines.add("处理：" + DependencyRemediationPlan.steps(members, javaVersion, !missing.isEmpty()));
+            lines.add("验证：" + DependencyRemediationPlan.validation(first));
         }
         return String.join("\n", lines);
     }
@@ -145,6 +149,10 @@ public final class DependencyRemediationAdvice {
                 urls.add("https://github.com/apache/axis-axis1-java/commit/7e66753427466590d6def0125e448d2791723210");
             }
         }
+        urls.add("https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html");
+        if (value(finding.getCodeSnippet()).startsWith("commons-collections:commons-collections@"))
+            urls.add("https://commons.apache.org/proper/commons-collections/release_3_2_2.html");
+        urls.add("https://maven.apache.org/plugins/maven-shade-plugin/examples/class-relocation.html");
         urls.addAll(Java8RemediationAdvice.references(finding));
         return new ArrayList<>(urls);
     }
@@ -169,6 +177,20 @@ public final class DependencyRemediationAdvice {
                     + "验证：新密钥调用正常，旧密钥已禁用，重新扫描配置文件。";
         }
         return forFinding(f);
+    }
+
+    private static boolean newerNumericRelease(String target, String installed) {
+        if (!target.matches("[0-9]+(?:\\.[0-9]+)*(?:\\.Final)?")
+                || !installed.matches("[0-9]+(?:\\.[0-9]+)*(?:\\.Final)?")) return false;
+        String[] left = target.replace(".Final", "").split("\\.");
+        String[] right = installed.replace(".Final", "").split("\\.");
+        for (int i = 0; i < Math.max(left.length, right.length); i++) {
+            java.math.BigInteger a = new java.math.BigInteger(i < left.length ? left[i] : "0");
+            java.math.BigInteger b = new java.math.BigInteger(i < right.length ? right[i] : "0");
+            int difference = a.compareTo(b);
+            if (difference != 0) return difference > 0;
+        }
+        return false;
     }
 
     private static boolean isDependency(FindingView finding) {

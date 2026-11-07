@@ -65,7 +65,16 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
 
     @Override
     public List<NormalizedFinding> scan(ScanContext context) {
+        boolean uploaded = context.getWorkspaceMode() == io.codesentry.scan.model.WorkspaceMode.JAR_UPLOAD;
         List<Path> archives = findArchives(context.getWorkspace());
+        List<Path> dependencies = List.of();
+        if (uploaded) {
+            if (archives.size() != 1) throw new BusinessException(HttpStatus.BAD_REQUEST, "上传扫描应包含一个 JAR 文件");
+            io.codesentry.scan.archive.JarArchive.Layout layout = io.codesentry.scan.archive.JarArchive.prepare(
+                    archives.get(0), context.getOutputDirectory().resolve("bytecode-" + context.getLabel()));
+            archives = List.of(layout.getTarget());
+            dependencies = layout.getDependencies();
+        }
         if (archives.isEmpty()) {
             return List.of();
         }
@@ -84,6 +93,9 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
         command.add("-medium");
 
         String plugin = properties.getScanners().getSpotbugs().getConfig();
+        if (uploaded && (plugin == null || plugin.isBlank())) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "JAR 安全扫描必须配置 FindSecBugs 插件");
+        }
         if (plugin != null && !plugin.isBlank()) {
             Path pluginPath = Path.of(plugin).toAbsolutePath().normalize();
             if (!Files.isRegularFile(pluginPath)) {
@@ -94,18 +106,44 @@ public class SpotBugsScannerAdapter implements ScannerAdapter {
         }
 
         String include = properties.getScanners().getSpotbugs().getInclude();
-        if (include != null && !include.isBlank()) {
+        if (!uploaded && include != null && !include.isBlank()) {
             command.add("-onlyAnalyze");
             command.add(include);
+        }
+        Path auxiliaryClasspath = null;
+        if (uploaded) {
+            command.add("-bugCategories");
+            command.add("SECURITY");
+            if (!dependencies.isEmpty()) {
+                Path classpath = context.getOutputDirectory().resolve("spotbugs-aux-" + context.getLabel() + ".txt");
+                try {
+                    Files.write(classpath, dependencies.stream().map(path -> path.toAbsolutePath().toString()).collect(Collectors.toList()));
+                } catch (java.io.IOException exception) {
+                    throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "无法准备 JAR 依赖类路径");
+                }
+                auxiliaryClasspath = classpath;
+            }
         }
         Path project = context.getOutputDirectory().resolve("spotbugs-" + context.getLabel() + ".fbp");
         writeProject(project, archives);
         command.add("-project");
         command.add(project.toString());
+        // Loading a project replaces SpotBugs' project classpath. Add auxiliaries afterward.
+        if (auxiliaryClasspath != null) {
+            command.add("-auxclasspathFromFile");
+            command.add(auxiliaryClasspath.toString());
+        }
 
         int timeoutSeconds = Math.max(30, properties.getScanners().getSpotbugs().getTimeoutSeconds());
         CommandResult result = commandExecutor.execute(context.getWorkspace(), command,
                 Duration.ofSeconds(timeoutSeconds));
+        // Minimal launchers invoke the Java main class directly and do not understand
+        // the distribution shell script's heap switch. Retry only that specific incompatibility.
+        if (uploaded && !result.isSuccess() && result.getOutput() != null
+                && result.getOutput().contains("Unknown option: -maxHeap")) {
+            command.subList(1, 3).clear();
+            result = commandExecutor.execute(context.getWorkspace(), command, Duration.ofSeconds(timeoutSeconds));
+        }
         if (!result.isSuccess() && !(result.getExitCode() == 1 && isUsableReport(report))) {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "SpotBugs/FindSecBugs 扫描执行失败（退出码 " + result.getExitCode() + "）");
