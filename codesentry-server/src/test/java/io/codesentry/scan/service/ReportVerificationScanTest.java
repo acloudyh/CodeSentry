@@ -35,6 +35,6 @@ class ReportVerificationScanTest {
         source.setProjectId(1L);
         when(mapper.insert(any())).thenAnswer(c -> { ((ScanRun)c.getArgument(0)).setId(8L); return 1; });
         assertEquals(7L, service.start(req).getSourceReportRunId());
-        verify(orchestrator).execute(8L, true);
+        verify(orchestrator).execute(8L, false);
     }
 }

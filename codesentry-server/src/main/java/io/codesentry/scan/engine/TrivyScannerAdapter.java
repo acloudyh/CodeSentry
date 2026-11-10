@@ -58,14 +58,14 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
         if (scanners == null || scanners.isBlank()) scanners = "vuln,secret";
         if (context.getWorkspaceMode() == io.codesentry.scan.model.WorkspaceMode.JAR_UPLOAD) scanners = "vuln";
         int timeoutSeconds = Math.max(1, properties.getScanners().getTrivy().getTimeoutSeconds());
-        scanTarget(context.getWorkspace(), report, scanners, timeoutSeconds);
+        scanTarget(context.getWorkspace(), report, scanners, timeoutSeconds, context);
 
         List<NormalizedFinding> findings = findings(readJson(report));
         Map<String, String> aliases = prepareArchiveAliases(context);
         if (!aliases.isEmpty()) {
             Path aliasRoot = context.getOutputDirectory().resolve("trivy-archive-aliases-" + context.getLabel());
             Path aliasReport = context.getOutputDirectory().resolve("trivy-archive-aliases-" + context.getLabel() + ".json");
-            scanTarget(aliasRoot, aliasReport, "vuln", timeoutSeconds);
+            scanTarget(aliasRoot, aliasReport, "vuln", timeoutSeconds, context);
             List<NormalizedFinding> aliasFindings = findings(readJson(aliasReport));
             aliasFindings.forEach(finding -> restoreArchivePath(finding, aliases));
             findings.addAll(aliasFindings);
@@ -73,7 +73,7 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
         return findings;
     }
 
-    private void scanTarget(Path target, Path report, String scanners, int timeoutSeconds) {
+    private void scanTarget(Path target, Path report, String scanners, int timeoutSeconds, ScanContext context) {
         // rootfs expands packaged Java artifacts on Trivy 0.62, while filesystem may
         // report zero language files for legacy WEB-INF/lib directories.
         List<String> command = new ArrayList<>(List.of(executable(), "rootfs", "--format", "json", "--output",
@@ -82,7 +82,7 @@ public class TrivyScannerAdapter extends AbstractCliScannerAdapter {
             command.add("--skip-files");
             command.add(excluded);
         }
-        if (properties.getScanners().getTrivy().isOfflineScan()) {
+        if (context.getNetworkMode() != io.codesentry.scan.model.NetworkMode.ONLINE || properties.getScanners().getTrivy().isOfflineScan()) {
             command.add("--offline-scan");
             command.add("--skip-db-update");
             command.add("--skip-java-db-update");

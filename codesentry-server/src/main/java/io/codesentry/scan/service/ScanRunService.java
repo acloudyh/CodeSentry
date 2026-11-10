@@ -47,11 +47,14 @@ public class ScanRunService {
     }
 
     public ScanRun start(CreateScanRunRequest request) {
+        if (request.getNetworkMode() == null) throw new BusinessException(HttpStatus.BAD_REQUEST, "请选择本地扫描或联网扫描");
         ScanProject project = projectService.requireById(request.getProjectId());
         validate(project, request);
 
         ScanRun run = new ScanRun();
         run.setProjectId(project.getId());
+        run.setNetworkMode(request.getNetworkMode());
+        run.setRemediationStatus(request.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE ? "PENDING" : "NOT_REQUESTED");
         if (request.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD) run.setArtifactPath(project.getLocalPath());
         run.setSourceReportRunId(request.getSourceReportRunId());
         run.setScanMode(request.getScanMode());
@@ -129,8 +132,17 @@ public class ScanRunService {
                 throw new BusinessException(HttpStatus.BAD_REQUEST, "整改验收必须关联已归档报告，并使用原项目、原规则集进行全量复扫");
             }
         }
+        if (request.getNetworkMode() == io.codesentry.scan.model.NetworkMode.LOCAL) request.setRefreshRemote(false);
         ruleProfileService.validate(StringUtils.hasText(request.getRuleProfile())
                 ? request.getRuleProfile() : RuleProfileService.COMMUNITY_GENERAL);
+        if (request.getNetworkMode() == io.codesentry.scan.model.NetworkMode.LOCAL
+                && request.getWorkspaceMode() != WorkspaceMode.JAR_UPLOAD) {
+            for (String config : ruleProfileService.semgrepConfigs(StringUtils.hasText(request.getRuleProfile())
+                    ? request.getRuleProfile() : RuleProfileService.COMMUNITY_GENERAL)) {
+                if (config.startsWith("http:") || config.startsWith("https:") || config.startsWith("p/"))
+                    throw new BusinessException(HttpStatus.BAD_REQUEST, "所选规则集尚未缓存到本地，请先同步规则或选择支持离线的规则集");
+            }
+        }
         if (request.getWorkspaceMode() == WorkspaceMode.CURRENT
                 && project.getSourceType() != ProjectSourceType.LOCAL) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "只有本地目录项目可以扫描当前工作区");

@@ -64,10 +64,10 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
             <tr v-for="run in pagedRuns" :key="run.id">
               <td><strong>#{{ String(run.id).padStart(5,'0') }}</strong><div v-if="run.repositoryDirty" class="danger-text" style="font-size:10px;margin-top:5px">含未提交内容</div></td>
               <td>{{ projectName(run.projectId) }}</td>
-              <td><span>{{ modeLabel(run) }}</span><div class="muted" style="margin-top:4px">{{ workspaceLabel(run) }}</div></td>
+              <td><span>{{ modeLabel(run) }} · {{ run.networkMode === 'ONLINE' ? '联网' : '本地' }}</span><div class="muted" style="margin-top:4px">{{ workspaceLabel(run) }}</div></td>
               <td><div>{{ run.scanRef ?? '当前工作区' }}</div><div class="muted" style="margin-top:4px">→ {{ run.baselineRef ?? '无基线' }}</div></td>
               <td><b class="danger-text">+{{ run.newFindings }}</b><span class="muted"> 新增</span> · <b class="signal-text">-{{ run.fixedFindings }}</b><span class="muted"> 修复</span><div class="mono" style="margin-top:4px">合计 {{ run.totalFindings }}</div></td>
-              <td><StatusBadge :value="run.status" /><div v-if="run.errorMessage" class="danger-text clamp-error" style="font-size:10px;margin-top:6px" :title="run.errorMessage">{{ run.errorMessage }}</div></td>
+              <td><StatusBadge :value="run.status" /><div v-if="run.networkMode === 'ONLINE'" class="muted" style="font-size:10px;margin-top:6px">{{ run.remediationStatus === 'COMPLETED' ? '联网核实完成' : run.remediationStatus === 'RUNNING' ? '正在联网核实' : run.remediationStatus === 'CANCELLED' ? '联网核实已停止' : ['PARTIAL','FAILED'].includes(run.remediationStatus ?? '') ? '联网核实未全部完成，详见任务' : '等待联网核实' }}</div><div v-if="run.errorMessage" class="danger-text clamp-error" style="font-size:10px;margin-top:6px" :title="run.errorMessage">{{ run.errorMessage }}</div></td>
               <td class="mono">{{ formatTime(run.createdAt) }}</td>
               <td><div class="scan-row-actions"><RouterLink :to="`/scans/${run.id}`" class="table-action"><span aria-hidden="true">⌕</span>详情</RouterLink><RouterLink :to="{ path: '/findings', query: { projectId: run.projectId, runId: run.id } }" class="table-action"><span aria-hidden="true">☷</span>问题台账</RouterLink><button v-if="['PENDING','PREPARING','RUNNING'].includes(run.status)" class="table-action danger" :disabled="stopping === run.id" @click="stopScan(run.id)"><span aria-hidden="true">■</span>{{ stopping === run.id ? '停止中…' : '停止扫描' }}</button></div></td>
             </tr>

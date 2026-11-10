@@ -37,6 +37,10 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
                 "ALTER TABLE scan_run ADD COLUMN source_report_run_id BIGINT NULL");
         ensureColumn("scan_run", "artifact_path",
                 "ALTER TABLE scan_run ADD COLUMN artifact_path VARCHAR(1024) NULL");
+        ensureColumn("scan_run", "network_mode", "ALTER TABLE scan_run ADD COLUMN network_mode VARCHAR(16) NOT NULL DEFAULT 'LOCAL'");
+        ensureColumn("scan_run", "remediation_status", "ALTER TABLE scan_run ADD COLUMN remediation_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUESTED'");
+        ensureColumn("scan_run", "remediation_message", "ALTER TABLE scan_run ADD COLUMN remediation_message VARCHAR(1000) NULL");
+        ensureColumn("scan_run", "remediation_evidence", "ALTER TABLE scan_run ADD COLUMN remediation_evidence LONGTEXT NULL");
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("UPDATE scan_run r JOIN scan_project p ON p.id = r.project_id "
                     + "SET r.artifact_path = p.local_path WHERE r.workspace_mode = 'JAR_UPLOAD' AND r.artifact_path IS NULL");
@@ -69,7 +73,10 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
     }
 
     private void failInterruptedRuns() throws Exception {
-        String sql = "UPDATE scan_run SET status = 'FAILED', " +
+        String sql = "UPDATE scan_run SET remediation_message = CASE WHEN network_mode = 'ONLINE' " +
+                "AND remediation_status IN ('PENDING','RUNNING') THEN '服务重启，联网核实未完成' ELSE remediation_message END, " +
+                "remediation_status = CASE WHEN network_mode = 'ONLINE' AND remediation_status IN ('PENDING','RUNNING') " +
+                "THEN 'FAILED' ELSE remediation_status END, status = 'FAILED', " +
                 "error_message = '服务重启或本地进程中断，扫描未正常完成', " +
                 "finished_at = NOW(3) WHERE status IN ('PENDING', 'PREPARING', 'RUNNING')";
         try (Connection connection = dataSource.getConnection();

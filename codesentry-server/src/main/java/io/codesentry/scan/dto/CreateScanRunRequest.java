@@ -7,6 +7,11 @@ import javax.validation.constraints.NotNull;
 
 public class CreateScanRunRequest {
 
+    @NotNull(message = "请选择本地扫描或联网扫描")
+    private io.codesentry.scan.model.NetworkMode networkMode = io.codesentry.scan.model.NetworkMode.LOCAL;
+    public io.codesentry.scan.model.NetworkMode getNetworkMode() { return networkMode; }
+    public void setNetworkMode(io.codesentry.scan.model.NetworkMode value) { networkMode = value; }
+
     @NotNull(message = "项目不能为空")
     private Long projectId;
     private Long sourceReportRunId;

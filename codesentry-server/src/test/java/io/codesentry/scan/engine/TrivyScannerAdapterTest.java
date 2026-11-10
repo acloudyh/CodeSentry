@@ -46,7 +46,8 @@ class TrivyScannerAdapterTest {
         properties.getScanners().getTrivy().setTimeoutSeconds(60);
         properties.getScanners().getTrivy().setOfflineScan(false);
         when(commands.execute(any(), anyList(), any())).thenReturn(new CommandResult(0, ""));
-        adapter().scan(context());
+        ScanContext online = context(); online.setNetworkMode(io.codesentry.scan.model.NetworkMode.ONLINE);
+        adapter().scan(online);
         verify(commands).execute(eq(temp), argThat(args -> !args.contains("--offline-scan") && args.contains("60s")), eq(Duration.ofSeconds(75)));
     }
     @Test void trivyDeadlineHasActionableFailureInsteadOfGenericError() {

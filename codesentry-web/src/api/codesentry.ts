@@ -12,6 +12,7 @@ export interface CreateProjectPayload {
 }
 
 export interface CreateScanPayload {
+  networkMode?: 'LOCAL' | 'ONLINE'
   sourceReportRunId?: number
   projectId: number
   scanMode: ScanMode

@@ -8,6 +8,9 @@ import java.nio.file.Path;
 
 public class ScanContext {
 
+    private io.codesentry.scan.model.NetworkMode networkMode = io.codesentry.scan.model.NetworkMode.LOCAL;
+    public io.codesentry.scan.model.NetworkMode getNetworkMode() { return networkMode; }
+    public void setNetworkMode(io.codesentry.scan.model.NetworkMode value) { networkMode = value; }
     private final Long runId;
     private final ScanProject project;
     private final ScanMode scanMode;

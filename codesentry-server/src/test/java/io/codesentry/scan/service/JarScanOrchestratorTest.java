@@ -17,9 +17,10 @@ import static org.mockito.Mockito.*;
 
 class JarScanOrchestratorTest {
     @TempDir Path temp;
-    private void scan(boolean spotbugsEnabled) throws Exception {
+    private void scan(boolean spotbugsEnabled, boolean online) throws Exception {
         Path archive = Files.writeString(temp.resolve("app.jar"), "sample bytes");
         ScanRun run = new ScanRun(); run.setId(1L); run.setProjectId(2L);
+        run.setNetworkMode(online ? NetworkMode.ONLINE : NetworkMode.LOCAL);
         run.setWorkspaceMode(WorkspaceMode.JAR_UPLOAD); run.setScanMode(ScanMode.FULL);
         ScanProject project = new ScanProject(); project.setId(2L); project.setSourceType(ProjectSourceType.JAR_UPLOAD);
         project.setLocalPath(temp.resolve("new-version.jar").toString()); project.setManagedPath(temp.toString());
@@ -39,14 +40,17 @@ class JarScanOrchestratorTest {
         }
         when(bugs.enabled()).thenReturn(spotbugsEnabled);
         CodeSentryProperties properties = new CodeSentryProperties(); properties.getStorage().setRoot(temp.toString());
+        io.codesentry.finding.service.OnlineRemediationService resolver = mock(io.codesentry.finding.service.OnlineRemediationService.class);
         new ScanOrchestrator(runs, projects, git, snapshots, mock(FindingFingerprintService.class),
-                mock(FindingPersistenceService.class), tools, List.of(trivy, bugs, source), properties).execute(1L, false);
+                mock(FindingPersistenceService.class), tools, List.of(trivy, bugs, source), properties, resolver).execute(1L, false);
+        if (online) verify(resolver).enrich(run); else verifyNoInteractions(resolver);
         assertEquals(JarUploadService.sha256(archive), run.getScanCommit());
         assertEquals(spotbugsEnabled ? ScanRunStatus.COMPLETED : ScanRunStatus.PARTIAL, run.getStatus());
         verify(trivy).scan(any()); verify(source, never()).scan(any());
         verify(git, never()).resolveCommit(any(), any()); verifyNoInteractions(snapshots);
         if (!spotbugsEnabled) verify(tools).skipped(eq(1L), eq("SpotBugs-FindSecBugs"), any());
     }
-    @Test void uploadedJarScansOnlyTwoBinaryToolsWithoutGit() throws Exception { scan(true); }
-    @Test void disabledRequiredToolCannotProduceCompletedCleanScan() throws Exception { scan(false); }
+    @Test void uploadedJarScansOnlyTwoBinaryToolsWithoutGit() throws Exception { scan(true, false); }
+    @Test void disabledRequiredToolCannotProduceCompletedCleanScan() throws Exception { scan(false, false); }
+    @Test void onlineJarScanPerformsRemediationLookupBeforeFinishing() throws Exception { scan(true, true); }
 }

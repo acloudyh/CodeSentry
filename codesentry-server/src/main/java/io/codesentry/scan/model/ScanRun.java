@@ -4,6 +4,21 @@ import java.time.LocalDateTime;
 
 public class ScanRun {
 
+    private String remediationStatus;
+    private String remediationMessage;
+    private String remediationEvidence;
+    public String getRemediationStatus() { return remediationStatus; }
+    public void setRemediationStatus(String value) { remediationStatus = value; }
+    public String getRemediationMessage() { return remediationMessage; }
+    public void setRemediationMessage(String value) { remediationMessage = value; }
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public String getRemediationEvidence() { return remediationEvidence; }
+    public void setRemediationEvidence(String value) { remediationEvidence = value; }
+
+    private io.codesentry.scan.model.NetworkMode networkMode = io.codesentry.scan.model.NetworkMode.LOCAL;
+    public io.codesentry.scan.model.NetworkMode getNetworkMode() { return networkMode; }
+    public void setNetworkMode(io.codesentry.scan.model.NetworkMode value) { networkMode = value; }
+
     private Long id;
     private Long projectId;
     private Long sourceReportRunId;

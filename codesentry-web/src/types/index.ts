@@ -30,6 +30,9 @@ export interface BranchView {
 }
 
 export interface ScanRun {
+  networkMode?: 'LOCAL' | 'ONLINE'
+  remediationStatus?: string
+  remediationMessage?: string
   sourceReportRunId?: number
   id: number
   projectId: number

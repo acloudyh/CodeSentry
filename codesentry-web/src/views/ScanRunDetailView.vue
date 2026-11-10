@@ -101,6 +101,8 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
           <div class="panel-header"><h3>任务信息</h3><small>{{ projectName }}</small></div>
           <div class="kv-grid">
             <span>扫描模式</span><b>{{ scanModeLabel }}</b>
+            <span>扫描方式</span><b>{{ run.networkMode === 'ONLINE' ? '联网扫描' : '本地扫描' }}</b>
+            <template v-if="run.networkMode === 'ONLINE'"><span>修复依据核实</span><b>{{ run.remediationMessage ?? '等待本地扫描完成后联网核实' }}</b></template>
             <span>工作区</span><b>{{ workspaceLabel }}</b>
             <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '上传文件' : '扫描分支' }}</span><b>{{ run.scanRef ?? '当前工作区' }}</b>
             <span>基线分支</span><b>{{ run.baselineRef ?? '无基线' }}</b>

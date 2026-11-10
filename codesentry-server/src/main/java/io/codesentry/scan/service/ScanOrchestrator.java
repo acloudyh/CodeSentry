@@ -47,6 +47,7 @@ public class ScanOrchestrator {
     private final ScanToolRunService toolRunService;
     private final List<ScannerAdapter> scannerAdapters;
     private final CodeSentryProperties properties;
+    private final io.codesentry.finding.service.OnlineRemediationService onlineRemediation;
 
     public ScanOrchestrator(ScanRunMapper scanRunMapper,
                             ScanProjectService projectService,
@@ -56,7 +57,7 @@ public class ScanOrchestrator {
                             FindingPersistenceService findingService,
                             ScanToolRunService toolRunService,
                             List<ScannerAdapter> scannerAdapters,
-                            CodeSentryProperties properties) {
+                            CodeSentryProperties properties, io.codesentry.finding.service.OnlineRemediationService onlineRemediation) {
         this.scanRunMapper = scanRunMapper;
         this.projectService = projectService;
         this.gitRepositoryService = gitRepositoryService;
@@ -66,6 +67,7 @@ public class ScanOrchestrator {
         this.toolRunService = toolRunService;
         this.scannerAdapters = scannerAdapters;
         this.properties = properties;
+        this.onlineRemediation = onlineRemediation;
     }
 
     public void execute(Long runId, boolean refreshRemote) {
@@ -111,6 +113,7 @@ public class ScanOrchestrator {
                     currentWorkspace, repository, reportDirectory, run.getScanCommit(), run.getMergeBaseCommit(), "current",
                     run.getRuleProfile());
 
+            currentContext.setNetworkMode(run.getNetworkMode());
             if (run.getScanMode() == ScanMode.FULL) {
                 ScanBatch batch = executeAdapters(activeAdapters, currentContext);
                 if (batch.successfulTools == 0) {
@@ -134,6 +137,7 @@ public class ScanOrchestrator {
             ScanContext baselineContext = new ScanContext(runId, project, run.getScanMode(), WorkspaceMode.BRANCH_SNAPSHOT,
                     baselineWorkspace, repository, reportDirectory, run.getMergeBaseCommit(), run.getMergeBaseCommit(), "baseline",
                     run.getRuleProfile());
+            baselineContext.setNetworkMode(run.getNetworkMode());
             ScanBatch batch = executePairedAdapters(activeAdapters, currentContext, baselineContext);
             if (batch.successfulTools == 0) {
                 finish(run, ScanRunStatus.PARTIAL, 0, 0, 0, "增量扫描没有可用于两侧比较的扫描器结果");
@@ -333,6 +337,22 @@ public class ScanOrchestrator {
     }
 
     private void finish(ScanRun run, ScanRunStatus status, int total, int added, int fixed, String error) {
+        if (run.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE
+                && (status == ScanRunStatus.COMPLETED || status == ScanRunStatus.PARTIAL)) {
+            try { onlineRemediation.enrich(run); }
+            catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
+            catch (Exception failure) {
+                run.setRemediationStatus("FAILED");
+                run.setRemediationMessage("联网核实失败，报告沿用本地资料。");
+                scanRunMapper.updateRemediation(run);
+            }
+        }
+        if (run.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE && status == ScanRunStatus.FAILED) {
+            run.setRemediationStatus("FAILED");
+            run.setRemediationMessage("本地扫描未正常完成，联网修复核实未完成。");
+            scanRunMapper.updateRemediation(run);
+        }
+        io.codesentry.process.CancellableTasks.check();
         run.setStatus(status);
         run.setTotalFindings(total);
         run.setNewFindings(added);
