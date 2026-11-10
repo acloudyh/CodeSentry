@@ -51,24 +51,28 @@ export interface AiToolConfigurationPayload {
   defaultTool: boolean
 }
 
+function displayProject(project: ScanProject): ScanProject {
+  return { ...project, projectName: project.displayName ?? project.projectName }
+}
+
 export const api = {
   dashboard: () => request<DashboardSummary>('/api/v1/dashboard/summary'),
-  projects: () => request<ScanProject[]>('/api/v1/projects'),
+  projects: () => request<ScanProject[]>('/api/v1/projects').then(projects => projects.map(displayProject)),
   createProject: (payload: CreateProjectPayload) => request<ScanProject>('/api/v1/projects', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }),
+  }).then(displayProject),
   updateJarProject: (id: number, projectName: string, javaVersion: number | null, file: File | null) => {
     const body = new FormData()
     body.append('projectName', projectName)
     if (javaVersion !== null) body.append('javaVersion', String(javaVersion))
     if (file) body.append('file', file)
-    return request<ScanProject>(`/api/v1/projects/${id}/jar`, { method: 'PUT', body })
+    return request<ScanProject>(`/api/v1/projects/${id}/jar`, { method: 'PUT', body }).then(displayProject)
   },
   deleteProject: (id: number) => request<void>(`/api/v1/projects/${id}`, { method: 'DELETE' }),
   updateProject: (id: number, payload: CreateProjectPayload) => request<ScanProject>(`/api/v1/projects/${id}`, {
     method: 'PUT', body: JSON.stringify(payload),
-  }),
+  }).then(displayProject),
   branches: (id: number, refresh = false) => request<BranchView[]>(`/api/v1/projects/${id}/branches?refresh=${refresh}`),
   scanRuns: (limit = 100) => request<ScanRun[]>(`/api/v1/scan-runs?limit=${limit}`),
   scanRunDetail: (id: number) => request<ScanRunDetail>(`/api/v1/scan-runs/${id}/detail`),
@@ -78,7 +82,7 @@ export const api = {
     body.append('file', file)
     if (projectName.trim()) body.append('projectName', projectName.trim())
     if (javaVersion !== null) body.append('javaVersion', String(javaVersion))
-    return request<ScanProject>('/api/v1/projects/jar', { method: 'POST', body })
+    return request<ScanProject>('/api/v1/projects/jar', { method: 'POST', body }).then(displayProject)
   },
   uploadJar: (file: File, projectName: string, javaVersion: number | null) => {
     const body = new FormData()

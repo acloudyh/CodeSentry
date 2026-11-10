@@ -31,6 +31,12 @@ public class ScanProject {
         return projectName;
     }
 
+    /** JAR registrations retain their unique storage name; user-facing names omit its UUID suffix. */
+    public String getDisplayName() {
+        if (sourceType != ProjectSourceType.JAR_UPLOAD || projectName == null) return projectName;
+        return projectName.replaceFirst(" · [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "");
+    }
+
     public void setProjectName(String projectName) {
         this.projectName = projectName;
     }

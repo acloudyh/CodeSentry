@@ -11,6 +11,7 @@ export interface ApiResponse<T> {
 }
 
 export interface ScanProject {
+  displayName?: string
   targetJavaVersion?: number | null
   id: number
   projectName: string

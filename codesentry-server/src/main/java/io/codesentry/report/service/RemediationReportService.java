@@ -86,9 +86,11 @@ public class RemediationReportService {
 
     public String exportFileName(Long runId, String extension) {
         ScanRun run = scanRunService.requireById(runId);
-        String projectName = projectService.requireById(run.getProjectId()).getProjectName();
+        ScanProject project = projectService.requireById(run.getProjectId());
+        String projectName = project.getDisplayName();
         String safeName = projectName.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
-        return safeName + "-代码安全扫描." + extension;
+        String projectType = project.getSourceType() == io.codesentry.project.model.ProjectSourceType.JAR_UPLOAD ? "jar包" : "代码";
+        return safeName + projectType + "安全扫描." + extension;
     }
 
     public List<RemediationReportSummary> recent(int limit) {
@@ -130,7 +132,7 @@ public class RemediationReportService {
             addTitle(document, "CODESENTRY / REMEDIATION REPORT", 11, "78A921");
             addTitle(document, "代码安全扫描整改报告", 24, "14201B");
             addText(document, "报告编号 CSR-" + String.format("%06d", data.run.getId())
-                    + "    项目 " + data.project.getProjectName()
+                    + "    项目 " + data.project.getDisplayName()
                     + "    生成时间 " + TIME.format(LocalDateTime.now()), 10, "66796E", false);
 
             XWPFTable summary = document.createTable(2, 4);
@@ -307,7 +309,7 @@ public class RemediationReportService {
                 ".severity{font-weight:700}.critical,.high{color:#c83232}.medium{color:#a46400}.low,.info{color:#167c6d}.false-positive,.ai-review{color:#a46400}.ai-cell{background:#fffaf0}.ai-cell b{display:block;margin-bottom:3px}.ai-cell small{margin:2px 0 7px;line-height:1.45}.foot{margin-top:18px;color:#718077;font-size:9px}" +
                 "tr{page-break-inside:avoid}</style></head><body><header class=\"cover\"><div class=\"brand\">CODESENTRY / REMEDIATION REPORT</div>" +
                 "<h1>代码安全扫描整改报告</h1><div class=\"meta\">报告编号 CSR-" + String.format("%06d", run.getId()) +
-                " · 项目 " + escape(project.getProjectName()) + " · 生成时间 " + TIME.format(LocalDateTime.now()) + "</div></header><main class=\"wrap\">" +
+                " · 项目 " + escape(project.getDisplayName()) + " · 生成时间 " + TIME.format(LocalDateTime.now()) + "</div></header><main class=\"wrap\">" +
                 "<table class=\"summary-table\"><tr>" + summaryCell("扫描模式", scanModeLabel(run)) + summaryCell("当前问题", String.valueOf(data.findings.size())) +
                 summaryCell("新增问题", String.valueOf(data.newFindingCount)) + summaryCell("已修复", String.valueOf(data.fixedFindingCount)) +
                 "</tr></table>" +

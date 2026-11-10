@@ -27,7 +27,8 @@ async function exportReport(runId: number, format: 'html' | 'docx' | 'pdf', proj
     const objectUrl = URL.createObjectURL(await response.blob())
     const link = document.createElement('a')
     const safeName = projectName(projectId).replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, '_').trim()
-    link.href = objectUrl; link.download = `${safeName}-代码安全扫描.${format}`
+    const projectType = projects.value.find(item => item.id === projectId)?.sourceType === 'JAR_UPLOAD' ? 'jar包' : '代码'
+    link.href = objectUrl; link.download = `${safeName}${projectType}安全扫描.${format}`
     document.body.appendChild(link); link.click(); link.remove()
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
   } catch (reason) {
