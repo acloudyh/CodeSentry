@@ -484,3 +484,11 @@ body::before { display: none; }
   .tool-form .form-actions { flex-direction:row; }
   .tool-form .form-actions .button { width:auto; flex:1; }
 }
+
+/* Compact row actions shared by project and report lists. */
+.row-actions { display: flex; flex-wrap: nowrap; justify-content: flex-end; align-items: center; gap: 12px; white-space: nowrap; }
+.row-actions .button { flex-shrink: 0; white-space: nowrap; }
+.row-action-link { display: inline-flex; align-items: center; justify-content: center; padding: 6px 2px; border: 0; background: transparent; color: var(--signal); font: inherit; font-size: 13px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.row-action-link:hover { text-decoration: underline; }
+.row-action-link.danger { color: var(--danger); }
+.row-action-link:disabled { opacity: .5; cursor: not-allowed; }

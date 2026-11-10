@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { formatChinaDate } from '@/utils/datetime'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import ActionDropdown from '@/components/ui/ActionDropdown.vue'
 import JarUploadForm from '@/components/ui/JarUploadForm.vue'
 import type { ScanProject, SourceType } from '@/types'
 
@@ -124,8 +125,14 @@ async function save() {
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '保存失败' } finally { saving.value = false }
 }
 
+function startProjectScan(project: ScanProject, mode: string) {
+  void router.push({ path: '/scans/new', query: {
+    source: project.sourceType === 'JAR_UPLOAD' ? 'jar' : 'repository', projectId: project.id, networkMode: mode,
+  } })
+}
+
 async function remove(project: ScanProject) {
-  if (!window.confirm(`确认从 CodeSentry 移除“${project.projectName}”？不会删除你的本地源码。`)) return
+  if (!window.confirm(`确认从 CodeSentry 删除“${project.projectName}”？不会删除你的本地源码。`)) return
   try { await api.deleteProject(project.id); await load() } catch (reason) { error.value = reason instanceof Error ? reason.message : '删除失败' }
 }
 
@@ -195,8 +202,9 @@ onMounted(load)
     <div v-if="listType === 'jar'" class="notice">新增时上传 JAR，发起扫描时直接使用已保存文件；通过“编辑”替换版本，历史扫描结果会保留。</div>
     <section class="panel">
       <div v-if="visibleProjects.length" class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>编号 / 项目</th><th>来源</th><th>{{ listType === 'jar' ? '当前 JAR 文件' : '仓库位置' }}</th><th v-if="listType !== 'jar'">默认分支</th><th>登记时间</th><th>操作</th></tr></thead>
+        <table class="data-table projects-table">
+          <colgroup><col style="width:19%" /><col style="width:110px" /><col /><col v-if="listType !== 'jar'" style="width:96px" /><col style="width:128px" /><col style="width:250px" /></colgroup>
+          <thead><tr><th>编号 / 项目</th><th>来源</th><th>{{ listType === 'jar' ? '当前 JAR 文件' : '仓库位置' }}</th><th v-if="listType !== 'jar'">默认分支</th><th>登记时间</th><th class="actions-heading">操作</th></tr></thead>
           <tbody>
             <tr v-for="project in visibleProjects" :key="project.id">
               <td><span class="mono">P-{{ String(project.id).padStart(3, '0') }}</span><div style="margin-top:5px"><strong>{{ displayName(project) }}</strong></div></td>
@@ -204,7 +212,11 @@ onMounted(load)
               <td class="mono">{{ project.sourceType === 'JAR_UPLOAD' ? project.localPath?.split('/').pop() : project.localPath ?? project.remoteUrl }}</td>
               <td v-if="listType !== 'jar'" class="mono">{{ project.defaultBranch ?? '-' }}</td>
               <td class="mono">{{ formatChinaDate(project.createdAt) }}</td>
-              <td><div class="report-actions"><button class="button secondary compact" :disabled="saving" @click="project.sourceType === 'JAR_UPLOAD' ? editJar(project) : edit(project)">编辑</button><RouterLink class="button secondary compact" :to="{ path: '/scans/new', query: { source: project.sourceType === 'JAR_UPLOAD' ? 'jar' : 'repository', projectId: project.id } }">发起扫描</RouterLink><button class="button danger compact" :disabled="saving" @click="remove(project)">移除</button></div></td>
+              <td><div class="row-actions">
+                <ActionDropdown label="发起扫描" primary :disabled="saving" :items="[{ label: '本地扫描', value: 'LOCAL' }, { label: '联网扫描', value: 'ONLINE' }]" @select="startProjectScan(project, $event)" />
+                <button type="button" class="row-action-link" :disabled="saving" @click="project.sourceType === 'JAR_UPLOAD' ? editJar(project) : edit(project)">编辑</button>
+                <button type="button" class="row-action-link danger" :disabled="saving" @click="remove(project)">删除</button>
+              </div></td>
             </tr>
           </tbody>
         </table>
@@ -215,6 +227,9 @@ onMounted(load)
 </template>
 
 <style scoped>
+.projects-table { min-width: 1040px; }
+.actions-heading { text-align: right; }
+.projects-table td:nth-last-child(2) { white-space: nowrap; }
 .repository-edit-panel .field, .jar-edit-panel .field { align-content: start; }
 .repository-edit-panel .input, .repository-edit-panel .select, .jar-edit-panel .input, .jar-edit-panel .select { height: 44px; min-height: 44px; }
 </style>
