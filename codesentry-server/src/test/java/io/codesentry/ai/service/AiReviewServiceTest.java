@@ -45,7 +45,7 @@ class AiReviewServiceTest {
         ObjectMapper objectMapper = new ObjectMapper();
         AiReviewService service = new AiReviewService(mapper, findings, runs,
                 new AiReviewEvidenceBuilder(properties, objectMapper), provider, properties, objectMapper,
-                new SyncTaskExecutor());
+                new SyncTaskExecutor(), new SyncTaskExecutor());
         AiReviewJob job = new AiReviewJob();
         job.setId(31L);
         AiReviewRecord record = new AiReviewRecord();
@@ -73,7 +73,7 @@ class AiReviewServiceTest {
         ObjectMapper objectMapper = new ObjectMapper();
         AiReviewEvidenceBuilder evidenceBuilder = new AiReviewEvidenceBuilder(properties, objectMapper);
         AiReviewService service = new AiReviewService(mapper, findings, runs, evidenceBuilder, provider,
-                properties, objectMapper, new SyncTaskExecutor());
+                properties, objectMapper, new SyncTaskExecutor(), new SyncTaskExecutor());
 
         FindingView finding = new FindingView();
         finding.setId(9L); finding.setProjectId(3L); finding.setScanRunId(7L);
@@ -110,7 +110,7 @@ class AiReviewServiceTest {
         ObjectMapper objectMapper = new ObjectMapper();
         AiReviewEvidenceBuilder evidenceBuilder = new AiReviewEvidenceBuilder(properties, objectMapper);
         AiReviewService service = new AiReviewService(mapper, findings, runs, evidenceBuilder, provider,
-                properties, objectMapper, new SyncTaskExecutor());
+                properties, objectMapper, new SyncTaskExecutor(), new SyncTaskExecutor());
 
         FindingView finding = new FindingView();
         finding.setId(10L); finding.setProjectId(3L); finding.setScanRunId(7L);
@@ -147,7 +147,7 @@ class AiReviewServiceTest {
         ObjectMapper objectMapper = new ObjectMapper();
         AiReviewService service = new AiReviewService(mapper, findings, runs,
                 new AiReviewEvidenceBuilder(properties, objectMapper), provider, properties, objectMapper,
-                new SyncTaskExecutor());
+                new SyncTaskExecutor(), new SyncTaskExecutor());
         ScanRun run = new ScanRun(); run.setId(7L); run.setStatus(ScanRunStatus.COMPLETED);
         FindingView first = dependencyFinding(31L, "CVE-2017-5644", "Apache POI 远程攻击");
         FindingView second = dependencyFinding(32L, "CVE-2014-9527", "POI 拒绝服务");

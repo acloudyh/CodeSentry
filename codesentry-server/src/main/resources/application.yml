@@ -123,5 +123,5 @@ codesentry:
     read-timeout-seconds: ${CODESENTRY_AI_READ_TIMEOUT_SECONDS:90}
     max-context-characters: ${CODESENTRY_AI_MAX_CONTEXT_CHARACTERS:12000}
     max-output-tokens: ${CODESENTRY_AI_MAX_OUTPUT_TOKENS:4096}
-    max-concurrency: ${CODESENTRY_AI_MAX_CONCURRENCY:2}
+    max-concurrency: ${CODESENTRY_AI_MAX_CONCURRENCY:4}
     high-confidence-percent: ${CODESENTRY_AI_HIGH_CONFIDENCE_PERCENT:85}

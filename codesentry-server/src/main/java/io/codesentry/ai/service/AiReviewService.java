@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.*;
 
 @Service
 public class AiReviewService {
@@ -45,11 +46,14 @@ public class AiReviewService {
     private final CodeSentryProperties properties;
     private final ObjectMapper objectMapper;
     private final TaskExecutor taskExecutor;
+    private final TaskExecutor unitExecutor;
+    private final Map<Long, Set<Future<?>>> children = new ConcurrentHashMap<>();
 
     public AiReviewService(AiReviewMapper mapper, FindingPersistenceService findingService,
                            ScanRunService scanRunService, AiReviewEvidenceBuilder evidenceBuilder,
                            AiReviewProvider provider, CodeSentryProperties properties, ObjectMapper objectMapper,
-                           @Qualifier("aiReviewTaskExecutor") TaskExecutor taskExecutor) {
+                           @Qualifier("aiReviewTaskExecutor") TaskExecutor taskExecutor,
+                           @Qualifier("aiReviewWorkerExecutor") TaskExecutor unitExecutor) {
         this.mapper = mapper;
         this.findingService = findingService;
         this.scanRunService = scanRunService;
@@ -58,6 +62,7 @@ public class AiReviewService {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.taskExecutor = taskExecutor;
+        this.unitExecutor = unitExecutor;
     }
 
     public AiReviewSummary reviewFinding(Long findingId) {
@@ -66,11 +71,18 @@ public class AiReviewService {
         ReviewUnit unit = reviewUnits(reviewableFindings(finding.getScanRunId())).stream()
                 .filter(item -> item.contains(findingId)).findFirst()
                 .orElse(new ReviewUnit(finding));
-        AiReviewJob job = createJob(finding.getScanRunId(), 1);
-        tasks.registerCurrent(job.getId());
+        AiReviewProvider selectedProvider = snapshotProvider();
+        AiReviewJob job;
+        synchronized (this) {
+            AiReviewJob active = mapper.findLatestJobByRunId(finding.getScanRunId());
+            if (active != null && tasks.isActive(active.getId()))
+                throw new BusinessException(HttpStatus.CONFLICT, "该批次已有工具审核正在执行，请等待完成或先停止任务");
+            job = createJob(finding.getScanRunId(), 1, selectedProvider);
+            tasks.registerCurrent(job.getId());
+        }
         try {
             mapper.markJobRunning(job.getId(), LocalDateTime.now());
-            AiReviewSummary summary = executeUnit(unit, job.getId(), findingId);
+            AiReviewSummary summary = await(submitUnit(job.getId(), () -> executeUnit(unit, job.getId(), findingId, selectedProvider), null));
             mapper.updateJobProgress(job.getId(), 1, 0);
             mapper.finishJob(job.getId(), "COMPLETED", null, LocalDateTime.now());
             return summary;
@@ -80,6 +92,7 @@ public class AiReviewService {
             mapper.finishJob(job.getId(), "FAILED", safeMessage(exception), LocalDateTime.now());
             throw exception;
         } finally {
+            cancelChildren(job.getId());
             tasks.unregisterCurrent(job.getId());
         }
     }
@@ -92,7 +105,7 @@ public class AiReviewService {
         return startRunReview(scanRunId, true);
     }
 
-    private AiReviewJob startRunReview(Long scanRunId, boolean failedOnly) {
+    private synchronized AiReviewJob startRunReview(Long scanRunId, boolean failedOnly) {
         ensureEnabled();
         ScanRun run = scanRunService.requireById(scanRunId);
         if (run.getStatus() != ScanRunStatus.COMPLETED && run.getStatus() != ScanRunStatus.PARTIAL) {
@@ -125,9 +138,10 @@ public class AiReviewService {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "当前批次没有等待工具审核或需要重试的问题");
         }
         List<ReviewUnit> units = reviewUnits(findings);
-        AiReviewJob job = createJob(scanRunId, units.size());
+        AiReviewProvider selectedProvider = snapshotProvider();
+        AiReviewJob job = createJob(scanRunId, units.size(), selectedProvider);
         try {
-            tasks.submit(job.getId(), taskExecutor, () -> executeJob(job.getId(), units));
+            tasks.submit(job.getId(), taskExecutor, () -> executeJob(job.getId(), units, selectedProvider, job.getConcurrency()));
         } catch (RuntimeException exception) {
             mapper.finishJob(job.getId(), "FAILED", "AI 审核任务队列已满", LocalDateTime.now());
             throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "AI 审核任务队列已满，请稍后重试");
@@ -144,61 +158,115 @@ public class AiReviewService {
         return result;
     }
 
-    private void executeJob(Long jobId, List<ReviewUnit> units) {
-        checkJobActive(jobId);
-        mapper.markJobRunning(jobId, LocalDateTime.now());
-        int completed = 0;
-        int failed = 0;
-        List<ReviewUnit> retryUnits = new ArrayList<>();
-        for (ReviewUnit unit : units) {
+    private void executeJob(Long jobId, List<ReviewUnit> units, AiReviewProvider selectedProvider, int concurrency) {
+        int[] counts = {0, 0}; // Only the coordinator updates progress, including retries.
+        try {
             checkJobActive(jobId);
-            try {
-                executeUnit(unit, jobId, unit.primary().getId());
-                completed++;
-            } catch (Exception exception) {
-                if (exception instanceof java.util.concurrent.CancellationException) return;
-                io.codesentry.process.CancellableTasks.check();
-                failed++;
-                retryUnits.add(unit);
-            }
-            mapper.updateJobProgress(jobId, completed, failed);
-        }
-        // Finish the first pass before retrying. Successful findings are never called again.
-        if (!retryUnits.isEmpty()) {
-            checkJobActive(jobId);
-            failed = 0;
-            mapper.updateJobProgress(jobId, completed, failed);
-            for (ReviewUnit unit : retryUnits) {
+            mapper.markJobRunning(jobId, LocalDateTime.now());
+            List<ReviewUnit> retry = executePass(jobId, units, selectedProvider, concurrency, counts);
+            if (!retry.isEmpty()) {
                 checkJobActive(jobId);
-                try {
-                    executeUnit(unit, jobId, unit.primary().getId());
-                    completed++;
-                } catch (Exception exception) {
-                    if (exception instanceof java.util.concurrent.CancellationException) return;
-                    io.codesentry.process.CancellableTasks.check();
-                    failed++;
-                }
-                mapper.updateJobProgress(jobId, completed, failed);
+                counts[1] = 0;
+                mapper.updateJobProgress(jobId, counts[0], 0);
+                executePass(jobId, retry, selectedProvider, concurrency, counts);
             }
+            checkJobActive(jobId);
+            String status = counts[1] == 0 ? "COMPLETED" : counts[0] == 0 ? "FAILED" : "PARTIAL";
+            mapper.finishJob(jobId, status, counts[1] == 0 ? null : counts[1] + " 个问题 AI 审核失败", LocalDateTime.now());
+        } catch (CancellationException cancelled) {
+            // The cancel endpoint owns the terminal state. Never write fake failures.
+        } catch (RuntimeException error) {
+            if (!Thread.currentThread().isInterrupted())
+                mapper.finishJob(jobId, counts[0] == 0 ? "FAILED" : "PARTIAL", safeMessage(error), LocalDateTime.now());
+        } finally {
+            cancelChildren(jobId);
         }
-        String status = failed == 0 ? "COMPLETED" : completed == 0 ? "FAILED" : "PARTIAL";
-        mapper.finishJob(jobId, status, failed == 0 ? null : failed + " 个问题 AI 审核失败", LocalDateTime.now());
     }
 
-    private AiReviewSummary executeUnit(ReviewUnit unit, Long jobId, Long requestedFindingId) {
+    private List<ReviewUnit> executePass(Long jobId, List<ReviewUnit> units, AiReviewProvider selectedProvider,
+                                         int concurrency, int[] counts) {
+        BlockingQueue<FutureTask<ReviewUnit>> completed = new LinkedBlockingQueue<>();
+        Map<FutureTask<ReviewUnit>, ReviewUnit> pending = new LinkedHashMap<>();
+        List<ReviewUnit> failed = new ArrayList<>();
+        int next = 0;
+        while (next < units.size() || !pending.isEmpty()) {
+            checkJobActive(jobId);
+            while (next < units.size() && pending.size() < concurrency) {
+                ReviewUnit unit = units.get(next++);
+                FutureTask<ReviewUnit> future = submitUnit(jobId, () -> {
+                    executeUnit(unit, jobId, unit.primary().getId(), selectedProvider);
+                    return unit;
+                }, completed);
+                pending.put(future, unit);
+            }
+            FutureTask<ReviewUnit> future;
+            try { future = completed.take(); }
+            catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new CancellationException("任务已停止"); }
+            ReviewUnit unit = pending.remove(future);
+            try {
+                await(future);
+                counts[0]++;
+            } catch (CancellationException cancelled) { throw cancelled; }
+            catch (RuntimeException error) {
+                checkJobActive(jobId);
+                counts[1]++;
+                failed.add(unit);
+            }
+            checkJobActive(jobId);
+            mapper.updateJobProgress(jobId, counts[0], counts[1]);
+        }
+        return failed;
+    }
+
+    private <T> FutureTask<T> submitUnit(Long jobId, Callable<T> action, BlockingQueue<FutureTask<T>> completed) {
+        checkJobActive(jobId);
+        FutureTask<T> future = new FutureTask<T>(action) {
+            @Override protected void done() {
+                Set<Future<?>> active = children.get(jobId);
+                if (active != null) active.remove(this);
+                if (completed != null) completed.add(this);
+            }
+        };
+        children.computeIfAbsent(jobId, ignored -> ConcurrentHashMap.newKeySet()).add(future);
+        try { unitExecutor.execute(future); }
+        catch (RuntimeException error) { future.cancel(false); throw error; }
+        return future;
+    }
+
+    private <T> T await(Future<T> future) {
+        try { return future.get(); }
+        catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new CancellationException("任务已停止"); }
+        catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            throw new IllegalStateException("工具审核执行失败", cause);
+        }
+    }
+
+    private void cancelChildren(Long jobId) {
+        Set<Future<?>> active = children.remove(jobId);
+        if (active != null) active.forEach(future -> future.cancel(true));
+    }
+
+    private AiReviewProvider snapshotProvider() {
+        AiReviewProvider selected = provider.snapshot();
+        return selected == null ? provider : selected;
+    }
+
+    private AiReviewSummary executeUnit(ReviewUnit unit, Long jobId, Long requestedFindingId, AiReviewProvider selectedProvider) {
         checkJobActive(jobId);
         AiReviewEvidence evidence = buildUnitEvidence(unit);
         String serialized = evidenceBuilder.serialize(evidence);
         String inputHash = evidenceBuilder.sha256(serialized);
         try {
-            AiReviewDecision primary = provider.review(evidence, "PRIMARY", null);
+            AiReviewDecision primary = selectedProvider.review(evidence, "PRIMARY", null);
             checkJobActive(jobId);
-            AiReviewDecision verification = provider.review(evidence, "VERIFY", primary);
+            AiReviewDecision verification = selectedProvider.review(evidence, "VERIFY", primary);
             checkJobActive(jobId);
             AiReviewSummary requested = null;
             for (FindingView member : unit.members) {
-                AiReviewRecord primaryRecord = saveDecision(member, jobId, "PRIMARY", primary, inputHash);
-                AiReviewRecord verificationRecord = saveDecision(member, jobId, "VERIFY", verification, inputHash);
+                AiReviewRecord primaryRecord = saveDecision(member, jobId, "PRIMARY", primary, inputHash, selectedProvider);
+                AiReviewRecord verificationRecord = saveDecision(member, jobId, "VERIFY", verification, inputHash, selectedProvider);
                 if (requested == null || Objects.equals(member.getId(), requestedFindingId)) {
                     requested = summarize(primaryRecord, verificationRecord);
                 }
@@ -207,7 +275,7 @@ public class AiReviewService {
         } catch (RuntimeException exception) {
             if (exception instanceof java.util.concurrent.CancellationException) throw exception;
             checkJobActive(jobId);
-            for (FindingView member : unit.members) saveFailure(member, jobId, inputHash, exception);
+            for (FindingView member : unit.members) saveFailure(member, jobId, inputHash, exception, selectedProvider);
             throw exception;
         }
     }
@@ -265,8 +333,8 @@ public class AiReviewService {
     }
 
     private AiReviewRecord saveDecision(FindingView finding, Long jobId, String round,
-                                        AiReviewDecision decision, String inputHash) {
-        AiReviewRecord record = baseRecord(finding, jobId, round, inputHash);
+                                        AiReviewDecision decision, String inputHash, AiReviewProvider selectedProvider) {
+        AiReviewRecord record = baseRecord(finding, jobId, round, inputHash, selectedProvider);
         record.setVerdict(decision.getVerdict());
         record.setConfidence(BigDecimal.valueOf(decision.getConfidence()).setScale(4, RoundingMode.HALF_UP));
         record.setReason(limit(evidenceBuilder.sanitize(decision.getReason()), 4000));
@@ -278,8 +346,8 @@ public class AiReviewService {
         return record;
     }
 
-    private void saveFailure(FindingView finding, Long jobId, String inputHash, RuntimeException exception) {
-        AiReviewRecord record = baseRecord(finding, jobId, "ERROR", inputHash);
+    private void saveFailure(FindingView finding, Long jobId, String inputHash, RuntimeException exception, AiReviewProvider selectedProvider) {
+        AiReviewRecord record = baseRecord(finding, jobId, "ERROR", inputHash, selectedProvider);
         record.setVerdict("AI_ERROR");
         record.setConfidence(BigDecimal.ZERO);
         record.setStatus("FAILED");
@@ -287,28 +355,29 @@ public class AiReviewService {
         mapper.insertReview(record);
     }
 
-    private AiReviewRecord baseRecord(FindingView finding, Long jobId, String round, String inputHash) {
+    private AiReviewRecord baseRecord(FindingView finding, Long jobId, String round, String inputHash, AiReviewProvider selectedProvider) {
         AiReviewRecord record = new AiReviewRecord();
         record.setProjectId(finding.getProjectId());
         record.setScanRunId(finding.getScanRunId());
         record.setFindingId(finding.getId());
         record.setReviewJobId(jobId);
         record.setReviewRound(round);
-        record.setProvider(provider.providerName());
-        record.setModel(provider.modelName());
+        record.setProvider(selectedProvider.providerName());
+        record.setModel(selectedProvider.modelName());
         record.setInputHash(inputHash);
         record.setPromptVersion(PROMPT_VERSION);
         record.setCreatedAt(LocalDateTime.now());
         return record;
     }
 
-    private AiReviewJob createJob(Long scanRunId, int total) {
+    private AiReviewJob createJob(Long scanRunId, int total, AiReviewProvider selectedProvider) {
         AiReviewJob job = new AiReviewJob();
         job.setScanRunId(scanRunId);
-        job.setProvider(provider.providerName());
-        job.setModel(provider.modelName());
+        job.setProvider(selectedProvider.providerName());
+        job.setModel(selectedProvider.modelName());
         job.setStatus("PENDING");
         job.setTotalFindings(total);
+        job.setConcurrency(Math.min(total, Math.max(1, Math.min(properties.getAi().getMaxConcurrency(), 8))));
         job.setCompletedFindings(0);
         job.setFailedFindings(0);
         job.setCreatedAt(LocalDateTime.now());
@@ -347,6 +416,7 @@ public class AiReviewService {
         requireJob(jobId);
         mapper.cancelJob(jobId, LocalDateTime.now());
         tasks.cancel(jobId);
+        cancelChildren(jobId);
         return requireJob(jobId);
     }
 

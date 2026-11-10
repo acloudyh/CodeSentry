@@ -31,6 +31,19 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
     }
 
     @Override
+    public AiReviewProvider snapshot() {
+        CodeSentryProperties frozen = new CodeSentryProperties();
+        CodeSentryProperties.Ai source = properties.getAi(), target = frozen.getAi();
+        synchronized (source) {
+            target.setEnabled(source.isEnabled()); target.setProvider(source.getProvider());
+            target.setBaseUrl(source.getBaseUrl()); target.setModel(source.getModel()); target.setApiKey(source.getApiKey());
+            target.setReadTimeoutSeconds(source.getReadTimeoutSeconds()); target.setMaxOutputTokens(source.getMaxOutputTokens());
+            target.setThinkingMode(source.getThinkingMode());
+        }
+        return new OpenAiCompatibleReviewProvider(frozen, objectMapper, httpClient);
+    }
+
+    @Override
     public AiReviewDecision review(AiReviewEvidence evidence, String reviewRound, AiReviewDecision primaryDecision) {
         validateConfiguration();
         Map<String, Object> body = new LinkedHashMap<>();

@@ -13,12 +13,17 @@ import java.time.Duration;
 @Component
 public class JdkAiReviewHttpClient implements AiReviewHttpClient {
     private final HttpClient client;
+    private final Sleeper sleeper;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public JdkAiReviewHttpClient(CodeSentryProperties properties) {
-        this.client = HttpClient.newBuilder()
+        this(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(Math.max(1, properties.getAi().getConnectTimeoutSeconds())))
-                .build();
+                .build(), Thread::sleep);
     }
+
+    interface Sleeper { void sleep(long millis) throws InterruptedException; }
+    JdkAiReviewHttpClient(HttpClient client, Sleeper sleeper) { this.client = client; this.sleeper = sleeper; }
 
     @Override
     public String postJson(String endpoint, String apiKey, String requestBody, int timeoutSeconds) {
@@ -29,14 +34,25 @@ public class JdkAiReviewHttpClient implements AiReviewHttpClient {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody));
         if (StringUtils.hasText(apiKey)) builder.header("Authorization", "Bearer " + apiKey);
         try {
-            HttpResponse<String> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("AI 服务返回 HTTP " + response.statusCode());
+            HttpRequest request = builder.build();
+            for (int attempt = 0; attempt < 3; attempt++) {
+                io.codesentry.process.CancellableTasks.check();
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                int status = response.statusCode();
+                if ((status == 429 || (status >= 500 && status <= 504)) && attempt < 2) {
+                    long delay = 1000L << attempt;
+                    String retryAfter = response.headers().firstValue("Retry-After").orElse("");
+                    try { delay = Math.max(delay, Long.parseLong(retryAfter) * 1000L); }
+                    catch (NumberFormatException ignored) { /* Default exponential backoff. */ }
+                    sleeper.sleep(Math.min(30000L, delay));
+                    continue;
+                }
+                if (status < 200 || status >= 300) throw new IllegalStateException("AI 服务返回 HTTP " + status);
+                if (response.body() != null && response.body().length() > 200_000)
+                    throw new IllegalStateException("AI 服务响应超过安全长度限制");
+                return response.body();
             }
-            if (response.body() != null && response.body().length() > 200_000) {
-                throw new IllegalStateException("AI 服务响应超过安全长度限制");
-            }
-            return response.body();
+            throw new IllegalStateException("AI 服务重试后仍不可用");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("AI 服务调用被中断", exception);

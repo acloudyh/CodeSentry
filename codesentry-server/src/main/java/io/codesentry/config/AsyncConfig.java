@@ -23,7 +23,7 @@ public class AsyncConfig {
 
     @Bean("aiReviewTaskExecutor")
     public TaskExecutor aiReviewTaskExecutor(CodeSentryProperties properties) {
-        int workers = Math.max(1, Math.min(properties.getAi().getMaxConcurrency(), 8));
+        int workers = 2;
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(workers);
         executor.setMaxPoolSize(workers);
@@ -34,4 +34,19 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+    /** Shared worker budget across every batch and individual review. */
+    @Bean("aiReviewWorkerExecutor")
+    public TaskExecutor aiReviewWorkerExecutor(CodeSentryProperties properties) {
+        int workers = Math.max(1, Math.min(properties.getAi().getMaxConcurrency(), 8));
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(workers);
+        executor.setMaxPoolSize(workers);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("codesentry-ai-unit-");
+        executor.setWaitForTasksToCompleteOnShutdown(false);
+        executor.setAwaitTerminationSeconds(10);
+        executor.initialize();
+        return executor;
+    }
+
 }

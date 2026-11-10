@@ -44,7 +44,7 @@ class AiReviewRetryTest {
                 .when(mapper).insertJob(any());
         ObjectMapper json = new ObjectMapper();
         return new AiReviewService(mapper, findings, scans, new AiReviewEvidenceBuilder(properties, json),
-                provider, properties, json, new SyncTaskExecutor());
+                provider, properties, json, new SyncTaskExecutor(), new SyncTaskExecutor());
     }
 
     @Test void retriesOnlyFailuresAfterAllFirstPassFindingsAndClearsFailureCount() {

@@ -3,6 +3,9 @@ package io.codesentry.ai.model;
 import java.time.LocalDateTime;
 
 public class AiReviewJob {
+    private int concurrency = 1;
+    public int getConcurrency() { return concurrency; }
+    public void setConcurrency(int value) { concurrency = value; }
     private Long id;
     private Long scanRunId;
     private String provider;

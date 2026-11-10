@@ -23,7 +23,7 @@ class AiReviewConfigurationServiceTest {
         when(tools.active()).thenReturn(active);
         when(provider.providerName()).thenReturn("OPENAI_COMPATIBLE");
 
-        AiReviewConfigurationView result = new AiReviewConfigurationService(tools, provider).configuration();
+        AiReviewConfigurationView result = new AiReviewConfigurationService(tools, provider, new io.codesentry.config.CodeSentryProperties()).configuration();
 
         assertTrue(result.isEnabled());
         assertEquals("https://api.deepseek.com", result.getBaseUrl());
@@ -41,7 +41,7 @@ class AiReviewConfigurationServiceTest {
         request.setEnabled(true); request.setBaseUrl(" https://api.deepseek.com ");
         request.setModel(" deepseek-chat "); request.setApiKey("new-secret");
 
-        new AiReviewConfigurationService(tools, provider).configure(request);
+        new AiReviewConfigurationService(tools, provider, new io.codesentry.config.CodeSentryProperties()).configure(request);
 
         verify(tools).update(argThat(id -> id == 7L), argThat((AiToolConfigurationRequest value) ->
                 "https://api.deepseek.com".equals(value.getBaseUrl())

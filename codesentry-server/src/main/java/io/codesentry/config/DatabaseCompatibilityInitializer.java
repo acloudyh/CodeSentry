@@ -47,6 +47,7 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
         }
         alterColumn("ALTER TABLE scan_finding MODIFY COLUMN cwe VARCHAR(512) NULL");
         alterColumn("ALTER TABLE scan_ai_review MODIFY COLUMN prompt_version VARCHAR(128) NOT NULL");
+        ensureColumn("scan_ai_review_job", "concurrency", "ALTER TABLE scan_ai_review_job ADD COLUMN concurrency INT NOT NULL DEFAULT 1");
         failInterruptedRuns();
         failInterruptedAiReviewJobs();
     }

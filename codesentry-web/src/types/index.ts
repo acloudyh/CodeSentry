@@ -153,6 +153,7 @@ export interface RemediationReportSummary {
 }
 
 export interface AiReviewJob {
+  concurrency?: number
   id: number
   scanRunId: number
   provider: string
@@ -168,6 +169,7 @@ export interface AiReviewJob {
 }
 
 export interface AiReviewConfiguration {
+  maxConcurrency?: number
   enabled: boolean
   provider: string
   model?: string

@@ -10,6 +10,7 @@ import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummar
 
 const findings = ref<FindingView[]>([])
 const includedFindingIds = ref<number[]>([])
+const reviewedIssueCount = computed(() => findings.value.filter(item => ['COMPLETED', 'NEEDS_HUMAN'].includes(aiReviews.value[item.id]?.status ?? '')).length)
 const route = useRoute()
 const runs = ref<ScanRun[]>([])
 const projects = ref<ScanProject[]>([])
@@ -97,11 +98,6 @@ const aiConfidence = (value?: number) => value == null ? '-' : `${Number((value 
 const aiJobStatusLabel = (value?: AiReviewJob['status']) => ({
   PENDING: '等待执行', RUNNING: '正在审核', COMPLETED: '审核完成', PARTIAL: '部分完成', FAILED: '审核失败', CANCELLED: '已停止',
 } as Record<string, string>)[value ?? ''] ?? '未知状态'
-const aiJobProgress = computed(() => {
-  if (!aiJob.value?.totalFindings) return 0
-  return Math.min(100, Math.round((aiJob.value.completedFindings + aiJob.value.failedFindings)
-    / aiJob.value.totalFindings * 100))
-})
 const aiExecutionRows = computed(() => aiExecutionFindings.value.map((finding) => {
   const records = aiJobRecords.value.filter((record) => record.findingId === finding.id).sort((a, b) => b.id - a.id)
   const retained = !records.length && aiReviews.value[finding.id]?.status !== 'FAILED' ? aiReviews.value[finding.id] : undefined
@@ -325,8 +321,8 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       </div>
       <div v-if="selectedRun" class="batch-context"><div><span>当前批次</span><strong>{{ batchNumber(selectedRun.id) }}</strong></div><div><span>扫描时间</span><strong>{{ formatTime(selectedRun.createdAt) }}</strong></div><div><span>扫描类型</span><strong>{{ modeLabel(selectedRun) }}</strong></div><div><span>批次状态</span><StatusBadge :value="selectedRun.status" /></div><div><span>台账统计</span><strong>{{ findings.length }} 当前 / {{ batchNewCount }} 新增 / {{ batchFixedCount }} 修复</strong></div></div>
       <div v-if="aiConfig.enabled && selectedRun" class="ai-batch-bar">
-        <div><span class="eyebrow">工具辅助复核</span><p>工具根据规则命中位置与源码证据提供复核建议，之后由审核人员结合业务和调用链确认；工具建议不会覆盖人工结论。</p></div>
-        <div v-if="aiJob" class="ai-job-progress"><strong>{{ aiJob.completedFindings + aiJob.failedFindings }} / {{ aiJob.totalFindings }} 个审核组</strong><span>{{ aiJobStatusLabel(aiJob.status) }}<template v-if="aiJob.failedFindings"> · {{ aiJob.failedFindings }} 组失败</template></span></div>
+        <div><span class="eyebrow">工具辅助复核</span><p>最多 {{ aiConfig.maxConcurrency ?? 1 }} 组并行，每组依次完成初审、复审。审核进度按已覆盖的问题条数统计；内部合并调用不影响问题数量。审核人员再结合业务和调用链确认，工具建议不会覆盖人工结论。</p></div>
+        <div v-if="aiJob" class="ai-job-progress"><strong>{{ reviewedIssueCount }} / {{ findings.length }} 条已审核</strong><span>{{ aiJobStatusLabel(aiJob.status) }}<template v-if="aiJob.failedFindings"> · {{ aiJob.failedFindings }} 组失败</template></span></div>
         <div v-if="aiJob" class="ai-batch-actions"><button class="button secondary" @click="openAiDetails">执行详情</button><button v-if="['PARTIAL','FAILED'].includes(aiJob.status) && aiJob.failedFindings" class="button secondary" :disabled="startingAiBatch" @click="startBatchAiReview(true)">重试失败项</button><button v-if="['PENDING','RUNNING'].includes(aiJob.status)" class="button danger" :disabled="stoppingAi" @click="stopAiReview">{{ stoppingAi ? '停止中…' : '停止工具审核' }}</button></div>
       </div>
     </section>
@@ -385,9 +381,9 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
         <section class="ai-detail-dialog" role="dialog" aria-modal="true" aria-label="工具批量审核执行详情">
           <header class="ai-detail-head"><div><span class="eyebrow">工具审核执行详情</span><h2>{{ batchNumber(aiJob.scanRunId) }} 批量审核执行详情</h2><p>依赖漏洞按文件和版本合并为审核组；整批结束后自动补跑一次失败组，成功组不会重复调用。</p></div><div class="ai-detail-head-actions"><button v-if="['PARTIAL','FAILED'].includes(aiJob.status) && aiJob.failedFindings" class="button secondary compact" :disabled="startingAiBatch" @click="startBatchAiReview(true)">重试失败项</button><button v-if="['PENDING','RUNNING'].includes(aiJob.status)" class="button danger compact" :disabled="stoppingAi" @click="stopAiReview">{{ stoppingAi ? '停止中…' : '停止工具审核' }}</button><button class="button secondary compact" :disabled="aiDetailsLoading" @click="loadAiJobRecords(aiJob.id)">{{ aiDetailsLoading ? '刷新中…' : '刷新' }}</button><button class="icon-button" aria-label="关闭 工具执行详情" @click="aiDetailsOpen = false">×</button></div></header>
           <div class="ai-detail-metrics">
-            <div><span>任务编号</span><strong>#{{ aiJob.id }}</strong></div><div><span>执行方式</span><strong>工具复核</strong></div><div><span>任务状态</span><strong>{{ aiJobStatusLabel(aiJob.status) }}</strong></div><div><span>完成组 / 失败组</span><strong>{{ aiJob.completedFindings }} / {{ aiJob.failedFindings }}</strong></div><div><span>开始时间</span><strong>{{ formatTime(aiJob.startedAt ?? aiJob.createdAt) }}</strong></div>
+            <div><span>任务编号</span><strong>#{{ aiJob.id }}</strong></div><div><span>执行方式</span><strong>{{ (aiJob.concurrency ?? 1) > 1 ? `并行审核 · 最多 ${aiJob.concurrency} 组` : '工具复核' }}</strong></div><div><span>任务状态</span><strong>{{ aiJobStatusLabel(aiJob.status) }}</strong></div><div><span>完成组 / 失败组</span><strong>{{ aiJob.completedFindings }} / {{ aiJob.failedFindings }}</strong></div><div><span>开始时间</span><strong>{{ formatTime(aiJob.startedAt ?? aiJob.createdAt) }}</strong></div>
           </div>
-          <div class="ai-detail-progress"><div><span>整体进度</span><strong>{{ aiJob.completedFindings + aiJob.failedFindings }} / {{ aiJob.totalFindings }} 个审核组</strong></div><div class="progress-meter"><span :style="{ width: `${aiJobProgress}%` }"></span></div><b>{{ aiJobProgress }}%</b></div>
+          <div class="ai-detail-progress"><div><span>本批次问题覆盖</span><strong>{{ reviewedIssueCount }} / {{ findings.length }} 条已审核</strong></div><div class="progress-meter"><span :style="{ width: `${findings.length ? Math.round(reviewedIssueCount / findings.length * 100) : 0}%` }"></span></div><b>{{ findings.length ? Math.round(reviewedIssueCount / findings.length * 100) : 0 }}%</b></div>
           <div class="ai-review-flow" aria-label="工具检查执行步骤"><div><b>01</b><span>本地提取真实源码</span></div><i>→</i><div><b>02</b><span>工具初审</span></div><i>→</i><div><b>03</b><span>工具复审</span></div><i>→</i><div><b>04</b><span>生成工具建议</span></div></div>
           <div v-if="aiJob.errorMessage || aiDetailError" class="error-banner ai-detail-error">{{ aiDetailError || aiJob.errorMessage }}</div>
           <div class="ai-detail-table-wrap">

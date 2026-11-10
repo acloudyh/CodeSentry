@@ -1,6 +1,8 @@
 package io.codesentry.ai.dto;
 
 public class AiReviewConfigurationView {
+    private final int maxConcurrency;
+    public int getMaxConcurrency() { return maxConcurrency; }
     private final boolean enabled;
     private final String provider;
     private final String model;
@@ -8,7 +10,8 @@ public class AiReviewConfigurationView {
     private final boolean apiKeyConfigured;
 
     public AiReviewConfigurationView(boolean enabled, String provider, String model,
-                                     String baseUrl, boolean apiKeyConfigured) {
+                                     String baseUrl, boolean apiKeyConfigured, int maxConcurrency) {
+        this.maxConcurrency = Math.max(1, Math.min(maxConcurrency, 8));
         this.enabled = enabled;
         this.provider = provider;
         this.model = model;

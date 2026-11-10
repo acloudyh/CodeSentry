@@ -48,7 +48,7 @@ class AiReviewCancellationTest {
         });
         ObjectMapper json = new ObjectMapper();
         return new AiReviewService(mapper, findings, scans, new AiReviewEvidenceBuilder(properties, json),
-                provider, properties, json, executor);
+                provider, properties, json, executor, Runnable::run);
     }
 
     @Test void cancellingQueuedReviewDoesNotCallModel() {

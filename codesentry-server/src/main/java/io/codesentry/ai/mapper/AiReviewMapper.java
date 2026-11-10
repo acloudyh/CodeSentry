@@ -13,8 +13,8 @@ import java.util.List;
 
 public interface AiReviewMapper {
 
-    @Insert("INSERT INTO scan_ai_review_job(scan_run_id, provider, model, status, total_findings, " +
-            "completed_findings, failed_findings, created_at) VALUES(#{scanRunId}, #{provider}, #{model}, " +
+    @Insert("INSERT INTO scan_ai_review_job(concurrency, scan_run_id, provider, model, status, total_findings, " +
+            "completed_findings, failed_findings, created_at) VALUES(#{concurrency}, #{scanRunId}, #{provider}, #{model}, " +
             "#{status}, #{totalFindings}, #{completedFindings}, #{failedFindings}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insertJob(AiReviewJob job);

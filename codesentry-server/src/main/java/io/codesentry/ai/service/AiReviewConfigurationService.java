@@ -15,9 +15,10 @@ import org.springframework.util.StringUtils;
 public class AiReviewConfigurationService {
     private final AiToolConfigurationService tools;
     private final AiReviewProvider provider;
+    private final io.codesentry.config.CodeSentryProperties properties;
 
-    public AiReviewConfigurationService(AiToolConfigurationService tools, AiReviewProvider provider) {
-        this.tools = tools; this.provider = provider;
+    public AiReviewConfigurationService(AiToolConfigurationService tools, AiReviewProvider provider, io.codesentry.config.CodeSentryProperties properties) {
+        this.tools = tools; this.provider = provider; this.properties = properties;
     }
 
     public AiReviewConfigurationView configuration() {
@@ -39,7 +40,7 @@ public class AiReviewConfigurationService {
         AiToolConfiguration active = tools.active();
         return new AiReviewConfigurationView(active != null, provider.providerName(),
                 active == null ? null : active.getModel(), active == null ? null : active.getBaseUrl(),
-                active != null && StringUtils.hasText(active.getApiKeyCiphertext()));
+                active != null && StringUtils.hasText(active.getApiKeyCiphertext()), properties.getAi().getMaxConcurrency());
     }
 
     private String trim(String value) {

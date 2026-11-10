@@ -236,7 +236,7 @@ public class CodeSentryProperties {
         private int connectTimeoutSeconds = 10;
         private int readTimeoutSeconds = 90;
         private int maxContextCharacters = 12000;
-        private int maxConcurrency = 2;
+        private int maxConcurrency = 4;
         private int highConfidencePercent = 85;
         private int maxOutputTokens = 4096;
 

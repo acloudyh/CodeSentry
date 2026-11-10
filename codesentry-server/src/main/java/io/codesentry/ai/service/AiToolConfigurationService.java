@@ -125,11 +125,13 @@ public class AiToolConfigurationService {
 
     private void applyActiveConfiguration() {
         AiToolConfiguration active = mapper.findActive();
+        synchronized (properties.getAi()) {
         properties.getAi().setEnabled(active != null);
         properties.getAi().setProvider(active == null ? "OPENAI_COMPATIBLE" : active.getProvider());
         properties.getAi().setBaseUrl(active == null ? null : active.getBaseUrl());
         properties.getAi().setModel(active == null ? null : active.getModel());
         properties.getAi().setApiKey(active == null ? null : cipher.decrypt(active.getApiKeyCiphertext()));
+        }
     }
 
     private String trim(String value) { return value == null ? "" : value.trim(); }

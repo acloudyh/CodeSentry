@@ -118,4 +118,23 @@ class OpenAiCompatibleReviewProviderTest {
         assertTrue(requestBody.get().contains("\"response_format\":{\"type\":\"json_object\"}"));
         assertTrue(requestBody.get().contains("\"thinking\":{\"type\":\"disabled\"}"));
     }
+    @Test void aJobSnapshotKeepsItsModelAndEndpointAfterDefaultToolChanges() throws Exception {
+        CodeSentryProperties properties=configured(); ObjectMapper json=new ObjectMapper();
+        java.util.List<String> models=new java.util.ArrayList<>();
+        AiReviewHttpClient client=(endpoint,key,body,timeout)->{
+            assertEquals("http://mock/v1/chat/completions",endpoint);assertEquals(90,timeout);
+            try {
+                models.add(json.readTree(body).path("model").asText());
+                return json.writeValueAsString(java.util.Map.of("choices",java.util.List.of(java.util.Map.of("message",java.util.Map.of("content","{\"verdict\":\"CONDITIONAL\",\"confidence\":0.9,\"reason\":\"evidence\"}")))));
+            }catch(java.io.IOException error){throw new IllegalStateException(error);}
+        };
+        AiReviewProvider snapshot=new OpenAiCompatibleReviewProvider(properties,json,client).snapshot();
+        properties.getAi().setModel("new-model");properties.getAi().setBaseUrl("http://new/v1");
+        properties.getAi().setReadTimeoutSeconds(2);properties.getAi().setEnabled(false);
+        AiReviewDecision primary=snapshot.review(new AiReviewEvidence(),"PRIMARY",null);
+        snapshot.review(new AiReviewEvidence(),"VERIFY",primary);
+        assertEquals(java.util.List.of("deepseek-v4-pro","deepseek-v4-pro"),models);
+        assertEquals("deepseek-v4-pro",snapshot.modelName());
+    }
+
 }
