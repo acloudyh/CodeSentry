@@ -21,7 +21,7 @@ final class Java8RemediationAdvice {
                     + "处理：业务未使用则移除；仍需使用则替换 ant.jar，核对配套 ant-* 包，设置仅服务账户可写的临时目录。\n"
                     + "验证：构建或业务调用测试后复扫。";
         }
-        if (pkg.equals("org.apache.xmlbeans:xmlbeans") && version.equals("2.6.0")
+        if (pkg.equals("org.apache.xmlbeans:xmlbeans") && (version.equals("2.3.0") || version.equals("2.6.0"))
                 && known(members, "CVE-2021-23926")) {
             return prefix + "问题：XML 外部实体解析可能读取服务器文件或发起外部请求。\n"
                     + "建议目标：org.apache.xmlbeans:xmlbeans:5.3.0，与 POI 5.5.1 的声明依赖一致。\n"
@@ -35,12 +35,12 @@ final class Java8RemediationAdvice {
                     + "处理：未使用则移除；仍需使用则向供应方获取 Java 8 修复包。CVE-2023-40743 可评估官方源码补丁并限制不可信服务查找输入；该补丁不覆盖其余漏洞。\n"
                     + "验证：逐项核对补丁覆盖范围，测试 SOAP 调用和错误主机名证书拒绝行为后复扫。";
         }
-        if (pkg.startsWith("org.apache.poi:") && (version.equals("3.7") || version.equals("3.15"))
+        if (pkg.startsWith("org.apache.poi:") && (version.equals("3.7") || version.equals("3.11") || version.equals("3.15"))
                 && known(members, "CVE-2017-12626", "CVE-2019-12415", "CVE-2017-5644", "CVE-2014-9527",
                     "CVE-2014-3574", "CVE-2014-3529", "CVE-2012-0213", "CVE-2025-31672", "CVE-2022-26336")) {
             return prefix + "问题：恶意 Office 文件可能导致服务不可用或读取服务器文件。\n"
                     + "建议目标：统一 POI 组件至 5.5.1；Java 8 不使用要求 Java 17 的 POI 6.x。\n"
-                    + "处理：清除 3.7、3.15 及 .jar37 等旧副本，配套更新 poi、poi-ooxml 等所用模块及其依赖；原 POI 调用需重新编译、适配。\n"
+                    + "处理：清除 3.7、3.11、3.15 及 .jar37 等旧副本，配套更新 poi、poi-ooxml 等所用模块及其依赖；原 POI 调用需重新编译、适配。\n"
                     + "验证：Excel 导入导出、公式和格式回归后复扫。";
         }
         if (pkg.equals("org.apache.httpcomponents:httpclient") && version.equals("4.5.9")

@@ -28,7 +28,7 @@ class ScanProjectServiceTest {
         r.setLocalPath("/new-repo"); r.setDefaultBranch("master"); r.setRemoteUrl("git@example.com:group/repo.git"); return r;
     }
     @Test void editsLocalMetadataAndValidatesRepositoryWithoutChangingRegistrationTime() {
-        ScanProject p = project(ProjectSourceType.LOCAL); LocalDateTime created = p.getCreatedAt();
+        ScanProject p = project(ProjectSourceType.LOCAL); p.setTargetJavaVersion(11); LocalDateTime created = p.getCreatedAt();
         when(git.validateLocalRepository("/new-repo")).thenReturn(Path.of("/new-repo"));
         CreateProjectRequest request = request(ProjectSourceType.LOCAL); request.setTargetJavaVersion(8);
         ScanProject updated = service.update(1L, request);
@@ -59,4 +59,11 @@ class ScanProjectServiceTest {
         assertThrows(BusinessException.class, () -> service.update(1L, request(ProjectSourceType.LOCAL)));
         verifyNoInteractions(git); verify(mapper, never()).update(any());
     }
+    @Test void javaVersionCanBeClearedWhenItIsNoLongerConfirmed() {
+        ScanProject p = project(ProjectSourceType.LOCAL); p.setTargetJavaVersion(11);
+        when(git.validateLocalRepository("/new-repo")).thenReturn(Path.of("/new-repo"));
+        assertNull(service.update(1L, request(ProjectSourceType.LOCAL)).getTargetJavaVersion());
+        verify(mapper).update(p);
+    }
+
 }

@@ -76,8 +76,22 @@ public final class DependencyRemediationAdvice {
     public static String compact(List<FindingView> members) { return compact(members, null); }
 
     public static String compact(List<FindingView> members, Integer javaVersion) {
+        String advice = compactBody(members, javaVersion);
+        List<io.codesentry.finding.model.OnlineRemediationEvidence> evidence = members.stream()
+                .map(FindingView::getOnlineRemediation).filter(Objects::nonNull).distinct().collect(java.util.stream.Collectors.toList());
+        if (evidence.isEmpty()) return advice;
+        long compatible = evidence.stream().filter(e -> e.verifiedTargets.values().stream()
+                .anyMatch(v -> javaVersion != null && v <= javaVersion)).count();
+        String status = evidence.stream().allMatch(e -> "FOUND".equals(e.status)) ? "已取得修复记录" : "部分修复依据尚未确认，详见附录";
+        if (compatible < evidence.size() && evidence.stream().anyMatch(e -> !e.verifiedTargets.isEmpty()))
+            status += "；部分候选版本的 Java 要求未满足或尚未核定";
+        return advice + "\n联网核实：" + status + "。";
+    }
+
+    private static String compactBody(List<FindingView> members, Integer javaVersion) {
         FindingView first = members.get(0);
         if (!isDependency(first)) return codeAdvice(first);
+        if (javaVersion == null) return UnifiedDependencyRemediation.recommend(members, null);
         String java8 = Java8RemediationAdvice.recommend(members, javaVersion);
         if (java8 != null) return java8;
         String signature = value(first.getCodeSnippet()).split("\\R", 2)[0];
@@ -102,38 +116,11 @@ public final class DependencyRemediationAdvice {
                     + "处理：优先移除；必须使用时评估迁移 Axis2（需改造，不能只换 JAR）；过渡期可按官方补丁处理该漏洞。\n"
                     + "验证：SOAP 调用兼容测试后，复扫全部所列漏洞。";
         }
-        Map<String, List<String>> fixes = new LinkedHashMap<>();
-        List<String> missing = new ArrayList<>();
-        Set<String> explicit = new LinkedHashSet<>();
-        Pattern pattern = Pattern.compile("本漏洞修复版本（扫描时漏洞库记录）：([^。\\n]+)");
-        for (FindingView finding : members) {
-            String text = forFinding(finding);
-            Matcher match = pattern.matcher(text);
-            if (match.find()) fixes.computeIfAbsent(match.group(1), k -> new ArrayList<>()).add(value(finding.getRuleId()));
-            else if (text.contains("当前漏洞库未提供") || text.contains("扫描结果未给出")) missing.add(value(finding.getRuleId()));
-            else explicit.add(text);
-        }
-        List<String> lines = new ArrayList<>();
-        if (!fixes.isEmpty()) {
-            lines.add("修复记录：");
-            fixes.forEach((versions, cves) -> lines.add(String.join("、", cves) + "：" + versions));
-        }
-        if (!missing.isEmpty()) {
-            lines.add(fixes.isEmpty() ? "修复版本：扫描结果未给出，需核实官方方案。"
-                    : "修复版本待核实：" + String.join("、", missing) + "。");
-        }
-        lines.addAll(explicit);
-        if (!fixes.isEmpty() || !missing.isEmpty()) {
-            if (missing.isEmpty() && explicit.isEmpty() && fixes.size() == 1) {
-                String target = fixes.keySet().iterator().next();
-                if (newerNumericRelease(target, installed)) {
-                    lines.add("候选版本：" + target + "（仅针对本组所列漏洞，需验证兼容性）。");
-                }
-            }
-            lines.add("处理：" + DependencyRemediationPlan.steps(members, javaVersion, !missing.isEmpty()));
-            lines.add("验证：" + DependencyRemediationPlan.validation(first));
-        }
-        return String.join("\n", lines);
+        return UnifiedDependencyRemediation.recommend(members, javaVersion);
+    }
+
+    public static List<String> versionRecords(List<FindingView> members) {
+        return UnifiedDependencyRemediation.versionRecords(members);
     }
 
     public static List<String> references(FindingView finding) {
@@ -154,6 +141,8 @@ public final class DependencyRemediationAdvice {
             urls.add("https://commons.apache.org/proper/commons-collections/release_3_2_2.html");
         urls.add("https://maven.apache.org/plugins/maven-shade-plugin/examples/class-relocation.html");
         urls.addAll(Java8RemediationAdvice.references(finding));
+        urls.addAll(VerifiedDependencyRemediation.references(finding));
+        urls.addAll(UnifiedDependencyRemediation.references(finding));
         return new ArrayList<>(urls);
     }
 
@@ -177,20 +166,6 @@ public final class DependencyRemediationAdvice {
                     + "验证：新密钥调用正常，旧密钥已禁用，重新扫描配置文件。";
         }
         return forFinding(f);
-    }
-
-    private static boolean newerNumericRelease(String target, String installed) {
-        if (!target.matches("[0-9]+(?:\\.[0-9]+)*(?:\\.Final)?")
-                || !installed.matches("[0-9]+(?:\\.[0-9]+)*(?:\\.Final)?")) return false;
-        String[] left = target.replace(".Final", "").split("\\.");
-        String[] right = installed.replace(".Final", "").split("\\.");
-        for (int i = 0; i < Math.max(left.length, right.length); i++) {
-            java.math.BigInteger a = new java.math.BigInteger(i < left.length ? left[i] : "0");
-            java.math.BigInteger b = new java.math.BigInteger(i < right.length ? right[i] : "0");
-            int difference = a.compareTo(b);
-            if (difference != 0) return difference > 0;
-        }
-        return false;
     }
 
     private static boolean isDependency(FindingView finding) {

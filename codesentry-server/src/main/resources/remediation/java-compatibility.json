@@ -1,0 +1,274 @@
+{
+  "checkedAt": "2026-11-10",
+  "rules": [
+    {
+      "package": "org\\.apache\\.tomcat(?:\\.embed)?:.*",
+      "versions": "9\\.0\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://tomcat.apache.org/whichversion.html",
+      "preferred": [
+        "9.0.123"
+      ]
+    },
+    {
+      "package": "org\\.apache\\.tomcat(?:\\.embed)?:.*",
+      "versions": "10\\.1\\..*",
+      "java": 11,
+      "branchParts": 2,
+      "source": "https://tomcat.apache.org/whichversion.html"
+    },
+    {
+      "package": "org\\.apache\\.tomcat(?:\\.embed)?:.*",
+      "versions": "11\\.0\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://tomcat.apache.org/whichversion.html"
+    },
+    {
+      "package": "org\\.springframework:.*",
+      "versions": "5\\.[23]\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions",
+      "preferred": [
+        "5.3.50"
+      ],
+      "maxJava": 21
+    },
+    {
+      "package": "org\\.springframework:.*",
+      "versions": "6\\.[01]\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://docs.spring.io/spring-framework/reference/overview.html",
+      "maxJava": 21
+    },
+    {
+      "package": "org\\.springframework:.*",
+      "versions": "6\\.2\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://docs.spring.io/spring-framework/reference/overview.html",
+      "maxJava": 25
+    },
+    {
+      "package": "org\\.springframework:.*",
+      "versions": "7\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://docs.spring.io/spring-framework/reference/overview.html"
+    },
+    {
+      "package": "org\\.springframework\\.boot:.*",
+      "versions": "2\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://docs.spring.io/spring-boot/docs/2.7.18/reference/html/getting-started.html",
+      "preferred": [
+        "2.7.18"
+      ],
+      "maxJava": 21
+    },
+    {
+      "package": "org\\.springframework\\.boot:.*",
+      "versions": "[34]\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide"
+    },
+    {
+      "package": "org\\.springframework\\.security:.*",
+      "versions": "5\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://docs.spring.io/spring-security/site/docs/5.8.18/reference/html5/"
+    },
+    {
+      "package": "org\\.springframework\\.security:.*",
+      "versions": "[67]\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://docs.spring.io/spring-security/reference/prerequisites.html"
+    },
+    {
+      "package": "ch\\.qos\\.logback:.*",
+      "versions": "1\\.[23]\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://logback.qos.ch/download.html"
+    },
+    {
+      "package": "ch\\.qos\\.logback:.*",
+      "versions": "1\\.[456]\\..*",
+      "java": 11,
+      "branchParts": 2,
+      "source": "https://logback.qos.ch/download.html"
+    },
+    {
+      "package": "com\\.fasterxml\\.jackson\\..*:.*",
+      "versions": "2\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://github.com/FasterXML/jackson-core",
+      "preferred": [
+        "2.21.7"
+      ]
+    },
+    {
+      "package": "(?:com\\.fasterxml|tools)\\.jackson\\..*:.*",
+      "versions": "3\\..*",
+      "java": 17,
+      "branchParts": 2,
+      "source": "https://github.com/FasterXML/jackson-core"
+    },
+    {
+      "package": "org\\.apache\\.logging\\.log4j:.*",
+      "versions": "2\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://logging.apache.org/log4j/2.x/manual/installation.html",
+      "preferred": [
+        "2.26.1"
+      ]
+    },
+    {
+      "package": "io\\.netty:.*",
+      "versions": "4\\.1\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://netty.io/wiki/requirements-for-4.x.html"
+    },
+    {
+      "package": "io\\.micrometer:micrometer-core",
+      "versions": "1\\..*",
+      "java": 8,
+      "branchParts": 2,
+      "source": "https://github.com/micrometer-metrics/micrometer"
+    },
+    {
+      "package": "com\\.google\\.guava:guava",
+      "versions": "(?:3[2-9])\\..*-jre",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/google/guava",
+      "preferred": [
+        "33.8.0-jre"
+      ]
+    },
+    {
+      "package": "commons-collections:commons-collections",
+      "versions": "3\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://commons.apache.org/proper/commons-collections/release_3_2_2.html"
+    },
+    {
+      "package": "commons-beanutils:commons-beanutils",
+      "versions": "1\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://commons.apache.org/proper/commons-beanutils/"
+    },
+    {
+      "package": "commons-fileupload:commons-fileupload",
+      "versions": "1\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://commons.apache.org/proper/commons-fileupload/"
+    },
+    {
+      "package": "commons-io:commons-io",
+      "versions": "2\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://commons.apache.org/proper/commons-io/"
+    },
+    {
+      "package": "org\\.apache\\.commons:commons-lang3",
+      "versions": "3\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://commons.apache.org/proper/commons-lang/changes.html"
+    },
+    {
+      "package": "cn\\.hutool:.*",
+      "versions": "5\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://hutool.cn/",
+      "preferred": [
+        "5.8.24"
+      ]
+    },
+    {
+      "package": "org\\.apache\\.poi:.*",
+      "versions": "[345]\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://poi.apache.org/help/faq"
+    },
+    {
+      "package": "org\\.apache\\.xmlbeans:xmlbeans",
+      "versions": "[345]\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://xmlbeans.apache.org/"
+    },
+    {
+      "package": "com\\.itextpdf:itextpdf",
+      "versions": "5\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/itext/itextpdf",
+      "preferred": [
+        "5.5.13.4"
+      ]
+    },
+    {
+      "package": "com\\.squareup\\.okhttp3:okhttp",
+      "versions": "4\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/square/okhttp"
+    },
+    {
+      "package": "com\\.squareup\\.okio:okio",
+      "versions": "[13]\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/square/okio"
+    },
+    {
+      "package": "io\\.springfox:springfox-swagger-ui",
+      "versions": "2\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/springfox/springfox"
+    },
+    {
+      "package": "org\\.bouncycastle:.*-jdk18on",
+      "versions": "1\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://www.bouncycastle.org/download/bouncy-castle-java/",
+      "preferred": [
+        "1.85"
+      ]
+    },
+    {
+      "package": "io\\.minio:minio",
+      "versions": "8\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/minio/minio-java"
+    },
+    {
+      "package": "org\\.yaml:snakeyaml",
+      "versions": "[12]\\..*",
+      "java": 8,
+      "branchParts": 0,
+      "source": "https://github.com/snakeyaml/snakeyaml"
+    }
+  ]
+}

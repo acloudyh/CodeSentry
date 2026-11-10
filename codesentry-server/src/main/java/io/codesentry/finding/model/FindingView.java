@@ -3,6 +3,10 @@ package io.codesentry.finding.model;
 import java.time.LocalDateTime;
 
 public class FindingView extends ScanFinding {
+    private OnlineRemediationEvidence onlineRemediation;
+    public OnlineRemediationEvidence getOnlineRemediation() { return onlineRemediation; }
+    public void setOnlineRemediation(OnlineRemediationEvidence value) { onlineRemediation = value; }
+
 
     private Long instanceId;
     private Long scanRunId;

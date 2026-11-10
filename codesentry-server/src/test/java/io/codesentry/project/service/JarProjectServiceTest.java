@@ -20,7 +20,7 @@ class JarProjectServiceTest {
     private final ScanProject project = new ScanProject();
     private JarProjectService service() throws Exception {
         CodeSentryProperties props = new CodeSentryProperties(); props.getStorage().setRoot(temp.toString());
-        project.setId(1L); project.setSourceType(ProjectSourceType.JAR_UPLOAD); project.setEnabled(true);
+        project.setTargetJavaVersion(8); project.setId(1L); project.setSourceType(ProjectSourceType.JAR_UPLOAD); project.setEnabled(true);
         Path old = Files.createDirectories(temp.resolve("old")).resolve("original.jar"); Files.writeString(old, "original bytes");
         project.setLocalPath(old.toString()); project.setManagedPath(old.getParent().toString()); project.setProjectName("original");
         when(projects.findByIdForUpdate(1L)).thenReturn(project); when(projects.update(any())).thenReturn(1);
@@ -64,4 +64,15 @@ class JarProjectServiceTest {
         assertTrue(Files.exists(original));
         try (var files = Files.list(temp.resolve("uploads"))) { assertEquals(0, files.count()); }
     }
+    @Test void javaVersionCanBeChangedTogetherWithTheJar() throws Exception {
+        JarProjectService service = service(); String original = project.getLocalPath();
+        ScanProject updated = service.update(1L, "new", 17, replacement());
+        assertEquals(17, updated.getTargetJavaVersion()); assertNotEquals(original, updated.getLocalPath());
+        verify(projects).update(updated);
+    }
+    @Test void javaVersionCanBeClearedWhenItIsNoLongerConfirmed() throws Exception {
+        JarProjectService service = service();
+        assertNull(service.update(1L, "renamed", null, null).getTargetJavaVersion());
+    }
+
 }

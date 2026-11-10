@@ -1,0 +1,115 @@
+{
+  "checkedAt": "2026-11-10",
+  "findings": [
+    {
+      "package": "com.fasterxml.jackson.core:jackson-core",
+      "cve": "CVE-2025-52999",
+      "versions": [
+        "2.15.0"
+      ],
+      "laterBranches": true,
+      "source": "https://github.com/FasterXML/jackson-core/security/advisories/GHSA-h46c-h94j-95f3"
+    },
+    {
+      "package": "com.fasterxml.jackson.core:jackson-databind",
+      "cve": "CVE-2022-42003",
+      "versions": [
+        "2.14.0"
+      ],
+      "laterBranches": true,
+      "source": "https://github.com/advisories/GHSA-jjjh-jjxp-wpff"
+    },
+    {
+      "package": "com.fasterxml.jackson.core:jackson-databind",
+      "cve": "CVE-2022-42004",
+      "versions": [
+        "2.14.0"
+      ],
+      "laterBranches": true,
+      "source": "https://github.com/advisories/GHSA-rgv9-q543-rqg4"
+    },
+    {
+      "package": "com.fasterxml.jackson.core:jackson-databind",
+      "cve": "CVE-2026-19032",
+      "versions": [
+        "2.21.6",
+        "2.22.2",
+        "3.1.4"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-wjgm-6hv5-3cvf"
+    },
+    {
+      "package": "org.bouncycastle:bcprov-jdk15on",
+      "cve": "CVE-2023-33201",
+      "versions": [
+        "1.74"
+      ],
+      "laterBranches": false,
+      "source": "https://www.bouncycastle.org/resources/java-release-1-74-is-now-available-for-download/"
+    },
+    {
+      "package": "com.fasterxml.jackson.core:jackson-databind",
+      "cve": "CVE-2026-50193",
+      "versions": [
+        "2.14.0"
+      ],
+      "laterBranches": true,
+      "source": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-3wrr-7qpf-2prh"
+    },
+    {
+      "package": "cn.hutool:hutool-core",
+      "cve": "CVE-2023-42276",
+      "versions": [
+        "5.8.22"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/chinabugotech/hutool/commit/9ba8f9ca5dd32441f2e0f150cb22fa178bb771d3"
+    },
+    {
+      "package": "cn.hutool:hutool-core",
+      "cve": "CVE-2023-42277",
+      "versions": [
+        "5.8.22"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/chinabugotech/hutool/commit/9ba8f9ca5dd32441f2e0f150cb22fa178bb771d3"
+    },
+    {
+      "package": "cn.hutool:hutool-json",
+      "cve": "CVE-2023-42276",
+      "versions": [
+        "5.8.22"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/chinabugotech/hutool/commit/9ba8f9ca5dd32441f2e0f150cb22fa178bb771d3"
+    },
+    {
+      "package": "cn.hutool:hutool-json",
+      "cve": "CVE-2023-42277",
+      "versions": [
+        "5.8.22"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/chinabugotech/hutool/commit/9ba8f9ca5dd32441f2e0f150cb22fa178bb771d3"
+    },
+    {
+      "package": "cn.hutool:hutool-all",
+      "cve": "CVE-2023-42276",
+      "versions": [
+        "5.8.22"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/chinabugotech/hutool/commit/9ba8f9ca5dd32441f2e0f150cb22fa178bb771d3"
+    },
+    {
+      "package": "cn.hutool:hutool-all",
+      "cve": "CVE-2023-42277",
+      "versions": [
+        "5.8.22"
+      ],
+      "laterBranches": false,
+      "source": "https://github.com/chinabugotech/hutool/commit/9ba8f9ca5dd32441f2e0f150cb22fa178bb771d3"
+    }
+  ]
+}

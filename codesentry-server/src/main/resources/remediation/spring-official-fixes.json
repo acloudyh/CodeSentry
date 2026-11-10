@@ -1,0 +1,647 @@
+{
+  "checkedAt": "2026-11-10",
+  "findings": {
+    "CVE-2023-20860": {
+      "url": "https://spring.io/security/cve-2023-20860/",
+      "versions": [
+        {
+          "version": "6.0.7",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.26",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2023-20861": {
+      "url": "https://spring.io/security/cve-2023-20861/",
+      "versions": [
+        {
+          "version": "6.0.7",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.26",
+          "enterprise": false
+        },
+        {
+          "version": "5.2.23.RELEASE",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2023-20863": {
+      "url": "https://spring.io/security/cve-2023-20863/",
+      "versions": [
+        {
+          "version": "6.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.27",
+          "enterprise": false
+        },
+        {
+          "version": "5.2.24.RELEASE",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2024-22243": {
+      "url": "https://spring.io/security/cve-2024-22243/",
+      "versions": [
+        {
+          "version": "6.1.4",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.17",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.32",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2024-22259": {
+      "url": "https://spring.io/security/cve-2024-22259/",
+      "versions": [
+        {
+          "version": "6.1.5",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.18",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.33",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2024-22262": {
+      "url": "https://spring.io/security/cve-2024-22262/",
+      "versions": [
+        {
+          "version": "6.1.6",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.19",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.34",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2024-38808": {
+      "url": "https://spring.io/security/cve-2024-38808/",
+      "versions": [
+        {
+          "version": "5.3.39",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2024-38809": {
+      "url": "https://spring.io/security/cve-2024-38809/",
+      "versions": [
+        {
+          "version": "6.1.12",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.23",
+          "enterprise": false
+        },
+        {
+          "version": "5.3.38",
+          "enterprise": false
+        }
+      ]
+    },
+    "CVE-2024-38816": {
+      "url": "https://spring.io/security/cve-2024-38816/",
+      "versions": [
+        {
+          "version": "6.1.13",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.24",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.40",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2024-38819": {
+      "url": "https://spring.io/security/cve-2024-38819/",
+      "versions": [
+        {
+          "version": "6.1.14",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.25",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.41",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2024-38820": {
+      "url": "https://spring.io/security/cve-2024-38820/",
+      "versions": [
+        {
+          "version": "6.1.14",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.25",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.41",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2024-38828": {
+      "url": "https://spring.io/security/cve-2024-38828/",
+      "versions": [
+        {
+          "version": "5.3.42",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2025-22233": {
+      "url": "https://spring.io/security/cve-2025-22233/",
+      "versions": [
+        {
+          "version": "6.2.7",
+          "enterprise": false
+        },
+        {
+          "version": "6.1.20",
+          "enterprise": false
+        },
+        {
+          "version": "6.0.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.43",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2025-41242": {
+      "url": "https://spring.io/security/cve-2025-41242/",
+      "versions": [
+        {
+          "version": "6.2.10",
+          "enterprise": false
+        },
+        {
+          "version": "6.1.22",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.44",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-22735": {
+      "url": "https://spring.io/security/cve-2026-22735/",
+      "versions": [
+        {
+          "version": "7.0.6",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.17",
+          "enterprise": false
+        },
+        {
+          "version": "6.1.26",
+          "enterprise": true
+        },
+        {
+          "version": "6.0.31",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.47",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-22737": {
+      "url": "https://spring.io/security/cve-2026-22737/",
+      "versions": [
+        {
+          "version": "7.0.6",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.17",
+          "enterprise": false
+        },
+        {
+          "version": "6.1.26",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.47",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-22741": {
+      "url": "https://spring.io/security/cve-2026-22741/",
+      "versions": [
+        {
+          "version": "7.0.7",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18",
+          "enterprise": false
+        },
+        {
+          "version": "6.1.27",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.48",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-22745": {
+      "url": "https://spring.io/security/cve-2026-22745/",
+      "versions": [
+        {
+          "version": "7.0.7",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18",
+          "enterprise": false
+        },
+        {
+          "version": "6.1.27",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.48",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41841": {
+      "url": "https://spring.io/security/cve-2026-41841/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41842": {
+      "url": "https://spring.io/security/cve-2026-41842/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41843": {
+      "url": "https://spring.io/security/cve-2026-41843/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41844": {
+      "url": "https://spring.io/security/cve-2026-41844/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41845": {
+      "url": "https://spring.io/security/cve-2026-41845/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41846": {
+      "url": "https://spring.io/security/cve-2026-41846/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41849": {
+      "url": "https://spring.io/security/cve-2026-41849/",
+      "versions": [
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41850": {
+      "url": "https://spring.io/security/cve-2026-41850/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41851": {
+      "url": "https://spring.io/security/cve-2026-41851/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41852": {
+      "url": "https://spring.io/security/cve-2026-41852/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-41853": {
+      "url": "https://spring.io/security/cve-2026-41853/",
+      "versions": [
+        {
+          "version": "7.0.8",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.7.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.19",
+          "enterprise": false
+        },
+        {
+          "version": "6.2.18.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.28",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.49",
+          "enterprise": true
+        }
+      ]
+    },
+    "CVE-2026-47884": {
+      "url": "https://spring.io/security/cve-2026-47884/",
+      "versions": [
+        {
+          "version": "7.0.9",
+          "enterprise": false
+        },
+        {
+          "version": "7.0.8.1",
+          "enterprise": true
+        },
+        {
+          "version": "6.2.20",
+          "enterprise": true
+        },
+        {
+          "version": "6.1.29",
+          "enterprise": true
+        },
+        {
+          "version": "6.0.31",
+          "enterprise": true
+        },
+        {
+          "version": "5.3.50",
+          "enterprise": true
+        },
+        {
+          "version": "5.2.26",
+          "enterprise": true
+        }
+      ]
+    }
+  }
+}
