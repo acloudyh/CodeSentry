@@ -484,5 +484,44 @@ class RemediationReportServiceTest {
         }
     }
 
+    @Test void pdfRetainsHtmlTablesAndStartsEverySectionOnANewPage() throws Exception {
+        ScanRunService runs=mock(ScanRunService.class);ScanProjectService projects=mock(ScanProjectService.class);
+        FindingPersistenceService findings=mock(FindingPersistenceService.class);AiReviewService ai=mock(AiReviewService.class);
+        ScanRun run=reportRun(8L,LocalDateTime.of(2026,11,10,12,0));
+        ScanProject project=new ScanProject();project.setId(1L);project.setProjectName("PDF 连续分页");project.setTargetJavaVersion(8);
+        java.util.List<FindingView> members=new java.util.ArrayList<>();java.util.List<AiReviewSummary> summaries=new java.util.ArrayList<>();
+        for(int i=0;i<12;i++) {
+            FindingView f=dependencyFinding(500L+i,"CVE-2026-"+(90000+i),"A long component vulnerability title for pagination testing", "lib/sample.jar", "commons-io:commons-io@2.11.0");
+            f.setRecommendation("升级到修复版本：2.14.0");members.add(f);
+            summaries.add(aiSummary(f.getId(),"CONFIRMED",true,false,"COMPLETED"));
+        }
+        when(runs.requireById(8L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);
+        java.util.List<FindingView> raw=new java.util.ArrayList<>(members);
+        raw.add(finding(999L,"排除项","FALSE_POSITIVE"));
+        when(findings.findByRunId(8L)).thenReturn(raw);when(ai.latestForRun(8L)).thenReturn(summaries);
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,ai,snapshotStore());
+        try(org.apache.pdfbox.pdmodel.PDDocument pdf=org.apache.pdfbox.pdmodel.PDDocument.load(service.exportPdf(8L))) {
+            assertTrue(pdf.getPage(0).getMediaBox().getWidth()>pdf.getPage(0).getMediaBox().getHeight());
+            String text=new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).replaceAll("\\s+", "");
+            for(int i=0;i<12;i++){assertTrue(text.contains("CVE-2026-"+(90000+i)));assertTrue(text.contains("F-"+(500+i)));}
+            assertTrue(text.contains("工具复核"));assertTrue(text.contains("确认风险"));
+            org.apache.pdfbox.text.PDFTextStripper stripper=new org.apache.pdfbox.text.PDFTextStripper();
+            stripper.setSortByPosition(true);stripper.setStartPage(1);stripper.setEndPage(1);
+            String first=stripper.getText(pdf);
+            assertTrue(first.contains("扫描基线"));assertTrue(first.contains("数量说明"));
+            assertFalse(first.contains("问题明细与整改建议"));
+            int previous=0;
+            for(String heading:List.of("问题明细与整改建议","未纳入整改的问题及原因","附录：整改版本依据")) {
+                boolean found=false;
+                for(int page=2;page<=pdf.getNumberOfPages();page++) {
+                    stripper.setStartPage(page);stripper.setEndPage(page);
+                    String content=stripper.getText(pdf).strip();
+                    if(content.startsWith(heading)) {assertTrue(page>previous);previous=page;found=true;break;}
+                }
+                assertTrue(found,"section did not start on a fresh page: "+heading);
+            }
+
+        }
+    }
 
 }

@@ -117,7 +117,7 @@ public class RemediationReportService {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFastMode();
-            builder.withHtmlContent(buildHtml(data), null);
+            builder.withHtmlContent(buildPdfHtml(data), null);
             builder.useFont(resolvePdfSongFont(), "CodeSentrySong");
             builder.useFont(resolvePdfHeiFont(), "CodeSentryHei");
             builder.toStream(output);
@@ -285,6 +285,28 @@ public class RemediationReportService {
         return new ReportData(run, project, visible, aiReviews, raw);
     }
 
+
+    /** Keep the browser's table layout; only adapt spacing and pagination for PDF. */
+    private String buildPdfHtml(ReportData data) {
+        String html = buildHtml(data);
+        for (String heading : Arrays.asList("问题明细与整改建议", "未纳入整改的问题及原因", "附录：整改版本依据")) {
+            html = html.replace("<h2>" + heading + "</h2>", "<h2 class=\"pdf-section\">" + heading + "</h2>");
+        }
+        String css = "@page{size:A4 landscape;margin:10mm 10mm 13mm;"
+                + "@bottom-center{content:'第 ' counter(page) ' / ' counter(pages) ' 页';font-family:'CodeSentrySong';font-size:9px;color:#66796e}}"
+                + "body{font-size:12px;line-height:1.35}.wrap{padding:0}.cover{padding:17px 22px;margin-bottom:12px}"
+                + "h1{font-size:25px;margin:9px 0 6px}.brand{font-size:11px}.meta{font-size:10px}"
+                + ".summary-table{margin:0 0 12px;border-spacing:6px 0;page-break-inside:avoid}.summary-table td{padding:11px 12px}.summary-table b{font-size:22px;margin-top:4px}"
+                + ".card{padding:12px 14px;margin-bottom:12px;page-break-inside:auto}.count-card{page-break-inside:avoid}.count-card>b{font-size:15px}"
+                + ".count-lines{font-size:12px;line-height:1.4;margin-top:8px}.count-lines th,.count-lines td{padding:6px 0}.count-note{font-size:10px;margin-top:2px}"
+                + ".card p{margin:7px 0}.foot{font-size:9px;line-height:1.35;margin:8px 0}"
+                + "h2.pdf-section{page-break-before:always;page-break-after:avoid;font-size:18px;margin:0 0 10px;padding-top:0}"
+                + ".data{-fs-table-paginate:paginate;font-size:10px;line-height:1.35}.data thead{display:table-header-group}"
+                + ".data tr,.data td{page-break-inside:auto}.data th,.data td{padding:7px 6px}.data th{font-size:10px}"
+                + ".group-review{margin:0 0 6px;padding-bottom:6px}.card>b{page-break-after:avoid}"
+                + "a,code,pre{word-wrap:break-word}p{orphans:2;widows:2}";
+        return html.replace("</style>", css + "</style>");
+    }
 
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
