@@ -35,6 +35,11 @@ public class ReportController {
         return ApiResponse.success(service.includedFindingIds(runId));
     }
 
+    @GetMapping("/scan-runs/{runId}/excluded-findings")
+    public ApiResponse<List<io.codesentry.report.dto.ReportExclusion>> excludedFindings(@PathVariable Long runId) {
+        return ApiResponse.success(service.excludedFindings(runId));
+    }
+
     @GetMapping(value = "/scan-runs/{runId}/html", produces = "text/html;charset=UTF-8")
     public ResponseEntity<byte[]> exportHtml(@PathVariable Long runId) {
         HttpHeaders headers = new HttpHeaders();

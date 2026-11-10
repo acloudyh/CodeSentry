@@ -12,9 +12,19 @@ public class RemediationReportSummary {
     private final int totalFindings;
     private final int newFindings;
     private final LocalDateTime createdAt;
+    private final int ledgerFindings;
+    private final int detailGroups;
+    private final int notIncludedFindings;
 
     public RemediationReportSummary(Long id, Long projectId, ScanMode scanMode, ScanRunStatus status,
                                     int totalFindings, int newFindings, LocalDateTime createdAt) {
+        this(id, projectId, scanMode, status, totalFindings, newFindings, createdAt,
+                totalFindings, totalFindings, 0);
+    }
+
+    public RemediationReportSummary(Long id, Long projectId, ScanMode scanMode, ScanRunStatus status,
+                                    int totalFindings, int newFindings, LocalDateTime createdAt,
+                                    int ledgerFindings, int detailGroups, int notIncludedFindings) {
         this.id = id;
         this.projectId = projectId;
         this.scanMode = scanMode;
@@ -22,6 +32,9 @@ public class RemediationReportSummary {
         this.totalFindings = totalFindings;
         this.newFindings = newFindings;
         this.createdAt = createdAt;
+        this.ledgerFindings = ledgerFindings;
+        this.detailGroups = detailGroups;
+        this.notIncludedFindings = notIncludedFindings;
     }
 
     public Long getId() { return id; }
@@ -31,4 +44,7 @@ public class RemediationReportSummary {
     public int getTotalFindings() { return totalFindings; }
     public int getNewFindings() { return newFindings; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public int getLedgerFindings() { return ledgerFindings; }
+    public int getDetailGroups() { return detailGroups; }
+    public int getNotIncludedFindings() { return notIncludedFindings; }
 }

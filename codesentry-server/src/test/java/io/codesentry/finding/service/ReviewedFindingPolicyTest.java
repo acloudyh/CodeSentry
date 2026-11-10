@@ -23,12 +23,14 @@ class ReviewedFindingPolicyTest {
         r.setPromptVersion(AiReviewService.PROMPT_VERSION); r.setInputHash("evidence");
         r.setConfidence(new BigDecimal(confidence)); return r;
     }
-    @Test void eachRoundMustBeStrictlyAbove65NotAverageOrRoundedValue() {
-        assertTrue(ReviewedFindingPolicy.isEligible(finding(), summary("0.6501", "0.66")));
-        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.65", "0.99")));
-        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.99", "0.65")));
-        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.64", "0.99")));
-        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.99", "0.64")));
+    @Test void eachRoundMustBeStrictlyAbove50NotAverageOrRoundedValue() {
+        assertTrue(ReviewedFindingPolicy.isEligible(finding(), summary("0.5001", "0.51")));
+        assertTrue(ReviewedFindingPolicy.isEligible(finding(), summary("0.55", "0.60")));
+        assertTrue(ReviewedFindingPolicy.exclusionReason(finding(), summary("0.50", "0.99")).contains("均必须大于 50%"));
+        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.50", "0.99")));
+        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.99", "0.50")));
+        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.49", "0.99")));
+        assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("0.99", "0.49")));
         assertFalse(ReviewedFindingPolicy.isEligible(finding(), summary("1.01", "0.99")));
     }
     @Test void anyRoundOrHumanFalsePositiveIsExcludedEvenWithHighConfidence() {
@@ -43,7 +45,7 @@ class ReviewedFindingPolicyTest {
     @Test void failuresMissingReviewsAndLowConfidenceAreExcludedWithoutHumanConfirmation() {
         FindingView f = finding();
         assertFalse(ReviewedFindingPolicy.isEligible(f, null));
-        assertFalse(ReviewedFindingPolicy.isEligible(f, summary("0.65", "0.99")));
+        assertFalse(ReviewedFindingPolicy.isEligible(f, summary("0.50", "0.99")));
         AiReviewSummary s = summary("0.9", "0.9"); s.setStatus("FAILED");
         assertFalse(ReviewedFindingPolicy.isEligible(f, s));
         s.setStatus("COMPLETED"); s.setVerificationReview(null);

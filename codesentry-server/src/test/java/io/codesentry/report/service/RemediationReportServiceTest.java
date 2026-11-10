@@ -23,6 +23,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class RemediationReportServiceTest {
+    private String riskBody(String html) {
+        return html.substring(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
+    }
+
     private ReportSnapshotStore snapshotStore() {
         ReportSnapshotStore store = mock(ReportSnapshotStore.class);
         when(store.read(org.mockito.ArgumentMatchers.anyLong())).thenReturn(null);
@@ -75,12 +79,12 @@ class RemediationReportServiceTest {
 
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
 
-        assertFalse(html.contains("AI_AUTO_EXCLUDED"));
-        assertFalse(html.contains("MANUAL_FALSE_POSITIVE"));
+        assertFalse(riskBody(html).contains("AI_AUTO_EXCLUDED"));
+        assertFalse(riskBody(html).contains("MANUAL_FALSE_POSITIVE"));
         assertTrue(html.contains("HUMAN_CONFIRMED_VISIBLE"));
         assertTrue(html.contains("AI_DISAGREEMENT_VISIBLE"));
-        assertFalse(html.contains("OLD_AI_PROTOCOL_VISIBLE"));
-        assertFalse(html.contains("DIFFERENT_AI_EVIDENCE_VISIBLE"));
+        assertFalse(riskBody(html).contains("OLD_AI_PROTOCOL_VISIBLE"));
+        assertFalse(riskBody(html).contains("DIFFERENT_AI_EVIDENCE_VISIBLE"));
         assertFalse(html.contains("误报已排除"));
         assertFalse(html.contains("默认报告已排除"));
     }
@@ -110,7 +114,45 @@ class RemediationReportServiceTest {
         assertEquals(1, summary.getTotalFindings());
         assertEquals(1, summary.getNewFindings());
         assertTrue(html.contains("VISIBLE"));
-        assertFalse(html.contains("EXCLUDED"));
+        assertFalse(riskBody(html).contains("EXCLUDED"));
+    }
+
+    @Test
+    void distinguishesLedgerIssueCountsFromMergedReportGroups() {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService reviews = mock(AiReviewService.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
+        ScanRun run = reportRun(47L, LocalDateTime.of(2026, 11, 10, 17, 45));
+        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
+        List<FindingView> raw = new java.util.ArrayList<>();
+        for (int i = 0; i < 145; i++) {
+            int component = i % 41;
+            raw.add(dependencyFinding(1000L + i, "CVE-2026-" + (10000 + i), "组件风险",
+                    "app.jar/BOOT-INF/lib/lib-" + component + "-1.0.jar", "example:lib-" + component + "@1.0"));
+        }
+        for (int i = 0; i < 12; i++) raw.add(finding(2000L + i, "未纳入项" + i, "FALSE_POSITIVE"));
+        when(runs.recent(100)).thenReturn(List.of(run));
+        when(runs.requireById(47L)).thenReturn(run);
+        when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(47L)).thenReturn(raw);
+        when(reviews.latestForRun(47L)).thenReturn(List.of());
+
+        io.codesentry.report.dto.RemediationReportSummary summary = service.recent(100).get(0);
+        assertEquals(157, summary.getLedgerFindings());
+        assertEquals(145, summary.getTotalFindings());
+        assertEquals(41, summary.getDetailGroups());
+        assertEquals(12, summary.getNotIncludedFindings());
+        List<io.codesentry.report.dto.ReportExclusion> excluded = service.excludedFindings(47L);
+        assertEquals(12, excluded.size());
+        assertTrue(excluded.stream().allMatch(item -> "人工判定误报".equals(item.getReason())));
+        assertEquals(12, excluded.stream().map(io.codesentry.report.dto.ReportExclusion::getFindingId).distinct().count());
+        String html = new String(service.exportHtml(47L), StandardCharsets.UTF_8);
+        assertTrue(html.contains("157 条台账问题 = 145 条纳入整改 + 12 条未纳入"));
+        String body = html.substring(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
+        assertEquals(41, body.split("</td></tr>", -1).length - 1);
+        assertTrue(html.contains("合并为 41 组整改项"));
     }
 
     @Test
@@ -148,7 +190,7 @@ class RemediationReportServiceTest {
         AiReviewService reviews = mock(AiReviewService.class);
         RemediationReportService service = new RemediationReportService(runs, projects, findings, reviews, snapshotStore());
         ScanRun run = reportRun(8L, LocalDateTime.of(2026, 11, 1, 10, 0));
-        ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
+        ScanProject project = new ScanProject(); project.setTargetJavaVersion(11); project.setId(1L); project.setProjectName("测试项目");
         FindingView first = log4jFinding(201L, "CVE-2022-23302", "JMSSink 远程代码执行");
         FindingView second = log4jFinding(202L, "CVE-2021-4104", "JMSAppender 远程代码执行");
         FindingView poiFirst = dependencyFinding(203L, "CVE-2017-5644", "Apache POI 远程攻击",
@@ -187,9 +229,10 @@ class RemediationReportServiceTest {
             assertTrue(report.contains("CVE-2017-5644"));
             assertTrue(report.contains("CVE-2014-9527"));
             assertTrue(report.contains("POI 另一版本风险"));
+            assertTrue(report.contains("5 条台账问题 = 5 条纳入整改 + 0 条未纳入"));
             assertFalse(report.contains("POI 组件存在 3 个已知漏洞（合并整改）"));
         }
-        assertTrue(html.contains("统计仍按 CVE 数量计算"));
+        assertEquals(3, riskBody(html).split("</td></tr>", -1).length - 1);
     }
 
     @Test
@@ -257,11 +300,16 @@ class RemediationReportServiceTest {
         when(findings.findByRunId(8L)).thenReturn(List.of(poi));when(reviews.latestForRun(8L)).thenReturn(List.of());
         String html = new String(service.exportHtml(8L),StandardCharsets.UTF_8);
         assertTrue(html.contains("业务 Java 版本：Java 8"));assertTrue(html.contains("统一 POI 组件至 5.5.1"));
+        assertFalse(html.contains("规则集：")); assertFalse(html.contains("两者分别统计"));
+        assertFalse(html.contains("项目约束："));
+        assertEquals(1, html.split("业务 Java 版本：", -1).length - 1);
         try (org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(
                 new java.io.ByteArrayInputStream(service.exportDocx(8L)))) {
             String text = document.getParagraphs().stream().map(org.apache.poi.xwpf.usermodel.XWPFParagraph::getText)
                     .collect(java.util.stream.Collectors.joining("\n"));
             assertTrue(text.contains("业务 Java 版本：Java 8"));assertTrue(text.contains("统一 POI 组件至 5.5.1"));
+            assertFalse(text.contains("规则集：")); assertFalse(text.contains("两者分别统计"));
+            assertFalse(document.getDocument().xmlText().contains("项目约束："));
         }
         project.setTargetJavaVersion(null);
         assertFalse(new String(service.exportHtml(8L),StandardCharsets.UTF_8).contains("统一 POI 组件至 5.5.1"));
@@ -412,4 +460,29 @@ class RemediationReportServiceTest {
         record.setInputHash("same-evidence-hash");
         return record;
     }
+    @Test
+    void archivedOnlineEvidenceFeedsReportsWithoutAnyNetworkRequest() throws Exception {
+        ScanRunService runs=mock(ScanRunService.class); ScanProjectService projects=mock(ScanProjectService.class);
+        FindingPersistenceService findings=mock(FindingPersistenceService.class); AiReviewService ai=mock(AiReviewService.class);
+        ScanRun run=reportRun(8L,LocalDateTime.of(2026,11,10,12,0));
+        run.setNetworkMode(io.codesentry.scan.model.NetworkMode.ONLINE);
+        run.setRemediationMessage("联网核实 1 项，取得可核实版本 1 项");
+        run.setRemediationEvidence("{\"entries\":[{\"coordinate\":\"example:library\",\"installedVersion\":\"2.0.0\",\"cve\":\"CVE-2023-1111\",\"checkedAt\":\"2026-11-10T12:00:00Z\",\"status\":\"FOUND\",\"fixedVersions\":[\"2.0.1\"],\"verifiedTargets\":{\"2.0.1\":8},\"sources\":[\"https://osv.dev/vulnerability/GHSA-test\"]}]}");
+        ScanProject project=new ScanProject(); project.setId(1L); project.setProjectName("联网报告"); project.setTargetJavaVersion(8);
+        FindingView f=dependencyFinding(999L,"CVE-2023-1111","Test dependency","lib/test.jar","example:library@2.0.0");
+        when(runs.requireById(8L)).thenReturn(run); when(projects.requireById(1L)).thenReturn(project);
+        when(findings.findByRunId(8L)).thenReturn(List.of(f)); when(ai.latestForRun(8L)).thenReturn(List.of());
+        ReportSnapshotStore snapshots=snapshotStore(); when(snapshots.read(8L)).thenReturn(List.of(f));
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,ai,snapshots);
+        String html=new String(service.exportHtml(8L),StandardCharsets.UTF_8);
+        assertTrue(html.contains("联网扫描：联网核实 1 项"));
+        assertTrue(html.contains("统一候选版本：example:library:2.0.1"));
+        assertTrue(html.contains("2026-11-10T12:00:00Z")); assertTrue(html.contains("https://osv.dev/vulnerability/GHSA-test"));
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument doc=new org.apache.poi.xwpf.usermodel.XWPFDocument(new java.io.ByteArrayInputStream(service.exportDocx(8L)))) {
+            assertTrue(doc.getDocument().xmlText().contains("example:library:2.0.1"));
+            assertTrue(doc.getDocument().xmlText().contains("联网扫描：联网核实 1 项"));
+        }
+    }
+
+
 }

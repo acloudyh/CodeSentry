@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.util.*;
 
 public final class ReviewedFindingPolicy {
-    private static final BigDecimal MIN_CONFIDENCE = new BigDecimal("0.65");
+    private static final BigDecimal MIN_CONFIDENCE = new BigDecimal("0.50");
     private static final Set<String> VERDICTS = Set.of("CONFIRMED", "CONDITIONAL", "INSUFFICIENT_EVIDENCE");
     private ReviewedFindingPolicy() {}
 
@@ -48,6 +48,24 @@ public final class ReviewedFindingPolicy {
                 && record.getConfidence() != null
                 && record.getConfidence().compareTo(MIN_CONFIDENCE) > 0
                 && record.getConfidence().compareTo(BigDecimal.ONE) <= 0;
+    }
+
+    public static String exclusionReason(FindingView finding, AiReviewSummary summary) {
+        if (isEligible(finding, summary)) return null;
+        if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) return "人工判定误报";
+        if (summary == null) return "尚无工具审核结果，且未人工确认风险";
+        if (!Set.of("COMPLETED", "NEEDS_HUMAN").contains(value(summary.getStatus(), "")))
+            return "工具审核未完成或失败（" + summary.getStatus() + "），需完成审核或人工确认";
+        AiReviewRecord primary = summary.getPrimaryReview(), verify = summary.getVerificationReview();
+        if (primary == null || verify == null) return "缺少完整的工具初审或复审记录";
+        if ("FALSE_POSITIVE".equals(primary.getVerdict()) || "FALSE_POSITIVE".equals(verify.getVerdict())
+                || "FALSE_POSITIVE".equals(summary.getConsolidatedVerdict())) return "工具判为疑似误报，需人工确认";
+        if (!AiReviewService.PROMPT_VERSION.equals(primary.getPromptVersion())
+                || !AiReviewService.PROMPT_VERSION.equals(verify.getPromptVersion())) return "审核协议版本已过期，需重新审核";
+        if (primary.getConfidence() == null || verify.getConfidence() == null
+                || primary.getConfidence().compareTo(MIN_CONFIDENCE) <= 0
+                || verify.getConfidence().compareTo(MIN_CONFIDENCE) <= 0) return "初审或复审可信度未通过门槛（初审、复审均必须大于 50%）";
+        return "审核状态、结论或证据一致性校验未通过，需重新审核或人工确认";
     }
 
     private static List<FindingView> deduplicateFindings(List<FindingView> rawFindings) {

@@ -10,6 +10,7 @@ import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummar
 
 const findings = ref<FindingView[]>([])
 const includedFindingIds = ref<number[]>([])
+const exclusionReasons = ref<Record<number, string>>({})
 const reviewedIssueCount = computed(() => findings.value.filter(item => ['COMPLETED', 'NEEDS_HUMAN'].includes(aiReviews.value[item.id]?.status ?? '')).length)
 const route = useRoute()
 const runs = ref<ScanRun[]>([])
@@ -75,7 +76,9 @@ const includedIdSet = computed(() => new Set(includedFindingIds.value))
 const reportStatus = (item: FindingView) => includedIdSet.value.has(item.id)
   ? '已采纳' : item.triageStatus || aiReviews.value[item.id] ? '未采纳' : '待审核'
 async function loadReportStatus(runId: number) {
-  includedFindingIds.value = await api.reportIncludedFindingIds(runId)
+  const [ids, exclusions] = await Promise.all([api.reportIncludedFindingIds(runId), api.reportExclusions(runId)])
+  includedFindingIds.value = ids
+  exclusionReasons.value = Object.fromEntries(exclusions.map(item => [item.findingId, item.reason]))
 }
 const batchNumber = (id: number) => `#${String(id).padStart(5, '0')}`
 const formatTime = formatChinaTime
@@ -308,7 +311,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
 
 <template>
   <div class="page-stack">
-    <section class="section-heading"><div><h2>问题台账</h2><p>保留本批次的扫描结果，包括未审核、审核失败、低可信度及误报项，供工具审核和人工复核。最终报告另按审核条件筛选。</p></div><span class="section-code">{{ selectedRun ? `${batchNumber(selectedRun.id)} / ${filtered.length} 个问题` : '未选择批次' }}</span></section>
+    <section class="section-heading"><div><h2>问题台账</h2><p>保留本批次的扫描结果，包括未审核、审核失败、低可信度及误报项，供工具审核和人工复核。最终报告另按审核条件筛选；各页面统一按问题条数统计；报告按依赖合并展示纳入问题，并列明未纳入项及原因。</p></div><span class="section-code">{{ selectedRun ? `${batchNumber(selectedRun.id)} / ${filtered.length} 条问题` : '未选择批次' }}</span></section>
     <div v-if="error" class="error-banner">{{ error }}</div>
     <section class="panel panel-pad">
       <div class="form-grid filter-grid finding-filter-grid">
@@ -319,7 +322,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
         <div class="field"><label>报告状态</label><select v-model="reportState" class="select"><option value="ALL">全部</option><option>已采纳</option><option>未采纳</option><option>待审核</option></select></div>
         <div class="field"><label>变化状态</label><select v-model="state" class="select"><option value="ALL">全部状态</option><option v-for="item in ['NEW','EXISTING','FIXED','REOPENED']" :key="item" :value="item">{{ statusLabel(item) }}</option></select></div>
       </div>
-      <div v-if="selectedRun" class="batch-context"><div><span>当前批次</span><strong>{{ batchNumber(selectedRun.id) }}</strong></div><div><span>扫描时间</span><strong>{{ formatTime(selectedRun.createdAt) }}</strong></div><div><span>扫描类型</span><strong>{{ modeLabel(selectedRun) }}</strong></div><div><span>批次状态</span><StatusBadge :value="selectedRun.status" /></div><div><span>台账统计</span><strong>{{ findings.length }} 当前 / {{ batchNewCount }} 新增 / {{ batchFixedCount }} 修复</strong></div></div>
+      <div v-if="selectedRun" class="batch-context"><div><span>当前批次</span><strong>{{ batchNumber(selectedRun.id) }}</strong></div><div><span>扫描时间</span><strong>{{ formatTime(selectedRun.createdAt) }}</strong></div><div><span>扫描类型</span><strong>{{ modeLabel(selectedRun) }}</strong></div><div><span>批次状态</span><StatusBadge :value="selectedRun.status" /></div><div><span>台账统计</span><strong>{{ findings.length }} 条台账 / {{ batchNewCount }} 条新增 / {{ batchFixedCount }} 条修复</strong></div></div>
       <div v-if="aiConfig.enabled && selectedRun" class="ai-batch-bar">
         <div><span class="eyebrow">工具辅助复核</span><p>最多 {{ aiConfig.maxConcurrency ?? 1 }} 组并行，每组依次完成初审、复审。审核进度按已覆盖的问题条数统计；内部合并调用不影响问题数量。审核人员再结合业务和调用链确认，工具建议不会覆盖人工结论。</p></div>
         <div v-if="aiJob" class="ai-job-progress"><strong>{{ reviewedIssueCount }} / {{ findings.length }} 条已审核</strong><span>{{ aiJobStatusLabel(aiJob.status) }}<template v-if="aiJob.failedFindings"> · {{ aiJob.failedFindings }} 组失败</template></span></div>
@@ -346,7 +349,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
               <td><StatusBadge :value="item.resultStatus" /></td>
               <td><div v-if="aiReviews[item.id]" class="ai-review-cell"><strong>{{ aiVerdictLabel(aiReviews[item.id].consolidatedVerdict) }}</strong><span v-if="aiReviews[item.id].confidenceAvailable">可信度 {{ aiConfidence(aiReviews[item.id].confidence) }}</span><small v-if="aiReviews[item.id].errorMessage">{{ aiReviews[item.id].errorMessage }}</small><small v-if="aiReviews[item.id].disagreement">工具结果存在分歧，必须人工处理</small><button v-if="aiReviews[item.id].status !== 'FAILED'" type="button" class="snippet-trigger" @click="applyAiSuggestion(item)">带入人工复核</button><button v-else type="button" class="snippet-trigger" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '重试中…' : '重新审核' }}</button></div><button v-else-if="aiConfig.enabled" class="button secondary compact" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '审核中…' : '工具初审' }}</button><span v-else class="muted">未启用</span></td>
               <td><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else class="muted">等待复核</span><div v-if="item.reviewer" class="mono finding-reviewer">复核人：{{ item.reviewer }}</div></td>
-              <td><strong>{{ reportStatus(item) }}</strong></td>
+              <td><strong>{{ reportStatus(item) }}</strong><small v-if="exclusionReasons[item.id]" class="exclusion-reason">{{ exclusionReasons[item.id] }}</small></td>
               <td><button class="button secondary compact" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button></td>
             </tr>
           </tbody>
@@ -358,7 +361,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
           <h3>{{ findingTitle(item) }}</h3>
           <p v-if="findingTitle(item) !== item.title" class="muted">{{ item.title }}</p>
           <code>{{ findingLocation(item) }}</code>
-          <dl><div><dt>扫描器</dt><dd>{{ scannerLabel(item.scanner) }}</dd></div><div><dt>规则编号</dt><dd>{{ item.ruleId }}</dd></div><div><dt>工具建议</dt><dd>{{ aiVerdictLabel(aiReviews[item.id]?.consolidatedVerdict) }} / {{ aiConfidence(aiReviews[item.id]?.confidence) }}</dd></div><div><dt>报告状态</dt><dd>{{ reportStatus(item) }}</dd></div><div><dt>人工结论</dt><dd><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else>等待复核</span></dd></div></dl>
+          <dl><div><dt>扫描器</dt><dd>{{ scannerLabel(item.scanner) }}</dd></div><div><dt>规则编号</dt><dd>{{ item.ruleId }}</dd></div><div><dt>工具建议</dt><dd>{{ aiVerdictLabel(aiReviews[item.id]?.consolidatedVerdict) }} / {{ aiConfidence(aiReviews[item.id]?.confidence) }}</dd></div><div><dt>报告状态</dt><dd>{{ reportStatus(item) }}<small v-if="exclusionReasons[item.id]" class="exclusion-reason">{{ exclusionReasons[item.id] }}</small></dd></div><div><dt>人工结论</dt><dd><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else>等待复核</span></dd></div></dl>
           <button v-if="aiConfig.enabled && !aiReviews[item.id]" class="button secondary" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '工具审核中…' : '工具初审' }}</button>
           <button v-if="aiReviews[item.id]" class="button secondary" @click="applyAiSuggestion(item)">将工具建议带入人工复核</button>
           <button class="button secondary" @click="snippetFinding = item">查看原始内容</button>
@@ -366,7 +369,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
         </article>
       </div>
       <footer v-if="!loading && filtered.length" class="table-pager">
-        <span>第 {{ page }} / {{ totalPages }} 页，共 {{ filtered.length }} 个问题</span>
+        <span>第 {{ page }} / {{ totalPages }} 页，共 {{ filtered.length }} 条问题</span>
         <div class="pager-controls">
           <label class="pager-field">每页<select v-model.number="pageSize" class="pager-select" aria-label="问题台账每页条数"><option v-for="size in pageSizes" :key="size" :value="size">{{ size }} 条</option></select></label>
           <label class="pager-field">跳至<select v-model.number="page" class="pager-select" aria-label="问题台账选择页数"><option v-for="number in totalPages" :key="number" :value="number">第 {{ number }} 页</option></select></label>
@@ -478,3 +481,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.exclusion-reason { display: block; margin-top: 0.4rem; max-width: 20rem; color: var(--muted); line-height: 1.5; }
+</style>

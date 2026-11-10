@@ -11,6 +11,8 @@ import io.codesentry.finding.service.FindingPersistenceService;
 import io.codesentry.project.model.ScanProject;
 import io.codesentry.project.service.ScanProjectService;
 import io.codesentry.report.dto.RemediationReportSummary;
+import io.codesentry.report.dto.ReportExclusion;
+import io.codesentry.finding.service.ReviewedFindingPolicy;
 import io.codesentry.scan.model.ScanRun;
 import io.codesentry.scan.service.ScanRunService;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
@@ -84,6 +86,8 @@ public class RemediationReportService {
         return load(runId, false).findings.stream().map(FindingView::getId).collect(Collectors.toList());
     }
 
+    public List<ReportExclusion> excludedFindings(Long runId) { return load(runId, false).exclusions; }
+
     public String exportFileName(Long runId, String extension) {
         ScanRun run = scanRunService.requireById(runId);
         ScanProject project = projectService.requireById(run.getProjectId());
@@ -100,7 +104,8 @@ public class RemediationReportService {
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
             ReportData data = load(run.getId(), false);
             reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
-                    run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt()));
+                    run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt(),
+                    data.ledgerFindingCount, groupFindings(data.findings).size(), data.notIncludedFindingCount));
         }
         reports.sort(Comparator.comparing(RemediationReportSummary::getCreatedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
@@ -135,19 +140,33 @@ public class RemediationReportService {
                     + "    项目 " + data.project.getDisplayName()
                     + "    生成时间 " + TIME.format(LocalDateTime.now()), 10, "66796E", false);
 
-            XWPFTable summary = document.createTable(2, 4);
+            XWPFTable summary = document.createTable(2, 5);
             summary.setWidth(9026);
-            String[] labels = {"扫描模式", "当前问题", "新增问题", "已修复"};
-            String[] values = {scanModeLabel(data.run), String.valueOf(data.findings.size()),
-                    String.valueOf(data.newFindingCount), String.valueOf(data.fixedFindingCount)};
-            for (int column = 0; column < 4; column++) {
-                styleCell(summary.getRow(0).getCell(column), labels[column], true, "E9EFE9", 2256);
-                styleCell(summary.getRow(1).getCell(column), values[column], false, "FFFFFF", 2256);
+            String[] labels = {"台账问题（条）", "纳入整改（条）", "合并整改（组）", "未纳入（条）", "扫描模式"};
+            String[] values = {String.valueOf(data.ledgerFindingCount), String.valueOf(data.findings.size()),
+                    String.valueOf(groupFindings(data.findings).size()), String.valueOf(data.notIncludedFindingCount), scanModeLabel(data.run)};
+            for (int column = 0; column < labels.length; column++) {
+                styleCell(summary.getRow(0).getCell(column), labels[column], true, "E9EFE9", 1805);
+                styleCell(summary.getRow(1).getCell(column), values[column], false, "FFFFFF", 1805);
+            }
+
+            addHeading(document, "数量说明", 1);
+            for (String[] row : countExplanationRows(data, groupFindings(data.findings).size())) {
+                XWPFParagraph paragraph = document.createParagraph();
+                paragraph.setSpacingAfter(120);
+                styleRun(paragraph.createRun(), row[0] + "　　", 10, "66796E", true);
+                styleRun(paragraph.createRun(), row[1], 10, "14201B", false);
+                if (!row[2].isEmpty()) {
+                    XWPFRun detail = paragraph.createRun();
+                    detail.addBreak();
+                    styleRun(detail, row[2], 9, "66796E", false);
+                }
             }
 
             addHeading(document, "扫描基线", 1);
             addText(document, "业务 Java 版本：" + javaVersionLabel(data.project), 10, "14201B", false);
-            addText(document, "规则集：" + ruleProfileLabel(data.run.getRuleProfile()), 10, "14201B", false);
+            if (data.run.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE)
+                addText(document, "联网扫描：" + value(data.run.getRemediationMessage(), "联网修复依据尚未完成核实"), 10, "A46400", true);
             addText(document, "扫描分支：" + value(data.run.getScanRef(), "当前工作区")
                     + "    基线分支：" + value(data.run.getBaselineRef(), "无"), 10, "14201B", false);
             addText(document, "扫描提交：" + value(data.run.getScanCommit(), "-")
@@ -200,7 +219,18 @@ public class RemediationReportService {
                 }
                 addText(document, "整改建议：", 9, "38483F", true);
                 for (String paragraph : group.recommendation().split("\\R")) {
-                    addText(document, paragraph, 9, "38483F", false);
+                    boolean coverage = paragraph.startsWith("覆盖情况：");
+                    addText(document, paragraph, 9, coverage ? "A46400" : "38483F", coverage);
+                }
+            }
+
+            if (!data.exclusions.isEmpty()) {
+                addHeading(document, "未纳入整改的问题及原因", 1);
+                addText(document, "以下记录用于台账对账，不计入待整改风险；原因按当前审核记录核对，已归档报告的纳入范围保持不变。", 9, "66796E", false);
+                for (ReportExclusion item : data.exclusions) {
+                    addText(document, "F-" + item.getFindingId() + " · " + item.getRuleId()
+                            + " · " + item.getTitle(), 10, "14201B", true);
+                    addText(document, "位置：" + value(item.getFilePath(), "未记录") + "\n未纳入原因：" + item.getReason(), 9, "38483F", false);
                 }
             }
 
@@ -208,9 +238,12 @@ public class RemediationReportService {
                     .filter(group -> !group.sources().isEmpty()).collect(Collectors.toList());
             if (!sourceGroups.isEmpty()) {
                 addHeading(document, "附录：整改版本依据", 1);
-                addText(document, "修复记录仅针对所列漏洞；升级须核对 JDK 和依赖兼容性。官方迁移建议核实日期：2026-11-03。", 9, "66796E", false);
+                addText(document, "修复记录仅针对所列漏洞；升级须核对 JDK 和依赖兼容性。官方补充规则核实日期：2026-11-10。正文推荐目标按项目 Java 版本筛选，与附录历史版本分别展示。", 9, "66796E", false);
                 for (ReportFindingGroup group : sourceGroups) {
                     addHeading(document, group.findingIds() + " · " + group.title(), 2);
+                    for (String record : io.codesentry.finding.service.DependencyRemediationAdvice.versionRecords(group.members)) {
+                        addText(document, record, 9, "38483F", false);
+                    }
                     for (Map.Entry<String, List<String>> source : group.sources().entrySet()) {
                         addText(document, String.join("、", source.getValue()) + "：" + source.getKey(), 9, "66796E", false);
                     }
@@ -240,6 +273,7 @@ public class RemediationReportService {
         }
         ScanProject project = projectService.requireById(run.getProjectId());
         List<FindingView> raw = findingService.findByRunId(runId);
+        io.codesentry.finding.service.OnlineRemediationService.attach(run, raw);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
         List<FindingView> visible = snapshots.read(runId);
@@ -247,7 +281,8 @@ public class RemediationReportService {
             visible = io.codesentry.finding.service.ReviewedFindingPolicy.select(raw, aiReviews);
             if (archive) visible = snapshots.freeze(runId, visible);
         }
-        return new ReportData(run, project, visible, aiReviews);
+        io.codesentry.finding.service.OnlineRemediationService.attach(run, visible);
+        return new ReportData(run, project, visible, aiReviews, raw);
     }
 
 
@@ -291,7 +326,7 @@ public class RemediationReportService {
             if (group.isGrouped()) appendGroupedAiReviewHtml(rows, group, data.aiReviews);
             else appendAiReviewHtml(rows, data.aiReviews.get(finding.getId()));
             rows.append("</td><td>")
-                    .append(escape(group.recommendation()).replace("\n", "<br/>"))
+                    .append(recommendationHtml(group.recommendation()))
                     .append("</td></tr>");
         }
 
@@ -302,18 +337,26 @@ public class RemediationReportService {
                 "body{font-family:'CodeSentrySong','SimSun',serif;margin:0;color:#14201b;background:#f4f7f3;font-size:12px}" +
                 ".cover{padding:32px 38px;background:#0b1714;color:#eef4ec;border-bottom:6px solid #adf33f}.brand{letter-spacing:.12em;color:#adf33f;font-weight:800}" +
                 "h1{margin:14px 0 8px;font-size:28px}.meta{color:#aec0b6}.wrap{padding:24px 38px 0}.brand,h1,h2,th,b{font-family:'CodeSentryHei','SimHei',sans-serif}.summary-table{width:100%;margin-bottom:22px;border-collapse:separate;border-spacing:10px 0}" +
-                ".summary-table td{width:25%;background:white;border:1px solid #d9e2dc;padding:14px}.summary-table span{color:#66796e;font-size:11px}.summary-table b{display:block;font-size:24px;margin-top:7px}" +
-                ".card{background:white;border:1px solid #d9e2dc;padding:16px;margin-bottom:20px}.data{width:100%;border-collapse:collapse;background:white;font-size:10px;table-layout:fixed}" +
+                ".summary-table td{width:20%;background:white;border:1px solid #d9e2dc;padding:14px}.summary-table span{color:#66796e;font-size:11px}.summary-table b{display:block;font-size:24px;margin-top:7px}" +
+                ".card{background:white;border:1px solid #d9e2dc;padding:16px;margin-bottom:20px;page-break-inside:avoid}.data{width:100%;border-collapse:collapse;background:white;font-size:10px;table-layout:fixed}" +
+                ".count-card{padding:24px 26px}.count-card>b{font-size:16px}.count-lines{width:100%;margin-top:17px;border-collapse:collapse;font-size:14px;line-height:1.7}" +
+                ".count-lines th,.count-lines td{padding:11px 0;border-bottom:1px solid #edf1ed;text-align:left;vertical-align:top}.count-lines th{width:106px;padding-right:14px;color:#66796e;font-weight:400}" +
+                ".count-lines tr:last-child th,.count-lines tr:last-child td{border-bottom:0}.count-lines strong{font-family:'CodeSentryHei','SimHei',sans-serif;font-weight:500}.count-note{display:block;color:#66796e;font-size:12px;margin-top:3px}" +
+                ".count-card{page-break-inside:avoid}" +
                 ".data th,.data td{padding:9px 7px;border:1px solid #dfe6e1;text-align:left;vertical-align:top;word-wrap:break-word}.data th{background:#e9efe9;color:#44574c}" +
                 "small{display:block;color:#718077;margin-top:5px}code{word-break:break-all}pre{white-space:pre-wrap;word-wrap:break-word;margin:8px 0 0;padding:8px;background:#f0f3ef;border-left:3px solid #78a921;font:8px/1.45 monospace}.vuln-list{margin:8px 0 0;padding-left:17px}.vuln-list li{margin:4px 0}.group-review{margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid #eadfca}" +
-                ".severity{font-weight:700}.critical,.high{color:#c83232}.medium{color:#a46400}.low,.info{color:#167c6d}.false-positive,.ai-review{color:#a46400}.ai-cell{background:#fffaf0}.ai-cell b{display:block;margin-bottom:3px}.ai-cell small{margin:2px 0 7px;line-height:1.45}.foot{margin-top:18px;color:#718077;font-size:9px}" +
+                ".severity{font-weight:700}.critical,.high{color:#c83232}.medium{color:#a46400}.low,.info{color:#167c6d}.false-positive,.ai-review,.coverage{color:#a46400}.ai-cell{background:#fffaf0}.ai-cell b{display:block;margin-bottom:3px}.ai-cell small{margin:2px 0 7px;line-height:1.45}.foot{margin-top:18px;color:#718077;font-size:9px}" +
                 "tr{page-break-inside:avoid}</style></head><body><header class=\"cover\"><div class=\"brand\">CODESENTRY / REMEDIATION REPORT</div>" +
                 "<h1>代码安全扫描整改报告</h1><div class=\"meta\">报告编号 CSR-" + String.format("%06d", run.getId()) +
                 " · 项目 " + escape(project.getDisplayName()) + " · 生成时间 " + TIME.format(LocalDateTime.now()) + "</div></header><main class=\"wrap\">" +
-                "<table class=\"summary-table\"><tr>" + summaryCell("扫描模式", scanModeLabel(run)) + summaryCell("当前问题", String.valueOf(data.findings.size())) +
-                summaryCell("新增问题", String.valueOf(data.newFindingCount)) + summaryCell("已修复", String.valueOf(data.fixedFindingCount)) +
-                "</tr></table>" +
-                "<section class=\"card\"><b>扫描基线</b><p>业务 Java 版本：" + javaVersionLabel(project) + "</p><p>规则集：" + escape(ruleProfileLabel(run.getRuleProfile())) + "</p><p>扫描分支：" +
+                "<table class=\"summary-table\"><tr>" + summaryCell("台账问题（条）", String.valueOf(data.ledgerFindingCount)) +
+                summaryCell("纳入整改（条）", String.valueOf(data.findings.size())) + summaryCell("合并整改（组）", String.valueOf(groups.size())) + summaryCell("未纳入（条）", String.valueOf(data.notIncludedFindingCount)) +
+                summaryCell("扫描模式", scanModeLabel(run)) +
+                "</tr></table>" + countExplanationHtml(data, groups.size()) +
+                "<section class=\"card\"><b>扫描基线</b><p>业务 Java 版本：" + javaVersionLabel(project) + "</p>"
+                + (run.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE
+                    ? "<p class=\"ai-review\">联网扫描：" + escape(value(run.getRemediationMessage(), "联网修复依据尚未完成核实")) + "</p>" : "")
+                + "<p>扫描分支：" +
                 escape(value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
                 "；扫描提交：" + escape(value(run.getScanCommit(), "-")) + "；merge-base：" + escape(value(run.getMergeBaseCommit(), "-")) +
                 "</p></section>" + (groups.size() < data.findings.size() ? "<p class=\"foot\">合并说明：同一依赖文件与组件版本的多个 CVE 在明细中合并展示；统计仍按 CVE 数量计算。</p>" : "") +
@@ -322,17 +365,68 @@ public class RemediationReportService {
                 "本报告由 CodeSentry 本地节点生成。</p><h2>问题明细与整改建议</h2><table class=\"data\"><thead><tr><th style=\"width:3%\">#</th><th style=\"width:6%\">等级</th>" +
                 "<th style=\"width:18%\">问题 / 规则 / 代码片段</th><th style=\"width:14%\">位置</th><th style=\"width:6%\">变化</th><th style=\"width:8%\">人工结论</th><th style=\"width:15%\">利用条件 / 复核证据</th><th style=\"width:16%\">工具复核</th><th style=\"width:14%\">整改建议</th>" +
                 "</tr></thead><tbody>" + (rows.length() == 0 ? "<tr><td colspan=\"9\">当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。</td></tr>" : rows) +
-                "</tbody></table>" + buildReferencesHtml(data.findings) + "</main></body></html>";
+                "</tbody></table>" + exclusionsHtml(data) + buildReferencesHtml(data.findings) + "</main></body></html>";
     }
 
+
+    private String[][] countExplanationRows(ReportData data, int groups) {
+        return new String[][] {
+                {"台账对账", data.ledgerFindingCount + " 条台账问题 = " + data.findings.size()
+                        + " 条纳入整改 + " + data.notIncludedFindingCount + " 条未纳入", ""},
+                {"合并展示", data.findings.size() + " 条纳入问题，合并为 " + groups + " 组整改项。",
+                        "同一依赖文件、同一组件版本的多个漏洞合并展示，组内保留问题编号与 CVE。"},
+                {"未纳入项", data.notIncludedFindingCount + " 条未纳入正文。",
+                        data.notIncludedFindingCount == 0 ? "本批次台账问题均已纳入整改。"
+                                : "报告后附问题编号和未纳入原因，可与台账逐条核对。"},
+                {"问题变化", "纳入整改范围内：新增 " + data.newFindingCount + " 条，已修复 "
+                        + data.fixedFindingCount + " 条。", ""}
+        };
+    }
+
+    private String recommendationHtml(String recommendation) {
+        return java.util.Arrays.stream(recommendation.split("\\R"))
+                .map(line -> line.startsWith("覆盖情况：")
+                        ? "<b class=\"coverage\">" + escape(line) + "</b>" : escape(line))
+                .collect(Collectors.joining("<br/>"));
+    }
+
+    private String countExplanationHtml(ReportData data, int groups) {
+        StringBuilder html = new StringBuilder("<section class=\"card count-card\"><b>数量说明</b><table class=\"count-lines\">");
+        for (String[] row : countExplanationRows(data, groups)) {
+            html.append("<tr><th scope=\"row\">").append(escape(row[0]))
+                    .append("</th><td><strong>").append(escape(row[1])).append("</strong>");
+            if (!row[2].isEmpty()) {
+                if ("合并展示".equals(row[0])) html.append("<span class=\"count-note\">").append(escape(row[2])).append("</span>");
+                else html.append(" ").append(escape(row[2]));
+            }
+            html.append("</td></tr>");
+        }
+        return html.append("</table></section>").toString();
+    }
+
+    private String exclusionsHtml(ReportData data) {
+        if (data.exclusions.isEmpty()) return "";
+        StringBuilder html = new StringBuilder("<h2>未纳入整改的问题及原因</h2><p>以下记录用于台账对账，不计入待整改风险；原因按当前审核记录核对，已归档报告的纳入范围保持不变。</p><table class=\"data\"><thead><tr><th>#</th><th>问题编号 / 规则</th><th>问题 / 位置</th><th>未纳入原因</th></tr></thead><tbody>");
+        int index = 1;
+        for (ReportExclusion item : data.exclusions) {
+            html.append("<tr><td>").append(index++).append("</td><td>F-").append(item.getFindingId())
+                    .append("<br/>").append(escape(item.getRuleId())).append("</td><td>")
+                    .append(escape(item.getTitle())).append("<br/>").append(escape(item.getFilePath()))
+                    .append("</td><td>").append(escape(item.getReason())).append("</td></tr>");
+        }
+        return html.append("</tbody></table>").toString();
+    }
 
     private String buildReferencesHtml(List<FindingView> findings) {
         StringBuilder html = new StringBuilder();
         for (ReportFindingGroup group : groupFindings(findings)) {
             Map<String, List<String>> sources = group.sources();
             if (sources.isEmpty()) continue;
-            if (html.length() == 0) html.append("<h2>附录：整改版本依据</h2><p class=\"foot\">修复记录仅针对所列漏洞；升级须核对 JDK 和依赖兼容性。官方迁移建议核实日期：2026-11-03。</p>");
+            if (html.length() == 0) html.append("<h2>附录：整改版本依据</h2><p class=\"foot\">修复记录仅针对所列漏洞；升级须核对 JDK 和依赖兼容性。官方补充规则核实日期：2026-11-10。正文推荐目标按项目 Java 版本筛选，与附录历史版本分别展示。</p>");
             html.append("<section class=\"card\"><b>").append(escape(group.findingIds() + " · " + group.title())).append("</b>");
+            for (String record : io.codesentry.finding.service.DependencyRemediationAdvice.versionRecords(group.members)) {
+                html.append("<p>").append(escape(record)).append("</p>");
+            }
             sources.forEach((url, cves) -> html.append("<p>").append(escape(String.join("、", cves)))
                     .append("：<a href=\"").append(escape(url)).append("\">").append(escape(url)).append("</a></p>"));
             html.append("</section>");
@@ -822,12 +916,28 @@ public class RemediationReportService {
         private final ScanRun run;
         private final ScanProject project;
         private final List<FindingView> findings;
+        private final List<ReportExclusion> exclusions = new ArrayList<>();
+        private final int ledgerFindingCount;
+        private final int notIncludedFindingCount;
         private final int newFindingCount;
         private final int fixedFindingCount;
         private final Map<Long, AiReviewSummary> aiReviews;
 
         private ReportData(ScanRun run, ScanProject project, List<FindingView> findings,
-                           Map<Long, AiReviewSummary> aiReviews) {
+                           Map<Long, AiReviewSummary> aiReviews, List<FindingView> raw) {
+            this.ledgerFindingCount = raw.size();
+            java.util.Set<Long> includedIds = findings.stream().map(FindingView::getId).collect(Collectors.toSet());
+            this.notIncludedFindingCount = (int) raw.stream().filter(f -> !includedIds.contains(f.getId())).count();
+            java.util.Set<Long> selectedIds = ReviewedFindingPolicy.select(raw, aiReviews).stream()
+                    .map(FindingView::getId).collect(Collectors.toSet());
+            for (FindingView finding : raw) {
+                if (includedIds.contains(finding.getId())) continue;
+                String reason = ReviewedFindingPolicy.exclusionReason(finding, aiReviews.get(finding.getId()));
+                if (reason == null) reason = selectedIds.contains(finding.getId())
+                        ? "不在已归档报告范围内，当前审核已符合条件；需通过报告更新流程重新纳入"
+                        : "同位置、同规则或同类规则重复命中，报告去重后保留其他记录";
+                exclusions.add(new ReportExclusion(finding, reason));
+            }
             this.run = run;
             this.project = project;
             this.findings = findings;

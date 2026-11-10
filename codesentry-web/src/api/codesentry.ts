@@ -97,6 +97,7 @@ export const api = {
   }),
   findings: (limit = 200) => request<FindingView[]>(`/api/v1/findings?limit=${limit}`),
   runFindings: (runId: number) => request<FindingView[]>(`/api/v1/findings/scan-runs/${runId}`),
+  reportExclusions: (runId: number) => request<{ findingId: number; reason: string }[]>(`/api/v1/reports/scan-runs/${runId}/excluded-findings`),
   reportIncludedFindingIds: (runId: number) => request<number[]>(`/api/v1/reports/scan-runs/${runId}/included-finding-ids`),
   triageFinding: (findingId: number, payload: TriageFindingPayload) => request<FindingView>(`/api/v1/findings/${findingId}/triage`, {
     method: 'PUT', body: JSON.stringify(payload),

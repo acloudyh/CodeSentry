@@ -144,6 +144,9 @@ export interface AiReviewSummary {
 }
 
 export interface RemediationReportSummary {
+  ledgerFindings: number
+  detailGroups: number
+  notIncludedFindings: number
   id: number
   projectId: number
   scanMode: ScanMode
