@@ -32,7 +32,10 @@ if (await findingsLink.count()) {
 const reviewButton = page.locator('.findings-table').getByRole('button', { name: /人工复核|更新复核/ }).first()
 if (await reviewButton.count()) {
   const batchToolbar = page.locator('.batch-review-toolbar')
-  await batchToolbar.getByRole('button', { name: '批量工具审核' }).waitFor()
+  const aiConfig = (await (await page.request.get(`${baseUrl}/api/v1/ai-reviews/config`)).json()).data
+  const aiBatchButton = batchToolbar.getByRole('button', { name: '批量工具审核' })
+  if (aiConfig.enabled) await aiBatchButton.waitFor()
+  else if (await aiBatchButton.count()) throw new Error('未启用工具审核时不应显示批量工具审核按钮')
   await batchToolbar.getByRole('button', { name: '批量人工复核' }).waitFor()
   const titleClamp = await page.locator('.finding-title-clamp').first().evaluate((element) => getComputedStyle(element).webkitLineClamp)
   if (titleClamp !== '2') throw new Error(`问题摘要未限制为两行: ${titleClamp}`)

@@ -11,7 +11,8 @@ const pageTitle = computed(() => String(route.meta.title ?? 'CodeSentry'))
 
 const navigation = [
   { label: '仪表盘', to: '/', glyph: '⌁' },
-  { label: '扫描项目', to: '/projects', glyph: '◇' },
+  { label: '项目概览', to: '/business-projects', glyph: '◇' },
+  { label: '扫描资产', to: '/projects', glyph: '▦' },
   { label: '发起扫描', to: '/scans/new', glyph: '↗' },
   { label: '扫描记录', to: '/scans', glyph: '▤' },
   { label: '问题台账', to: '/findings', glyph: '!' },

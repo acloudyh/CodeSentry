@@ -5,7 +5,9 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'dashboard', component: DashboardView, meta: { title: '仪表盘' } },
-    { path: '/projects', name: 'projects', component: () => import('@/views/ProjectsView.vue'), meta: { title: '扫描项目' } },
+    { path: '/business-projects', name: 'business-projects', component: () => import('@/views/BusinessProjectsView.vue'), meta: { title: '项目概览' } },
+    { path: '/business-projects/:id', name: 'business-project-detail', component: () => import('@/views/BusinessProjectDetailView.vue'), meta: { title: '项目详情' } },
+    { path: '/projects', name: 'projects', component: () => import('@/views/ProjectsView.vue'), meta: { title: '扫描资产' } },
     { path: '/scans/new', name: 'new-scan', component: () => import('@/views/NewScanView.vue'), meta: { title: '发起扫描' } },
     { path: '/scans', name: 'scan-runs', component: () => import('@/views/ScanRunsView.vue'), meta: { title: '扫描记录' } },
     { path: '/scans/:id', name: 'scan-run-detail', component: () => import('@/views/ScanRunDetailView.vue'), meta: { title: '扫描详情' } },

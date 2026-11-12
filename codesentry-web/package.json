@@ -11,7 +11,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:ui": "node scripts/ui-smoke.mjs",
-    "test:features": "node scripts/feature-smoke.mjs"
+    "test:features": "node scripts/feature-smoke.mjs",
+    "test:business-projects": "node scripts/business-project-smoke.mjs"
   },
   "dependencies": {
     "pinia": "^4.0.3",

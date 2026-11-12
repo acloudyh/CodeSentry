@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import ProjectLedger from '@/components/ProjectLedger.vue'
+import type { BusinessProject } from '@/types'
 import { api } from '@/api/codesentry'
 import { categoryLabel, findingTitle, scannerLabel, statusLabel } from '@/utils/labels'
 import { formatChinaTime } from '@/utils/datetime'
@@ -8,6 +10,13 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, FindingView, ScanProject, ScanRun, TriageStatus } from '@/types'
 
+const router = useRouter()
+const businessProjectsLoading = ref(true)
+const assetDetailsOpen = ref(false)
+let initialized = false
+let assetGeneration = 0
+const businessProjects = ref<BusinessProject[]>([])
+const businessProjectId = ref<number | null>(null)
 const findings = ref<FindingView[]>([])
 const includedFindingIds = ref<number[]>([])
 const exclusionReasons = ref<Record<number, string>>({})
@@ -68,7 +77,38 @@ const findingLocation = (item: FindingView) => isDependencyVulnerability(item)
 const findingLocationLabel = (item: FindingView) => isDependencyVulnerability(item) ? '依赖文件' : '代码位置'
 const projectRuns = computed(() => selectedProjectId.value === null
   ? runs.value : runs.value.filter((item) => item.projectId === selectedProjectId.value))
+const scopedProjects = computed(() => projects.value.filter(p => p.businessProjectId === businessProjectId.value || (assetDetailsOpen.value && !p.businessProjectId && p.id === selectedProjectId.value)))
+function chooseBusinessProject(requested?: unknown) {
+  const candidates = [Number(requested), Number(localStorage.getItem('codesentry-ledger-business-project'))]
+  return candidates.find(id => businessProjects.value.some(p => p.id === id)) ?? businessProjects.value[0]?.id ?? null
+}
+async function changeBusinessProject() {
+  assetGeneration++; assetDetailsOpen.value = false; selectedRunId.value = null; selected.value = null; snippetFinding.value = null; batchReviewOpen.value = false; aiDetailsOpen.value = false
+  await router.replace({ path: '/findings', query: businessProjectId.value ? { businessProjectId: businessProjectId.value } : {} })
+}
+async function backToProjectLedger() { await changeBusinessProject() }
+watch(businessProjectId, id => { if(id) localStorage.setItem('codesentry-ledger-business-project', String(id)) })
 const selectedProject = computed(() => projects.value.find((item) => item.id === selectedProjectId.value))
+async function openAssetRun(runId: number) {
+  const generation = ++assetGeneration
+  try {
+    let run = runs.value.find(item => item.id === runId)
+    if (!run) { run = (await api.scanRunDetail(runId)).run; if(generation !== assetGeneration) return; runs.value.unshift(run) }
+    const asset = projects.value.find(p => p.id === run!.projectId)
+    if (!asset) throw new Error('扫描资产不存在或已移除')
+    if (generation !== assetGeneration) return
+    businessProjectId.value = asset.businessProjectId && businessProjects.value.some(p => p.id === asset.businessProjectId) ? asset.businessProjectId : chooseBusinessProject()
+    assetDetailsOpen.value = true
+    selectedProjectId.value = run.projectId
+    selectedRunId.value = run.id
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : '扫描批次加载失败' }
+}
+watch(() => route.fullPath, () => {
+  if (!initialized) return
+  const id = Number(route.query.runId)
+  if (id > 0) void openAssetRun(id)
+  else { assetDetailsOpen.value = false; selectedRunId.value = null; selected.value = null; snippetFinding.value = null; businessProjectId.value = chooseBusinessProject(route.query.businessProjectId) }
+})
 const selectedRun = computed(() => runs.value.find((item) => item.id === selectedRunId.value))
 const batchNewCount = computed(() => findings.value.filter((item) => item.resultStatus === 'NEW' || item.resultStatus === 'REOPENED').length)
 const batchFixedCount = computed(() => findings.value.filter((item) => item.resultStatus === 'FIXED').length)
@@ -292,30 +332,40 @@ watch(selectedRunId, async (runId) => {
 
 onMounted(async () => {
   try {
+    businessProjects.value = await api.businessProjects()
+    businessProjectId.value = chooseBusinessProject(route.query.businessProjectId)
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : '项目列表加载失败' }
+  finally { businessProjectsLoading.value = false }
+  try {
     const [allRuns, allProjects, config] = await Promise.all([api.scanRuns(200), api.projects(), api.aiReviewConfig()])
-    runs.value = allRuns
-    projects.value = allProjects
-    aiConfig.value = config
+    runs.value = allRuns; projects.value = allProjects; aiConfig.value = config
     const requestedRunId = Number(route.query.runId)
-    const requestedProjectId = Number(route.query.projectId)
-    const requestedRun = Number.isFinite(requestedRunId)
-      ? runs.value.find((item) => item.id === requestedRunId
-        && (!Number.isFinite(requestedProjectId) || item.projectId === requestedProjectId))
-      : undefined
-    selectedProjectId.value = requestedRun?.projectId ?? runs.value[0]?.projectId ?? projects.value[0]?.id ?? null
-    selectedRunId.value = requestedRun?.id ?? projectRuns.value[0]?.id ?? null
+    const requestedAssetId = Number(route.query.projectId)
+    if (requestedRunId > 0) await openAssetRun(requestedRunId)
+    else if (requestedAssetId > 0) {
+      const run = runs.value.find(r => r.projectId === requestedAssetId)
+      if (run) await openAssetRun(run.id)
+    }
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '扫描批次加载失败' }
+  finally { initialized = true }
 })
 onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
 </script>
 
 <template>
   <div class="page-stack">
-    <section class="section-heading"><div><h2>问题台账</h2><p>保留本批次的扫描结果，包括未审核、审核失败、低可信度及误报项，供工具审核和人工复核。最终报告另按审核条件筛选；各页面统一按问题条数统计；报告按依赖合并展示纳入问题，并列明未纳入项及原因。</p></div><span class="section-code">{{ selectedRun ? `${batchNumber(selectedRun.id)} / ${filtered.length} 条问题` : '未选择批次' }}</span></section>
+    <div class="panel" style="padding:20px"><div class="field"><label for="ledger-business-project">业务项目</label><select id="ledger-business-project" class="select" v-model="businessProjectId" :disabled="businessProjectsLoading || !businessProjects.length" @change="changeBusinessProject"><option v-if="!businessProjectId" :value="null" disabled>{{ businessProjectsLoading ? '正在加载业务项目…' : '请先创建业务项目' }}</option><option v-for="p in businessProjects" :key="p.id" :value="p.id">{{ p.name }}</option></select></div></div>
+    <div v-if="error && !assetDetailsOpen" class="error-banner" role="alert">{{ error }}</div>
+    <div v-if="assetDetailsOpen" class="row-actions"><button class="button secondary compact" @click="backToProjectLedger">← 返回项目台账</button><span class="muted">{{ selectedProject?.projectName }} · 扫描与审核详情</span></div>
+    <ProjectLedger v-if="businessProjectId && !assetDetailsOpen" :business-project-id="businessProjectId" @open-asset="openAssetRun" />
+    <EmptyState v-else-if="!businessProjectsLoading && !assetDetailsOpen" title="还没有业务项目" description="请先在项目概览中创建业务项目并关联扫描资产，台账将按你创建的项目展示。" />
+    <div v-if="assetDetailsOpen" class="page-stack">
+    <div v-if="!selectedProject?.businessProjectId" class="notice">该资产尚未关联业务项目。可在项目概览关联后，从项目台账统一查看；此处仅展示链接指定的历史扫描。</div>
+    <section class="section-heading"><div><h2>资产扫描与审核详情</h2><p>保留本批次的扫描结果，包括未审核、审核失败、低可信度及误报项，供工具审核和人工复核。最终报告另按审核条件筛选；各页面统一按问题条数统计；报告按依赖合并展示纳入问题，并列明未纳入项及原因。</p></div><span class="section-code">{{ selectedRun ? `${batchNumber(selectedRun.id)} / ${filtered.length} 条问题` : '未选择批次' }}</span></section>
     <div v-if="error" class="error-banner">{{ error }}</div>
     <section class="panel panel-pad">
       <div class="form-grid filter-grid finding-filter-grid">
-        <div class="field"><label>项目</label><select v-model.number="selectedProjectId" class="select" :disabled="!projects.length"><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.projectName }}</option></select><small>先选择项目，再查看该项目的扫描批次。</small></div>
+        <div class="field"><label>扫描资产</label><select v-model.number="selectedProjectId" class="select" :disabled="!scopedProjects.length"><option v-for="project in scopedProjects" :key="project.id" :value="project.id">{{ project.projectName }}</option></select><small>选择当前业务项目下的资产，再查看对应扫描批次。</small></div>
         <div class="field"><label>扫描批次</label><select v-model.number="selectedRunId" class="select" :disabled="!projectRuns.length"><option v-for="run in projectRuns" :key="run.id" :value="run.id">{{ runOptionLabel(run) }}</option></select><small>{{ selectedProject?.projectName ?? '当前项目' }}共有 {{ projectRuns.length }} 个批次。</small></div>
         <div class="field"><label>检索问题或文件</label><input v-model="keyword" class="input" placeholder="输入规则、标题或文件路径" /></div>
         <div class="field"><label>风险等级</label><select v-model="severity" class="select"><option value="ALL">全部等级</option><option v-for="item in ['CRITICAL','HIGH','MEDIUM','LOW','INFO']" :key="item" :value="item">{{ statusLabel(item) }}</option></select></div>
@@ -432,7 +482,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
             <div><span>风险等级</span><StatusBadge :value="selected.severity" /></div>
             <div><span>扫描规则</span><b>{{ scannerLabel(selected.scanner) }} / {{ selected.ruleId }}</b></div>
             <div><span>{{ findingLocationLabel(selected) }}</span><code>{{ findingLocation(selected) }}</code><small v-if="isDependencyVulnerability(selected)">依赖组件漏洞不对应源码行号</small></div>
-            <div v-if="selected.codeSnippet" class="review-code"><span>{{ isRedacted(selected) ? '二进制凭据文件' : '代码片段' }}</span><button type="button" class="snippet-trigger" @click="snippetFinding = selected"><span>{{ isRedacted(selected) ? '◈' : '⌁' }}</span> {{ isRedacted(selected) ? '查看文件说明' : '查看原始内容' }}</button></div>
+            <div v-if="selected.codeSnippet" class="review-code"><span>{{ isRedacted(selected) ? '原始内容暂不可用' : '代码片段' }}</span><button type="button" class="snippet-trigger" @click="snippetFinding = selected"><span>{{ isRedacted(selected) ? '◈' : '⌁' }}</span> {{ isRedacted(selected) ? '查看文件说明' : '查看原始内容' }}</button></div>
             <div v-if="selected.description"><span>问题说明</span><p>{{ selected.description }}</p></div>
             <div v-if="selected.recommendation"><span>整改建议</span><p>{{ selected.recommendation }}</p></div>
           </div>
@@ -451,7 +501,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       <div v-if="snippetFinding" class="modal-backdrop snippet-backdrop" @click.self="snippetFinding = null">
         <section class="snippet-dialog" role="dialog" aria-modal="true" aria-label="问题原始内容查看器">
           <header class="snippet-head">
-            <div><span class="eyebrow">{{ isRedacted(snippetFinding) ? '二进制文件' : '本机原始内容' }}</span><h2>{{ findingTitle(snippetFinding) }}</h2></div>
+            <div><span class="eyebrow">{{ isRedacted(snippetFinding) ? '原始内容暂不可用' : '本机原始内容' }}</span><h2>{{ findingTitle(snippetFinding) }}</h2></div>
             <button class="icon-button" aria-label="关闭原始内容" @click="snippetFinding = null">×</button>
           </header>
           <div class="snippet-meta">
@@ -462,7 +512,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
           <template v-if="isRedacted(snippetFinding)">
             <div class="redacted-view">
               <div class="redacted-mark"><span>!</span></div>
-              <div class="redacted-copy"><span>无法文本预览</span><h3>二进制凭据文件</h3><p>该文件不是可读文本，不能在代码查看器中直接展示。文本格式的密钥、令牌和配置内容会在问题台账中显示原始行，不再使用脱敏占位符。</p></div>
+              <div class="redacted-copy"><span>无法文本预览</span><h3>暂时无法读取代码片段</h3><p>扫描快照可能已清理、文件过大或无法作为文本预览。可读取的文本会显示命中行及上下文，请根据文件位置进一步核验。</p></div>
               <div class="redacted-location"><span>本地文件位置</span><code>{{ snippetFinding.filePath }}:{{ snippetFinding.startLine ?? '-' }}</code><small>请使用对应证书工具核验；确认暴露后及时移除并轮换凭据。</small></div>
             </div>
           </template>
@@ -479,6 +529,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
         </section>
       </div>
     </Teleport>
+  </div>
   </div>
 </template>
 
