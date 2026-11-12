@@ -114,10 +114,16 @@ public class RemediationReportService {
 
     public byte[] exportPdf(Long runId) {
         ReportData data = load(runId, true);
+        return renderPdfHtml(buildPdfHtml(data));
+    }
+
+    public String projectSectionHtml(Long runId, ScanProject asset) { return buildPdfHtml(load(runId, true, asset)); }
+
+    public byte[] renderPdfHtml(String html) {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFastMode();
-            builder.withHtmlContent(buildPdfHtml(data), null);
+            builder.withHtmlContent(html, null);
             builder.useFont(resolvePdfSongFont(), "CodeSentrySong");
             builder.useFont(resolvePdfHeiFont(), "CodeSentryHei");
             builder.toStream(output);
@@ -129,8 +135,10 @@ public class RemediationReportService {
         }
     }
 
-    public byte[] exportDocx(Long runId) {
-        ReportData data = load(runId, true);
+    public byte[] exportDocx(Long runId) { return exportProjectDocx(runId, null); }
+
+    public byte[] exportProjectDocx(Long runId, ScanProject asset) {
+        ReportData data = load(runId, true, asset);
         try (XWPFDocument document = new XWPFDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             configureA4(document);
@@ -164,10 +172,11 @@ public class RemediationReportService {
             }
 
             addHeading(document, "扫描基线", 1);
-            addText(document, "业务 Java 版本：" + javaVersionLabel(data.project), 10, "14201B", false);
+            for (String identity : assetIdentityLines(data)) addText(document, identity, 11, "C83232", true);
+            addText(document, runtimeDescription(data.project), 10, "14201B", false);
             if (data.run.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE)
                 addText(document, "联网扫描：" + value(data.run.getRemediationMessage(), "联网修复依据尚未完成核实"), 10, "A46400", true);
-            addText(document, "扫描分支：" + value(data.run.getScanRef(), "当前工作区")
+            addText(document, (isJar(data.project) ? "扫描文件：" : "扫描分支：") + (isJar(data.project) ? jarFileName(data) : value(data.run.getScanRef(), "当前工作区"))
                     + "    基线分支：" + value(data.run.getBaselineRef(), "无"), 10, "14201B", false);
             addText(document, "扫描提交：" + value(data.run.getScanCommit(), "-")
                     + "    merge-base：" + value(data.run.getMergeBaseCommit(), "-"), 9, "66796E", false);
@@ -177,7 +186,7 @@ public class RemediationReportService {
                 addText(document, "当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。", 10, "66796E", false);
             }
             int index = 1;
-            for (ReportFindingGroup group : groupFindings(data.findings, data.project.getTargetJavaVersion())) {
+            for (ReportFindingGroup group : groupForProject(data.findings, data.project)) {
                 FindingView finding = group.primary();
                 XWPFParagraph heading = document.createParagraph();
                 heading.setSpacingBefore(220);
@@ -234,7 +243,7 @@ public class RemediationReportService {
                 }
             }
 
-            List<ReportFindingGroup> sourceGroups = groupFindings(data.findings, data.project.getTargetJavaVersion()).stream()
+            List<ReportFindingGroup> sourceGroups = groupForProject(data.findings, data.project).stream()
                     .filter(group -> !group.sources().isEmpty()).collect(Collectors.toList());
             if (!sourceGroups.isEmpty()) {
                 addHeading(document, "附录：整改版本依据", 1);
@@ -254,7 +263,7 @@ public class RemediationReportService {
                     + "报告保留人工已确认的风险，以及工具复核完成、通过可信度门槛且未判为误报的问题；人工判为误报的不纳入报告，可信度不代表漏洞可利用性。"
                     + "本报告由 CodeSentry 本地节点生成。",
                     8, "7B8B82", false);
-            embedWordFonts(document);
+            if (asset == null) embedWordFonts(document);
             document.write(output);
             return output.toByteArray();
         } catch (Exception exception) {
@@ -265,13 +274,16 @@ public class RemediationReportService {
 
     public List<FindingView> archiveFindings(Long runId) { return load(runId, true).findings; }
 
-    private ReportData load(Long runId, boolean archive) {
+    private ReportData load(Long runId, boolean archive) { return load(runId, archive, null); }
+
+    private ReportData load(Long runId, boolean archive, ScanProject asset) {
         ScanRun run = scanRunService.requireById(runId);
         if (archive && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
                 && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "扫描结束后才能归档和导出报告");
         }
         ScanProject project = projectService.requireById(run.getProjectId());
+        if (asset != null) project = asset;
         List<FindingView> raw = findingService.findByRunId(runId);
         io.codesentry.finding.service.OnlineRemediationService.attach(run, raw);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
@@ -311,7 +323,7 @@ public class RemediationReportService {
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
         int index = 1;
-        List<ReportFindingGroup> groups = groupFindings(data.findings, data.project.getTargetJavaVersion());
+        List<ReportFindingGroup> groups = groupForProject(data.findings, data.project);
         for (ReportFindingGroup group : groups) {
             FindingView finding = group.primary();
             rows.append("<tr><td>").append(index++).append("</td><td><span class=\"severity ")
@@ -375,11 +387,11 @@ public class RemediationReportService {
                 summaryCell("纳入整改（条）", String.valueOf(data.findings.size())) + summaryCell("合并整改（组）", String.valueOf(groups.size())) + summaryCell("未纳入（条）", String.valueOf(data.notIncludedFindingCount)) +
                 summaryCell("扫描模式", scanModeLabel(run)) +
                 "</tr></table>" + countExplanationHtml(data, groups.size()) +
-                "<section class=\"card\"><b>扫描基线</b><p>业务 Java 版本：" + javaVersionLabel(project) + "</p>"
+                "<section class=\"card\"><b>扫描基线</b>" + assetIdentityHtml(data) + "<p>" + escape(runtimeDescription(project)) + "</p>"
                 + (run.getNetworkMode() == io.codesentry.scan.model.NetworkMode.ONLINE
                     ? "<p class=\"ai-review\">联网扫描：" + escape(value(run.getRemediationMessage(), "联网修复依据尚未完成核实")) + "</p>" : "")
-                + "<p>扫描分支：" +
-                escape(value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
+                + "<p>" + (isJar(project) ? "扫描文件：" : "扫描分支：") +
+                escape(isJar(project) ? jarFileName(data) : value(run.getScanRef(), "当前工作区")) + "；基线分支：" + escape(value(run.getBaselineRef(), "无")) +
                 "；扫描提交：" + escape(value(run.getScanCommit(), "-")) + "；merge-base：" + escape(value(run.getMergeBaseCommit(), "-")) +
                 "</p></section>" + (groups.size() < data.findings.size() ? "<p class=\"foot\">合并说明：同一依赖文件与组件版本的多个 CVE 在明细中合并展示；统计仍按 CVE 数量计算。</p>" : "") +
                 "<p class=\"foot\">人工复核状态：" + escape(data.reviewStatus()) +
@@ -582,7 +594,7 @@ public class RemediationReportService {
         run.setFontFamily(eastAsiaFont, XWPFRun.FontCharRange.cs);
     }
 
-    private void embedWordFonts(XWPFDocument document) throws Exception {
+    public void embedWordFonts(XWPFDocument document) throws Exception {
         Path song = resolveWordFontFile("CODESENTRY_REPORT_SONG_FONT", "docker/fonts/simsun.ttf",
                 "/opt/codesentry/fonts/simsun.ttf", "宋体");
         Path hei = resolveWordFontFile("CODESENTRY_REPORT_HEI_FONT", "docker/fonts/simhei.ttf",
@@ -645,6 +657,43 @@ public class RemediationReportService {
                 + embedded.relationshipId + "\" w:fontKey=\"" + embedded.fontKey + "\"/></w:font>";
     }
 
+    private boolean isJar(ScanProject project) {
+        return project.getSourceType() == io.codesentry.project.model.ProjectSourceType.JAR_UPLOAD;
+    }
+
+    private String jarFileName(ReportData data) {
+        // The recorded artifact belongs to this scan, even when the registered JAR is replaced later.
+        String path = data.run.getArtifactPath();
+        if (path == null || path.isBlank()) path = data.run.getScanRef();
+        if (path == null || path.isBlank()) path = data.project.getLocalPath();
+        if (path == null || path.isBlank()) return "未记录 JAR 文件名";
+        path = path.replace('\\', '/');
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    private List<String> assetIdentityLines(ReportData data) {
+        ScanProject asset = data.project;
+        String name = "扫描资产：" + value(asset.getDisplayName(), "未命名资产");
+        if (isJar(asset)) return List.of("资产类型：JAR 包（上传产物）", name, "JAR 文件：" + jarFileName(data));
+        if (asset.getSourceType() == io.codesentry.project.model.ProjectSourceType.GIT) {
+            String url = value(asset.getRemoteUrl(), "未记录 Git 地址").replaceFirst("(?i)^(https?://)[^/@]+@", "$1");
+            return List.of("资产类型：代码（远程 Git 仓库）", name, "登记 Git 仓库：" + url);
+        }
+        return List.of("资产类型：代码（本地仓库）", name, "代码项目目录：" + value(asset.getLocalPath(), "未记录本地目录"));
+    }
+
+    private String assetIdentityHtml(ReportData data) {
+        return assetIdentityLines(data).stream().map(line -> "<p class=\"asset-identity\" style=\"color:#c83232;font-weight:700\"><b>" + escape(line) + "</b></p>")
+                .collect(Collectors.joining());
+    }
+
+    private String runtimeDescription(ScanProject project) {
+        String node = project.getTargetNodeVersion() == null ? "未确认" : "Node.js " + project.getTargetNodeVersion();
+        if (project.getApplicationType() == io.codesentry.project.model.ApplicationType.FRONTEND) return "业务 Node.js 版本：" + node;
+        String java = "业务 Java 版本：" + javaVersionLabel(project);
+        return project.getApplicationType() == io.codesentry.project.model.ApplicationType.FULL_STACK ? java + "；业务 Node.js 版本：" + node : java;
+    }
+
     private String javaVersionLabel(ScanProject project) {
         return project.getTargetJavaVersion() == null ? "未确认" : "Java " + project.getTargetJavaVersion();
     }
@@ -675,6 +724,29 @@ public class RemediationReportService {
             groups.computeIfAbsent(key, ignored -> new ReportFindingGroup(javaVersion)).members.add(finding);
         }
         return new ArrayList<>(groups.values());
+    }
+
+    private List<ReportFindingGroup> groupForProject(List<FindingView> findings, ScanProject project) {
+        List<ReportFindingGroup> groups = groupFindings(findings, project.getTargetJavaVersion());
+        for (ReportFindingGroup group : groups) {
+            FindingView first = group.primary();
+            String path = value(first.getFilePath(), "").toLowerCase(Locale.ROOT);
+            boolean nodePath = path.contains("package-lock.json") || path.contains("package.json") || path.contains("yarn.lock") || path.contains("pnpm-lock") || path.contains("node_modules");
+            if (project.getApplicationType() == io.codesentry.project.model.ApplicationType.FRONTEND
+                    || (project.getApplicationType() == io.codesentry.project.model.ApplicationType.FULL_STACK && nodePath))
+                group.nodeRuntime = project.getTargetNodeVersion() == null ? "未确认" : project.getTargetNodeVersion();
+        }
+        return groups;
+    }
+
+    private String nodeDependencyAdvice(List<FindingView> findings, String runtime) {
+        StringBuilder advice = new StringBuilder("项目 Node.js 版本：").append(runtime).append("。\n");
+        java.util.regex.Pattern fixed = java.util.regex.Pattern.compile("本漏洞修复版本（扫描时漏洞库记录）：([^。\\n]+)");
+        for (FindingView finding : findings) {
+            java.util.regex.Matcher match = fixed.matcher(value(finding.getRecommendation(), ""));
+            advice.append(value(finding.getRuleId(), "漏洞")).append("：").append(match.find() ? "扫描记录的修复版本 " + match.group(1) : "扫描记录未提供明确修复版本，需核对上游公告").append("。\n");
+        }
+        return advice.append("处理：逐条核对漏洞修复范围，更新 package.json 与锁文件，确认依赖 engines.node 及构建工具与当前 Node.js 版本兼容；安装、构建和业务回归测试后复扫。扫描记录的修复版本不代表已验证项目兼容性。").toString();
     }
 
     private int severityRank(String severity) {
@@ -884,6 +956,7 @@ public class RemediationReportService {
 
     private final class ReportFindingGroup {
         private final List<FindingView> members = new ArrayList<>();
+        private String nodeRuntime;
         private final Integer javaVersion;
         private ReportFindingGroup(Integer javaVersion) { this.javaVersion = javaVersion; }
 
@@ -900,6 +973,7 @@ public class RemediationReportService {
         }
 
         private String recommendation() {
+            if (nodeRuntime != null && isDependencyVulnerability(primary())) return nodeDependencyAdvice(members, nodeRuntime);
             return io.codesentry.finding.service.DependencyRemediationAdvice.compact(members, javaVersion);
         }
 

@@ -28,7 +28,11 @@ public final class SourceSnippetExtractor {
                 return limit(fallback);
             }
 
+            // Reject links escaping the scan storage and avoid loading oversized/binary artifacts as text.
+            sourcePath = sourcePath.toRealPath();
+            if (!sourcePath.startsWith(root.toRealPath()) || Files.size(sourcePath) > 10 * 1024 * 1024) return limit(fallback);
             List<String> lines = Files.readAllLines(sourcePath, StandardCharsets.UTF_8);
+            if (lines.stream().anyMatch(line -> line.indexOf('\0') >= 0)) return limit(fallback);
             if (lines.isEmpty() || startLine > lines.size()) {
                 return limit(fallback);
             }

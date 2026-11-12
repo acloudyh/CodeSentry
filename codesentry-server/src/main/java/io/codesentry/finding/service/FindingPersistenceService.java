@@ -142,7 +142,7 @@ public class FindingPersistenceService {
         return findings;
     }
 
-    private FindingView enrichSnippet(FindingView finding) {
+    public FindingView enrichSnippet(FindingView finding) {
         if (finding != null) {
             String fallback = finding.getCodeSnippet();
             String snippet = SourceSnippetExtractor.extract(properties.getStorage().rootPath(),

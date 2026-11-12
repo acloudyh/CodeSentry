@@ -524,4 +524,40 @@ class RemediationReportServiceTest {
         }
     }
 
+    @Test
+    void frontendReportUsesNodeRuntimeAndDoesNotApplyJavaUpgradeConstraints() {
+        ScanRunService runs=mock(ScanRunService.class);ScanProjectService projects=mock(ScanProjectService.class);
+        FindingPersistenceService findings=mock(FindingPersistenceService.class);AiReviewService reviews=mock(AiReviewService.class);
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
+        ScanRun run=reportRun(88L,LocalDateTime.now());ScanProject project=new ScanProject();project.setId(1L);project.setProjectName("前端项目");project.setApplicationType(io.codesentry.project.model.ApplicationType.FRONTEND);project.setTargetNodeVersion("20.19.0");
+        FindingView finding=dependencyFinding(303L,"TEST-NODE-VULN","测试依赖问题","package-lock.json","sample-package@1.0.0");finding.setRecommendation("本漏洞修复版本（扫描时漏洞库记录）：1.0.1。测试数据。");
+        when(runs.requireById(88L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);when(findings.findByRunId(88L)).thenReturn(List.of(finding));when(reviews.latestForRun(88L)).thenReturn(List.of());
+        String html=new String(service.exportHtml(88L),StandardCharsets.UTF_8);assertTrue(html.contains("业务 Node.js 版本：Node.js 20.19.0"));assertFalse(html.contains("业务 Java 版本："));assertFalse(html.contains("项目 Java 版本：未确认"));assertTrue(html.contains("engines.node"));assertTrue(html.contains("1.0.1"));
+    }
+
+    @Test void jarReportHighlightsRecordedArtifactInsteadOfCurrentReplacementInHtmlAndWord() throws Exception {
+        ScanRunService runs=mock(ScanRunService.class);ScanProjectService projects=mock(ScanProjectService.class);
+        FindingPersistenceService findings=mock(FindingPersistenceService.class);AiReviewService reviews=mock(AiReviewService.class);
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
+        ScanRun run=reportRun(98L,LocalDateTime.now());run.setArtifactPath("/uploads/old/payment-service-1.0.jar");run.setScanRef("old.jar");
+        ScanProject asset=new ScanProject();asset.setId(1L);asset.setProjectName("支付服务");asset.setSourceType(io.codesentry.project.model.ProjectSourceType.JAR_UPLOAD);asset.setLocalPath("/uploads/new/payment-service-2.0.jar");
+        when(runs.requireById(98L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(asset);when(findings.findByRunId(98L)).thenReturn(List.of());when(reviews.latestForRun(98L)).thenReturn(List.of());
+        String html=new String(service.exportHtml(98L),StandardCharsets.UTF_8);
+        assertTrue(html.contains("资产类型：JAR 包（上传产物）"));assertTrue(html.contains("扫描资产：支付服务"));assertTrue(html.contains("JAR 文件：payment-service-1.0.jar"));assertFalse(html.contains("payment-service-2.0.jar"));assertTrue(html.contains("color:#c83232;font-weight:700"));assertTrue(html.contains("扫描文件：payment-service-1.0.jar"));
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument doc=new org.apache.poi.xwpf.usermodel.XWPFDocument(new java.io.ByteArrayInputStream(service.exportDocx(98L)))) {
+            var identity=doc.getParagraphs().stream().flatMap(p->p.getRuns().stream()).filter(r->r.text().equals("JAR 文件：payment-service-1.0.jar")).findFirst().orElseThrow();
+            assertTrue(identity.isBold());assertEquals("C83232",identity.getColor());
+        }
+    }
+    @Test void codeReportDistinguishesGitFromLocalAndEscapesIdentityText() {
+        ScanRunService runs=mock(ScanRunService.class);ScanProjectService projects=mock(ScanProjectService.class);
+        FindingPersistenceService findings=mock(FindingPersistenceService.class);AiReviewService reviews=mock(AiReviewService.class);
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
+        ScanRun run=reportRun(99L,LocalDateTime.now());ScanProject asset=new ScanProject();asset.setId(1L);asset.setProjectName("测试<前端>");asset.setSourceType(io.codesentry.project.model.ProjectSourceType.GIT);asset.setRemoteUrl("https://fixture-user:fixture-password@example.invalid/team/web.git");
+        when(runs.requireById(99L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(asset);when(findings.findByRunId(99L)).thenReturn(List.of());when(reviews.latestForRun(99L)).thenReturn(List.of());
+        String html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("代码（远程 Git 仓库）"));assertTrue(html.contains("https://example.invalid/team/web.git"));assertFalse(html.contains("fixture-password"));assertTrue(html.contains("测试&lt;前端&gt;"));
+        asset.setSourceType(io.codesentry.project.model.ProjectSourceType.LOCAL);asset.setLocalPath("/workspace/frontend");
+        html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("代码（本地仓库）"));assertTrue(html.contains("代码项目目录：/workspace/frontend"));
+    }
+
 }

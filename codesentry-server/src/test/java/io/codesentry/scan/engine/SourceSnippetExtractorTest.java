@@ -37,6 +37,17 @@ class SourceSnippetExtractorTest {
         }
     }
 
+    @Test void refusesEscapingSymlinksAndBinaryContent() throws Exception {
+        Path outside=Files.createTempFile("codesentry-outside-", ".txt");
+        try {
+            Files.writeString(outside,"fixture-private-value");
+            Path link=workspace.resolve("outside.txt");Files.createSymbolicLink(link,outside);
+            assertEquals("fallback",SourceSnippetExtractor.extract(workspace,link.toString(),1,1,"fallback"));
+            Path binary=workspace.resolve("binary.key");Files.write(binary,new byte[]{'a',0,'b'});
+            assertEquals("fallback",SourceSnippetExtractor.extract(workspace,binary.toString(),1,1,"fallback"));
+        } finally { Files.deleteIfExists(outside); }
+    }
+
     @Test
     void oversizedSnippetsKeepBothEndsWithinDatabaseSafeLimit() {
         String oversized = "begin-" + "x".repeat(20000) + "-end";
