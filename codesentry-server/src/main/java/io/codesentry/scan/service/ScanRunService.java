@@ -21,6 +21,7 @@ import io.codesentry.rule.service.RuleProfileService;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/** 管理单资产扫描的创建、执行、停止及历史查询，供项目轮次和整改验收复用。 */
 @Service
 public class ScanRunService {
     private final io.codesentry.process.CancellableTasks tasks = new io.codesentry.process.CancellableTasks();
@@ -34,6 +35,7 @@ public class ScanRunService {
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
     private final RuleProfileService ruleProfileService;
 
+    /** 注入扫描存储、资产校验、执行编排和独立任务池。 */
     public ScanRunService(ScanRunMapper mapper,
                           ScanProjectService projectService,
                           ScanOrchestrator orchestrator,
@@ -48,6 +50,7 @@ public class ScanRunService {
         this.taskExecutor = taskExecutor;
     }
 
+    /** 校验扫描配置并持久化任务，在事务提交后投入执行，避免回滚任务产生外部副作用。 */
     @org.springframework.transaction.annotation.Transactional(noRollbackFor = BusinessException.class)
     public ScanRun start(CreateScanRunRequest request) {
         if (request.getNetworkMode() == null) throw new BusinessException(HttpStatus.BAD_REQUEST, "请选择本地扫描或联网扫描");
@@ -100,6 +103,7 @@ public class ScanRunService {
         }
     }
 
+    /** 停止活动扫描与相关子进程，保留已执行结果并标记不完整状态。 */
     public ScanRun cancel(Long id) {
         requireById(id);
         // A short completion grace handles the five-second UI polling race atomically.
@@ -112,6 +116,7 @@ public class ScanRunService {
         return requireById(id);
     }
 
+    /** 读取原扫描记录，不存在时返回明确的资源错误。 */
     public ScanRun requireById(Long id) {
         ScanRun run = mapper.findById(id);
         if (run == null) {
@@ -120,19 +125,33 @@ public class ScanRunService {
         return run;
     }
 
+    /** 兼容原扫描最近列表，不改变扫描 ID 或项目参数含义。 */
     public List<ScanRun> recent(int limit) {
         return mapper.findRecent(Math.min(Math.max(limit, 1), 200));
     }
 
+    /** 按项目或资产范围返回旧客户端使用的最近可出具报告扫描。 */
     public List<ScanRun> recentForReports(int limit,Long businessProjectId,Long assetId) {
         return mapper.findReportRuns(Math.min(Math.max(limit,1),200),businessProjectId,assetId);
     }
 
+    /** 统计当前项目/资产条件下全部可出具报告的扫描数量。 */
+    public long countForReports(Long businessProjectId,Long assetId) {
+        return mapper.countReportRuns(businessProjectId,assetId);
+    }
+
+    /** 读取报告页对应的扫描；offset 由报告分页服务统一计算。 */
+    public List<ScanRun> pageForReports(int size,long offset,Long businessProjectId,Long assetId) {
+        return mapper.findReportPage(size,offset,businessProjectId,assetId);
+    }
+
+    /** 汇总原扫描、扫描器任务及问题证据以展示执行详情。 */
     public ScanRunDetail detail(Long id) {
         ScanRun run = requireById(id);
         return new ScanRunDetail(run, toolRunService.listByScanRun(id));
     }
 
+    /** 校验资产类型、扫描目标、规则集及验收来源，拒绝不兼容的扫描配置。 */
     private void validate(ScanProject project, CreateScanRunRequest request) {
         if (project.getSourceType() == ProjectSourceType.JAR_UPLOAD || request.getWorkspaceMode() == WorkspaceMode.JAR_UPLOAD) {
             if (project.getSourceType() != ProjectSourceType.JAR_UPLOAD

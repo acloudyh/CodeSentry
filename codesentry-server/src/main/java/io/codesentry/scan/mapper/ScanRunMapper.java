@@ -41,11 +41,25 @@ public interface ScanRunMapper {
     @Select("SELECT * FROM scan_run WHERE id = #{id}")
     ScanRun findById(@Param("id") Long id);
 
-    @Select({"<script>", "SELECT s.* FROM scan_run s WHERE s.status IN ('COMPLETED','PARTIAL')",
-            "<if test='assetId != null'> AND s.project_id=#{assetId}</if>",
-            "<if test='businessProjectId != null'> AND EXISTS(SELECT 1 FROM business_project_asset a WHERE a.asset_id=s.project_id AND a.business_project_id=#{businessProjectId})</if>",
+    /** 报告范围仅包含已完成/部分完成扫描；归属用 EXISTS 筛选，避免关联放大行数。 */
+    String REPORT_WHERE = "FROM scan_run s WHERE s.status IN ('COMPLETED','PARTIAL') " +
+            "<if test='assetId != null'> AND s.project_id=#{assetId}</if>" +
+            "<if test='businessProjectId != null'> AND EXISTS(SELECT 1 FROM business_project_asset a WHERE a.asset_id=s.project_id AND a.business_project_id=#{businessProjectId})</if>";
+
+    /** 兼容旧列表调用；新页面使用 countReportRuns 与 findReportPage，不截断历史总量。 */
+    @Select({"<script>", "SELECT s.* ", REPORT_WHERE,
             "ORDER BY s.created_at DESC,s.id DESC LIMIT #{limit}", "</script>"})
     List<ScanRun> findReportRuns(@Param("limit") int limit,@Param("businessProjectId") Long businessProjectId,@Param("assetId") Long assetId);
+
+    /** 按相同项目、资产条件统计完整匹配数量，不受每页条数影响。 */
+    @Select({"<script>", "SELECT COUNT(*) ", REPORT_WHERE, "</script>"})
+    long countReportRuns(@Param("businessProjectId") Long businessProjectId,@Param("assetId") Long assetId);
+
+    /** 先在数据库分页，再计算报告统计；相同扫描时间按 ID 倒序保持翻页顺序稳定。 */
+    @Select({"<script>", "SELECT s.* ", REPORT_WHERE,
+            "ORDER BY s.created_at DESC,s.id DESC LIMIT #{size} OFFSET #{offset}", "</script>"})
+    List<ScanRun> findReportPage(@Param("size") int size,@Param("offset") long offset,
+            @Param("businessProjectId") Long businessProjectId,@Param("assetId") Long assetId);
 
     @Select("SELECT * FROM scan_run ORDER BY created_at DESC LIMIT #{limit}")
     List<ScanRun> findRecent(@Param("limit") int limit);

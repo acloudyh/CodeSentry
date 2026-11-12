@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/** 统一计算报告采纳、数量对账与依赖合并建议，并生成保留来源证据的多格式整改报告。 */
 @Service
 public class RemediationReportService {
     private static final int REPORT_CODE_MAX_LINES = 30;
@@ -69,6 +70,7 @@ public class RemediationReportService {
     private final AiReviewService aiReviewService;
     private final ReportSnapshotStore snapshots;
 
+    /** 注入原扫描、资产、问题、工具复核和归档存储，统一三种导出数据来源。 */
     public RemediationReportService(ScanRunService scanRunService, ScanProjectService projectService,
                                     FindingPersistenceService findingService, AiReviewService aiReviewService, ReportSnapshotStore snapshots) {
         this.scanRunService = scanRunService;
@@ -78,16 +80,20 @@ public class RemediationReportService {
         this.snapshots = snapshots;
     }
 
+    /** 按原扫描加载并归档采纳清单，生成带转义源码的在线整改报告。 */
     public byte[] exportHtml(Long runId) {
         return buildHtml(load(runId, true)).getBytes(StandardCharsets.UTF_8);
     }
 
+    /** 读取原报告已采纳问题 ID，不合并或重编号原始问题。 */
     public List<Long> includedFindingIds(Long runId) {
         return load(runId, false).findings.stream().map(FindingView::getId).collect(Collectors.toList());
     }
 
+    /** 读取未采纳问题及排除理由，支持与台账逐项对账。 */
     public List<ReportExclusion> excludedFindings(Long runId) { return load(runId, false).exclusions; }
 
+    /** 按资产显示名和代码/JAR 类型生成安全文件名，过滤路径分隔符及控制字符。 */
     public String exportFileName(Long runId, String extension) {
         ScanRun run = scanRunService.requireById(runId);
         ScanProject project = projectService.requireById(run.getProjectId());
@@ -97,11 +103,40 @@ public class RemediationReportService {
         return safeName + projectType + "安全扫描." + extension;
     }
 
+    /** 兼容最近报告列表接口，仍沿用原采纳统计；完整历史由分页接口提供。 */
     public List<RemediationReportSummary> recent(int limit) { return recent(limit,null,null); }
 
+    /** 兼容最近报告列表接口，仍沿用原采纳统计；完整历史由分页接口提供。 */
     public List<RemediationReportSummary> recent(int limit,Long businessProjectId,Long assetId) {
+        List<RemediationReportSummary> reports = summarize(scanRunService.recentForReports(limit,businessProjectId,assetId));
+        reports.sort(Comparator.comparing(RemediationReportSummary::getCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return reports;
+    }
+
+    /**
+     * 按项目和资产查询完整历史报告；只限制单页计算量，不限制可翻阅的历史总量。
+     * 同一只读快照内查询总数和分页，避免后台扫描完成时总数与列表范围不一致。
+     * @param requestedPage 从 1 开始的页码，超出范围时回到末页
+     * @param requestedSize 单页条数，限制为 1 至 100 以控制报告统计开销
+     * @param businessProjectId 可选业务项目 ID，按资产当前归属筛选
+     * @param assetId 可选扫描资产 ID，同时指定项目时取交集
+     * @return 当前页报告、归一化页码及完整匹配总数
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public io.codesentry.report.dto.ReportPage page(int requestedPage,int requestedSize,Long businessProjectId,Long assetId) {
+        int size=Math.max(1,Math.min(100,requestedSize));
+        long total=scanRunService.countForReports(businessProjectId,assetId);
+        long last=Math.max(1,(total+size-1)/size);
+        int page=(int)Math.min(Math.max(1,requestedPage),last);
+        List<RemediationReportSummary> items=total==0?List.of():summarize(scanRunService.pageForReports(size,(long)(page-1)*size,businessProjectId,assetId));
+        return new io.codesentry.report.dto.ReportPage(items,total,page,size);
+    }
+
+    /** 将当前页扫描转换为报告对账统计，沿用原始归档采纳规则及联网核实状态。 */
+    private List<RemediationReportSummary> summarize(List<ScanRun> runs) {
         List<RemediationReportSummary> reports = new ArrayList<>();
-        for (ScanRun run : scanRunService.recentForReports(limit,businessProjectId,assetId)) {
+        for (ScanRun run : runs) {
             if (run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
             ReportData data = load(run.getId(), false);
@@ -109,18 +144,19 @@ public class RemediationReportService {
                     run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt(),
                     data.ledgerFindingCount, groupFindings(data.findings).size(), data.notIncludedFindingCount).withRemediation(data.run));
         }
-        reports.sort(Comparator.comparing(RemediationReportSummary::getCreatedAt,
-                Comparator.nullsLast(Comparator.reverseOrder())));
         return reports;
     }
 
+    /** 以统一报告数据生成 PDF，保留分页和中文字体。 */
     public byte[] exportPdf(Long runId) {
         ReportData data = load(runId, true);
         return renderPdfHtml(buildPdfHtml(data));
     }
 
+    /** 按轮次保存的资产身份生成项目汇总中的单资产章节。 */
     public String projectSectionHtml(Long runId, ScanProject asset) { return buildPdfHtml(load(runId, true, asset)); }
 
+    /** 使用本地中文字体将报告 HTML 转换为 PDF，不访问外部资源。 */
     public byte[] renderPdfHtml(String html) {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
@@ -137,8 +173,10 @@ public class RemediationReportService {
         }
     }
 
+    /** 导出原资产整改报告的 Word 文档。 */
     public byte[] exportDocx(Long runId) { return exportProjectDocx(runId, null); }
 
+    /** 生成独立或项目章节使用的 Word 内容，沿用原采纳清单与资产版本身份。 */
     public byte[] exportProjectDocx(Long runId, ScanProject asset) {
         ReportData data = load(runId, true, asset);
         try (XWPFDocument document = new XWPFDocument();
@@ -274,10 +312,13 @@ public class RemediationReportService {
         }
     }
 
+    /** 取得并固定该报告采纳的问题清单，供项目汇总归档复用。 */
     public List<FindingView> archiveFindings(Long runId) { return load(runId, true).findings; }
 
+    /** 加载原扫描、资产和问题；archive 为真时固定采纳清单，资产覆盖值仅用于历史身份展示。 */
     private ReportData load(Long runId, boolean archive) { return load(runId, archive, null); }
 
+    /** 加载原扫描、资产和问题；archive 为真时固定采纳清单，资产覆盖值仅用于历史身份展示。 */
     private ReportData load(Long runId, boolean archive, ScanProject asset) {
         ScanRun run = scanRunService.requireById(runId);
         if (archive && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
@@ -322,6 +363,7 @@ public class RemediationReportService {
         return html.replace("</style>", css + "</style>");
     }
 
+    /** 构建报告正文、统计、原始问题明细和未纳入项，所有业务文本需转义。 */
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
         int index = 1;
@@ -405,6 +447,7 @@ public class RemediationReportService {
     }
 
 
+    /** 生成台账、采纳、合并及变化数量说明，区分问题条数与整改组数。 */
     private String[][] countExplanationRows(ReportData data, int groups) {
         return new String[][] {
                 {"台账对账", data.ledgerFindingCount + " 条台账问题 = " + data.findings.size()
@@ -419,6 +462,7 @@ public class RemediationReportService {
         };
     }
 
+    /** 将整改建议文本转换为安全的报告段落，不执行内嵌 HTML。 */
     private String recommendationHtml(String recommendation) {
         return java.util.Arrays.stream(recommendation.split("\\R"))
                 .map(line -> line.startsWith("覆盖情况：")
@@ -426,6 +470,7 @@ public class RemediationReportService {
                 .collect(Collectors.joining("<br/>"));
     }
 
+    /** 以 HTML 展示与原台账可逐项核对的数量口径。 */
     private String countExplanationHtml(ReportData data, int groups) {
         StringBuilder html = new StringBuilder("<section class=\"card count-card\"><b>数量说明</b><table class=\"count-lines\">");
         for (String[] row : countExplanationRows(data, groups)) {
@@ -440,6 +485,7 @@ public class RemediationReportService {
         return html.append("</table></section>").toString();
     }
 
+    /** 列出未纳入正文的问题编号和原因，保留排除项的可追溯性。 */
     private String exclusionsHtml(ReportData data) {
         if (data.exclusions.isEmpty()) return "";
         StringBuilder html = new StringBuilder("<h2>未纳入整改的问题及原因</h2><p>以下记录用于台账对账，不计入待整改风险；原因按当前审核记录核对，已归档报告的纳入范围保持不变。</p><table class=\"data\"><thead><tr><th>#</th><th>问题编号 / 规则</th><th>问题 / 位置</th><th>未纳入原因</th></tr></thead><tbody>");
@@ -453,6 +499,7 @@ public class RemediationReportService {
         return html.append("</tbody></table>").toString();
     }
 
+    /** 汇总依据链接与原始 CVE 来源，减少重复引用。 */
     private String buildReferencesHtml(List<FindingView> findings) {
         StringBuilder html = new StringBuilder();
         for (ReportFindingGroup group : groupFindings(findings)) {
@@ -549,6 +596,7 @@ public class RemediationReportService {
         }
     }
 
+    /** 整理报告使用的证据片段，控制文档长度并保持原问题定位。 */
     private String reportCodeSnippet(String code) {
         String[] lines = code.split("\\R", -1);
         StringBuilder snippet = new StringBuilder(Math.min(code.length(), REPORT_CODE_MAX_CHARS));
@@ -659,10 +707,12 @@ public class RemediationReportService {
                 + embedded.relationshipId + "\" w:fontKey=\"" + embedded.fontKey + "\"/></w:font>";
     }
 
+    /** 判断资产是否为上传 JAR，用于类型标识与包名展示。 */
     private boolean isJar(ScanProject project) {
         return project.getSourceType() == io.codesentry.project.model.ProjectSourceType.JAR_UPLOAD;
     }
 
+    /** 优先读取本次扫描保存的 JAR 包名，避免后续替换文件改变报告来源。 */
     private String jarFileName(ReportData data) {
         // The recorded artifact belongs to this scan, even when the registered JAR is replaced later.
         String path = data.run.getArtifactPath();
@@ -673,6 +723,7 @@ public class RemediationReportService {
         return path.substring(path.lastIndexOf('/') + 1);
     }
 
+    /** 生成资产类型、名称及 Git/目录/JAR 来源说明。 */
     private List<String> assetIdentityLines(ReportData data) {
         ScanProject asset = data.project;
         String name = "扫描资产：" + value(asset.getDisplayName(), "未命名资产");
@@ -684,11 +735,13 @@ public class RemediationReportService {
         return List.of("资产类型：代码（本地仓库）", name, "代码项目目录：" + value(asset.getLocalPath(), "未记录本地目录"));
     }
 
+    /** 将资产身份说明安全转义后以醒目的格式输出。 */
     private String assetIdentityHtml(ReportData data) {
         return assetIdentityLines(data).stream().map(line -> "<p class=\"asset-identity\" style=\"color:#c83232;font-weight:700\"><b>" + escape(line) + "</b></p>")
                 .collect(Collectors.joining());
     }
 
+    /** 按前后端应用类型描述业务 Java 或 Node.js 运行版本。 */
     private String runtimeDescription(ScanProject project) {
         String node = project.getTargetNodeVersion() == null ? "未确认" : "Node.js " + project.getTargetNodeVersion();
         if (project.getApplicationType() == io.codesentry.project.model.ApplicationType.FRONTEND) return "业务 Node.js 版本：" + node;
@@ -696,6 +749,7 @@ public class RemediationReportService {
         return project.getApplicationType() == io.codesentry.project.model.ApplicationType.FULL_STACK ? java + "；业务 Node.js 版本：" + node : java;
     }
 
+    /** 将业务 Java 版本转换为可展示标签，未配置时保留未知状态。 */
     private String javaVersionLabel(ScanProject project) {
         return project.getTargetJavaVersion() == null ? "未确认" : "Java " + project.getTargetJavaVersion();
     }
@@ -716,8 +770,10 @@ public class RemediationReportService {
                 + reportLocationValue(finding);
     }
 
+    /** 按依赖文件和组件版本合并整改展示，保留组内原问题编号与 CVE。 */
     private List<ReportFindingGroup> groupFindings(List<FindingView> findings) { return groupFindings(findings, null); }
 
+    /** 按依赖文件和组件版本合并整改展示，保留组内原问题编号与 CVE。 */
     private List<ReportFindingGroup> groupFindings(List<FindingView> findings, Integer javaVersion) {
         Map<String, ReportFindingGroup> groups = new LinkedHashMap<>();
         for (FindingView finding : findings) {
@@ -728,6 +784,7 @@ public class RemediationReportService {
         return new ArrayList<>(groups.values());
     }
 
+    /** 根据资产应用类型及运行版本选择依赖整改建议。 */
     private List<ReportFindingGroup> groupForProject(List<FindingView> findings, ScanProject project) {
         List<ReportFindingGroup> groups = groupFindings(findings, project.getTargetJavaVersion());
         for (ReportFindingGroup group : groups) {
@@ -741,6 +798,7 @@ public class RemediationReportService {
         return groups;
     }
 
+    /** 提供面向前端依赖的整改与复测要求，不套用 Java 兼容性约束。 */
     private String nodeDependencyAdvice(List<FindingView> findings, String runtime) {
         StringBuilder advice = new StringBuilder("项目 Node.js 版本：").append(runtime).append("。\n");
         java.util.regex.Pattern fixed = java.util.regex.Pattern.compile("本漏洞修复版本（扫描时漏洞库记录）：([^。\\n]+)");
