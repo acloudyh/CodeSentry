@@ -492,3 +492,8 @@ body::before { display: none; }
 .row-action-link:hover { text-decoration: underline; }
 .row-action-link.danger { color: var(--danger); }
 .row-action-link:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 扫描时间完整保留在同一行，窄屏由表格容器横向滚动，不折断日期和时分秒。 */
+.data-table td.scan-timestamp { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+
+.data-table th.scan-timestamp-heading { width: 190px; white-space: nowrap; }

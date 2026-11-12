@@ -50,7 +50,7 @@ onMounted(async () => {
         <header class="panel-header"><h3>最近扫描记录</h3><small>扫描执行记录</small></header>
         <div v-if="runs.length" class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>任务 / 资产</th><th>模式</th><th>提交</th><th>发现</th><th>状态</th><th>开始时间</th></tr></thead>
+            <thead><tr><th>任务 / 资产</th><th>模式</th><th>提交</th><th>发现</th><th>状态</th><th class="scan-timestamp-heading">开始时间</th></tr></thead>
             <tbody>
               <tr v-for="run in runs" :key="run.id">
                 <td><strong>#{{ run.id }}</strong><div class="muted" style="margin-top:4px">{{ projectName(run.projectId) }}</div></td>
@@ -58,7 +58,7 @@ onMounted(async () => {
                 <td><span class="mono">{{ shortCommit(run.scanCommit) }}</span></td>
                 <td><b :class="run.newFindings ? 'danger-text' : 'signal-text'">+{{ run.newFindings }}</b> / {{ run.totalFindings }}</td>
                 <td><StatusBadge :value="run.status" /></td>
-                <td class="mono">{{ formatTime(run.createdAt) }}</td>
+                <td class="mono scan-timestamp">{{ formatTime(run.createdAt) }}</td>
               </tr>
             </tbody>
           </table>
