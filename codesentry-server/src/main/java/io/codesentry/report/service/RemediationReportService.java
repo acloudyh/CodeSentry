@@ -97,9 +97,11 @@ public class RemediationReportService {
         return safeName + projectType + "安全扫描." + extension;
     }
 
-    public List<RemediationReportSummary> recent(int limit) {
+    public List<RemediationReportSummary> recent(int limit) { return recent(limit,null,null); }
+
+    public List<RemediationReportSummary> recent(int limit,Long businessProjectId,Long assetId) {
         List<RemediationReportSummary> reports = new ArrayList<>();
-        for (ScanRun run : scanRunService.recent(limit)) {
+        for (ScanRun run : scanRunService.recentForReports(limit,businessProjectId,assetId)) {
             if (run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
             ReportData data = load(run.getId(), false);

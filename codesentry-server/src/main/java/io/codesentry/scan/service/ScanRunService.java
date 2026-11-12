@@ -124,6 +124,10 @@ public class ScanRunService {
         return mapper.findRecent(Math.min(Math.max(limit, 1), 200));
     }
 
+    public List<ScanRun> recentForReports(int limit,Long businessProjectId,Long assetId) {
+        return mapper.findReportRuns(Math.min(Math.max(limit,1),200),businessProjectId,assetId);
+    }
+
     public ScanRunDetail detail(Long id) {
         ScanRun run = requireById(id);
         return new ScanRunDetail(run, toolRunService.listByScanRun(id));

@@ -26,8 +26,8 @@ public class ReportController {
     }
 
     @GetMapping
-    public ApiResponse<List<RemediationReportSummary>> recent(@RequestParam(defaultValue = "100") int limit) {
-        return ApiResponse.success(service.recent(limit));
+    public ApiResponse<List<RemediationReportSummary>> recent(@RequestParam(defaultValue = "100") int limit,@RequestParam(required=false) Long businessProjectId,@RequestParam(required=false) Long assetId) {
+        return ApiResponse.success(service.recent(limit,businessProjectId,assetId));
     }
 
     @GetMapping("/scan-runs/{runId}/included-finding-ids")

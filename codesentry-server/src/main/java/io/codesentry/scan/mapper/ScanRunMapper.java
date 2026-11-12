@@ -32,6 +32,12 @@ public interface ScanRunMapper {
     @Select("SELECT * FROM scan_run WHERE id = #{id}")
     ScanRun findById(@Param("id") Long id);
 
+    @Select({"<script>", "SELECT s.* FROM scan_run s WHERE s.status IN ('COMPLETED','PARTIAL')",
+            "<if test='assetId != null'> AND s.project_id=#{assetId}</if>",
+            "<if test='businessProjectId != null'> AND EXISTS(SELECT 1 FROM business_project_asset a WHERE a.asset_id=s.project_id AND a.business_project_id=#{businessProjectId})</if>",
+            "ORDER BY s.created_at DESC,s.id DESC LIMIT #{limit}", "</script>"})
+    List<ScanRun> findReportRuns(@Param("limit") int limit,@Param("businessProjectId") Long businessProjectId,@Param("assetId") Long assetId);
+
     @Select("SELECT * FROM scan_run ORDER BY created_at DESC LIMIT #{limit}")
     List<ScanRun> findRecent(@Param("limit") int limit);
 

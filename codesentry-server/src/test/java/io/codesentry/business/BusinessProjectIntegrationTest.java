@@ -35,6 +35,7 @@ class BusinessProjectIntegrationTest {
     @Autowired ScanProjectMapper assets;
     @Autowired io.codesentry.project.service.ScanProjectService assetService;
     @Autowired ObjectMapper json;
+    @Autowired io.codesentry.scan.service.ScanRunService scanRecords;
     private Long asset(String type) {
         ScanProject a=new ScanProject();a.setProjectName(type+"-"+UUID.randomUUID());a.setSourceType(ProjectSourceType.valueOf(type));a.setLocalPath("/tmp/test.jar");a.setEnabled(true);a.setDefaultBranch("main");a.setCreatedAt(java.time.LocalDateTime.now());a.setUpdatedAt(a.getCreatedAt());assets.insert(a);return a.getId();
     }
@@ -123,6 +124,14 @@ class BusinessProjectIntegrationTest {
         ProjectScanRound fresh=service.start(p.id,request(List.of(code),true));finish(fresh,"FAILED");
         assertEquals(fresh.id,service.latestRoundId(p.id));assertEquals(206L,service.rounds(p.id,1,20).get("total"));
         assertEquals(0,ledger.page(p.id,null,null,null,null,null,null,1,20).get("total"));
+    }
+    @Test void reportFiltersApplyBeforeRecentLimitAndRespectBusinessProjectAndAssetTogether() {
+        BusinessProject p=service.save(null,"报告条件","");BusinessProject other=service.save(null,"其他报告","");Long a=asset("LOCAL"),b=asset("JAR_UPLOAD"),foreign=asset("LOCAL");service.attach(p.id,a);service.attach(p.id,b);service.attach(other.id,foreign);
+        for(Long id:List.of(a,b,foreign)) db.update("INSERT INTO scan_run(project_id,scan_mode,workspace_mode,status,created_at) VALUES(?,'FULL','CURRENT','COMPLETED',?)",id,java.time.LocalDateTime.of(2020,1,1,0,0));
+        for(int n=0;n<205;n++) db.update("INSERT INTO scan_run(project_id,scan_mode,workspace_mode,status,created_at) VALUES(?,'FULL','CURRENT','COMPLETED',NOW(3))",foreign);
+        assertEquals(2,scanRecords.recentForReports(200,p.id,null).size());
+        assertEquals(1,scanRecords.recentForReports(200,p.id,a).size());assertEquals(a,scanRecords.recentForReports(200,p.id,a).get(0).getProjectId());
+        assertEquals(0,scanRecords.recentForReports(200,p.id,foreign).size());assertEquals(1,scanRecords.recentForReports(200,null,b).size());
     }
     @Test void ledgerSummaryCountsAllPagesAndSeparatesAssetScopeFromIssueFilters() {
         BusinessProject p=service.save(null,"台账条数","");Long a=asset("LOCAL"),b=asset("JAR_UPLOAD");service.attach(p.id,a);service.attach(p.id,b);

@@ -101,7 +101,7 @@ class RemediationReportServiceTest {
         run.setId(8L); run.setProjectId(1L); run.setScanMode(ScanMode.FULL);
         run.setStatus(io.codesentry.scan.model.ScanRunStatus.COMPLETED);
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("review-target");
-        when(runs.recent(100)).thenReturn(List.of(run));
+        when(runs.recentForReports(100,null,null)).thenReturn(List.of(run));
         when(runs.requireById(8L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
         when(findings.findByRunId(8L)).thenReturn(List.of(
@@ -133,7 +133,7 @@ class RemediationReportServiceTest {
                     "app.jar/BOOT-INF/lib/lib-" + component + "-1.0.jar", "example:lib-" + component + "@1.0"));
         }
         for (int i = 0; i < 12; i++) raw.add(finding(2000L + i, "未纳入项" + i, "FALSE_POSITIVE"));
-        when(runs.recent(100)).thenReturn(List.of(run));
+        when(runs.recentForReports(100,null,null)).thenReturn(List.of(run));
         when(runs.requireById(47L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
         when(findings.findByRunId(47L)).thenReturn(raw);
@@ -165,7 +165,7 @@ class RemediationReportServiceTest {
         ScanRun older = reportRun(31L, LocalDateTime.of(2026, 10, 30, 8, 0));
         ScanRun newer = reportRun(35L, LocalDateTime.of(2026, 11, 1, 9, 30));
         ScanProject project = new ScanProject(); project.setId(1L); project.setProjectName("测试项目");
-        when(runs.recent(100)).thenReturn(List.of(older, newer));
+        when(runs.recentForReports(100,null,null)).thenReturn(List.of(older, newer));
         when(runs.requireById(31L)).thenReturn(older);
         when(runs.requireById(35L)).thenReturn(newer);
         when(projects.requireById(1L)).thenReturn(project);
