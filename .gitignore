@@ -32,3 +32,6 @@ scripts/*
 !/docs/
 /docs/*
 !/docs/CodeSentry功能清单.md
+
+/outputs/
+!/docs/CodeSentry功能清单.xlsx
