@@ -11,12 +11,14 @@ import java.nio.charset.StandardCharsets;
 import java.math.BigInteger;
 import java.util.*;
 
+/** 将一个真实项目扫描轮次归档为汇总报告，固定覆盖范围和各资产整改内容。 */
 @Service
 public class ProjectReportService {
     private final JdbcTemplate db;
     private final BusinessProjectService projects;
     private final RemediationReportService reports;
     private final ObjectMapper json;
+    /** 注入项目范围、原资产报告及快照序列化能力。 */
     public ProjectReportService(JdbcTemplate db,BusinessProjectService projects,RemediationReportService reports,ObjectMapper json) { this.db=db;this.projects=projects;this.reports=reports;this.json=json; }
     public static class Snapshot {
         public ProjectScanRound round;
@@ -25,15 +27,18 @@ public class ProjectReportService {
         public int ledgerCount; public int includedCount;
         public Map<String,Integer> severityCounts=new LinkedHashMap<>();
     }
+    /** 按历史视图导出原资产报告，不将单资产记录伪装为整项目报告。 */
     public byte[] assetHistoryReport(Long projectId,Long viewId,String format) {
         ProjectScanRound history=projects.round(projectId,viewId);
         if(!history.assetHistory) throw BusinessProjectService.bad("不是资产历史扫描");
         Long runId=history.items.get(0).runId;
         return "html".equals(format)?reports.exportHtml(runId):"pdf".equals(format)?reports.exportPdf(runId):reports.exportDocx(runId);
     }
+    /** 沿用历史资产原报告的下载名称。 */
     public String assetHistoryReportName(Long projectId,Long viewId,String format) {
         return reports.exportFileName(projects.round(projectId,viewId).items.get(0).runId,format);
     }
+    /** 串行化首次归档并保存内容快照；已归档报告直接复用，后续审核或联网补查不改写。 */
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public Snapshot archive(Long projectId,Long roundId) {
         // Serialize first archive and cancel/start actions for this project.
         projects.require(projectId);
@@ -67,8 +72,11 @@ public class ProjectReportService {
         } catch(io.codesentry.common.error.BusinessException e) { throw e; }
         catch(Exception e) { throw new IllegalStateException("项目报告归档失败",e); }
     }
+    /** 返回已归档的项目 HTML 内容。 */
     public byte[] html(Snapshot s) { return s.html.getBytes(StandardCharsets.UTF_8); }
+    /** 使用统一中文字体渲染已归档项目 HTML。 */
     public byte[] pdf(Snapshot s) { return reports.renderPdfHtml(s.html); }
+    /** 合并归档时固定的子文档，保留各资产问题及原始来源编号。 */
     public byte[] docx(Snapshot s) {
         try(XWPFDocument doc=new XWPFDocument(); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
             org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr sect=doc.getDocument().getBody().addNewSectPr();
@@ -94,14 +102,18 @@ public class ProjectReportService {
             doc.write(out);return out.toByteArray();
         } catch(Exception e) { throw new IllegalStateException("项目 Word 报告生成失败",e); }
     }
+    /** 以指定字号写入宋体段落，保持项目汇总文档的中文排版。 */
     private void paragraph(XWPFDocument doc,String text,int size) { XWPFRun r=doc.createParagraph().createRun();r.setText(text);r.setFontFamily("宋体");r.setFontSize(size); }
+    /** 汇总本轮覆盖、状态、台账及采纳数量，并明确部分扫描范围。 */
     private String summaryText(Snapshot s) { return "项目扫描轮次 #P"+s.round.id+" · "+(s.round.fullScope?"全部资产扫描":"部分资产扫描 / 失败项重试")+" · 扫描时间 "+s.round.createdAt+" · 覆盖 "+s.round.items.size()+" / "+s.round.assetCount+" 个资产 · 完整完成 "+s.round.completedCount+" · 非完整完成 "+s.round.failedCount+" · 台账 "+s.ledgerCount+" 条 / 纳入整改 "+s.includedCount+" 条 / 未纳入 "+(s.ledgerCount-s.includedCount)+" 条 · 纳入风险：严重 "+s.severityCounts.getOrDefault("CRITICAL",0)+" / 高危 "+s.severityCounts.getOrDefault("HIGH",0)+" / 中危 "+s.severityCounts.getOrDefault("MEDIUM",0)+" / 低危 "+s.severityCounts.getOrDefault("LOW",0)+" / 提示 "+s.severityCounts.getOrDefault("INFO",0); }
+    /** 生成项目报告覆盖与风险统计区，输出内容进行 HTML 转义。 */
     private String summaryHtml(Snapshot s) {
         StringBuilder h=new StringBuilder("<h1>"+escape(s.round.projectName)+" · 项目安全扫描整改报告</h1><p>"+escape(summaryText(s))+"</p><table><thead><tr><th>资产</th><th>来源扫描</th><th>状态</th><th>扫描版本 / 文件</th><th>异常说明</th></tr></thead><tbody>");
         for(ProjectScanItem i:s.round.items) h.append("<tr><td>").append(escape(i.assetName)).append("</td><td>").append(i.runId==null?"未启动":i.runId).append("</td><td>").append(escape(i.status)).append("</td><td>").append(escape(version(i))).append("</td><td>").append(escape(i.errorMessage)).append("</td></tr>");
         for(Map<String,Object> asset:s.round.unselectedAssets) h.append("<tr><td>").append(escape(String.valueOf(asset.get("assetName")))).append("</td><td>—</td><td>本轮未扫描</td><td>—</td><td>不在本轮扫描范围内</td></tr>");
         return h.append("</tbody></table><p>未选中资产：").append(Math.max(0,s.round.assetCount-s.round.items.size())).append(" 个。失败、取消、未启动及工具部分失败的资产不代表已完整检查通过。</p>").toString();
     }
+    /** 描述本次扫描实际提交或工作区标识，不取远端后续版本。 */
     private String version(ProjectScanItem i) { return i.run!=null && i.run.getScanCommit()!=null?i.run.getScanCommit()+(Boolean.TRUE.equals(i.run.getRepositoryDirty())?"（包含未提交修改）":""):i.scanRef==null?"当前工作区":i.scanRef; }
     static String escape(String value) { return value==null?"":value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&#39;"); }
 }

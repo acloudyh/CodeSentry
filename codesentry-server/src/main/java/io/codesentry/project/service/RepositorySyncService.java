@@ -28,16 +28,20 @@ public class RepositorySyncService {
     private final Set<Long> running = ConcurrentHashMap.newKeySet();
     private volatile boolean ready;
 
+    /** 注入 Git 操作、独立任务池和短事务模板。 */
     public RepositorySyncService(ScanProjectMapper mapper, GitRepositoryService git,
             @Qualifier("repositoryTaskExecutor") TaskExecutor executor, PlatformTransactionManager manager) {
         this.mapper=mapper; this.git=git; this.executor=executor; this.tx=new TransactionTemplate(manager);
     }
 
+    /** 启动后恢复被中断的拉取状态，再开放后台调度。 */
     @EventListener(ApplicationReadyEvent.class)
     public void ready() { mapper.recoverRepositorySync(); ready=true; }
 
+    /** 查询当前实例是否正在处理指定资产的代码拉取。 */
     public boolean isRunning(Long id) { return running.contains(id); }
 
+    /** 调度数据库中待拉取资产；线程池满时保留排队状态，避免任务丢失。 */
     @Scheduled(fixedDelay=2000)
     public void dispatch() {
         if (!ready) return;
@@ -49,12 +53,14 @@ public class RepositorySyncService {
         }
     }
 
+    /** 扫描明确要求刷新时同步等待该次更新；与后台同资产任务互斥。 */
     public void refreshForScan(ScanProject project) {
         if (!running.add(project.getId())) throw new BusinessException(HttpStatus.CONFLICT,"代码正在后台拉取，请稍后重试扫描");
         try { perform(project.getId(), true); }
         finally { running.remove(project.getId()); }
     }
 
+    /** 短事务认领资产后在事务外执行网络操作，最后按配置版本条件回写结果。 */
     private void perform(Long id, boolean forScan) {
         ScanProject snapshot=tx.execute(status -> {
             ScanProject p=mapper.findByIdForUpdate(id);

@@ -18,42 +18,53 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/** 管理业务项目、资产归属和项目扫描轮次，并以只读映射兼容原资产历史。 */
 @Service
 public class BusinessProjectService {
     private final JdbcTemplate db;
     private final ScanProjectMapper assets;
     private final ScanRunService scans;
     private final ObjectMapper json;
+    /** 注入项目存储、资产查询及原扫描服务，复用已有扫描与历史标识。 */
     public BusinessProjectService(JdbcTemplate db, ScanProjectMapper assets, ScanRunService scans, ObjectMapper json) {
         this.db=db; this.assets=assets; this.scans=scans; this.json=json;
     }
+    /** 构造参数校验失败响应，向调用方返回可直接展示的业务原因。 */
     public static BusinessException bad(String message) { return new BusinessException(HttpStatus.BAD_REQUEST, message); }
+    /** 构造资源状态冲突响应，阻止不符合当前状态的操作。 */
     public static BusinessException conflict(String message) { return new BusinessException(HttpStatus.CONFLICT, message); }
+    /** 按业务项目 ID 读取项目；不存在时返回 404，避免后续查询落到空范围。 */
     public BusinessProject require(Long id) {
         List<BusinessProject> list=db.query("SELECT * FROM business_project WHERE id=?", new BeanPropertyRowMapper<>(BusinessProject.class), id);
         if(list.isEmpty()) throw new BusinessException(HttpStatus.NOT_FOUND,"业务项目不存在");
         return list.get(0);
     }
+    /** 锁定项目行，串行化资产归属、轮次创建和归档等变更。 */
     private void lock(Long id) {
         if(db.queryForList("SELECT id FROM business_project WHERE id=? FOR UPDATE",Long.class,id).isEmpty()) throw new BusinessException(HttpStatus.NOT_FOUND,"业务项目不存在");
     }
+    /** 列出业务项目及代码/JAR 数量，并解析其时间上最新的真实或历史扫描范围。 */
     public List<BusinessProject> list() {
         List<BusinessProject> list=db.query("SELECT b.*, (SELECT COUNT(*) FROM business_project_asset a JOIN scan_project p ON p.id=a.asset_id WHERE a.business_project_id=b.id AND p.enabled=1 AND p.source_type!='JAR_UPLOAD') repository_count, (SELECT COUNT(*) FROM business_project_asset a JOIN scan_project p ON p.id=a.asset_id WHERE a.business_project_id=b.id AND p.enabled=1 AND p.source_type='JAR_UPLOAD') jar_count FROM business_project b ORDER BY b.id DESC",new BeanPropertyRowMapper<>(BusinessProject.class));
         for(BusinessProject b:list) { Long last=latestRoundId(b.id); b.latestRound=last==null?null:round(b.id,last); }
         return list;
     }
+    /** 校验名称与备注后新建或编辑项目，不修改资产及历史扫描。 */
     @Transactional public BusinessProject save(Long id,String name,String description) {
         if(name==null || name.trim().isEmpty() || name.trim().length()>128 || (description!=null && description.length()>2000)) throw bad("项目名称不能为空且最多128字，描述最多2000字");
         if(id==null) { db.update("INSERT INTO business_project(name,description,created_at,updated_at) VALUES(?,?,NOW(3),NOW(3))", name.trim(),description); id=db.queryForObject("SELECT LAST_INSERT_ID()",Long.class); }
         else { lock(id); db.update("UPDATE business_project SET name=?,description=?,updated_at=NOW(3) WHERE id=?",name.trim(),description,id); }
         return require(id);
     }
+    /** 仅删除既无关联资产又无项目扫描历史的业务项目。 */
     @Transactional public void delete(Long id) {
         lock(id);
         if(db.queryForObject("SELECT COUNT(*) FROM business_project_asset WHERE business_project_id=?",Long.class,id)>0 || db.queryForObject("SELECT COUNT(*) FROM project_scan_round WHERE business_project_id=?",Long.class,id)>0) throw conflict("仅可删除无资产、无扫描历史的项目，请先解除资产归属");
         db.update("DELETE FROM business_project WHERE id=?",id);
     }
+    /** 读取项目当前有效资产，排除已停用项。 */
     public List<ScanProject> assets(Long id) { require(id); return db.query("SELECT p.*, a.business_project_id FROM scan_project p JOIN business_project_asset a ON a.asset_id=p.id WHERE a.business_project_id=? AND p.enabled=1 ORDER BY p.id",new BeanPropertyRowMapper<>(ScanProject.class),id); }
+    /** 在项目与资产行锁保护下建立唯一归属；已有其他归属时拒绝覆盖。 */
     @Transactional public void attach(Long id,Long assetId) {
         lock(id);
         ScanProject asset=assets.findByIdForUpdate(assetId);
@@ -62,6 +73,7 @@ public class BusinessProjectService {
         if(!owners.isEmpty()) { if(!owners.get(0).equals(id)) throw conflict("资产已归属其他项目，请先解除原归属"); return; }
         db.update("INSERT INTO business_project_asset(asset_id,business_project_id) VALUES(?,?)",assetId,id);
     }
+    /** 仅解除当前项目归属，保留原资产、扫描、台账和报告。 */
     @Transactional public void detach(Long id,Long assetId) {
         lock(id); assets.findByIdForUpdate(assetId);
         db.update("DELETE FROM business_project_asset WHERE business_project_id=? AND asset_id=?",id,assetId);
@@ -72,15 +84,18 @@ public class BusinessProjectService {
             "SELECT -s.id AS id,s.created_at FROM scan_run s JOIN business_project_asset a ON a.asset_id=s.project_id " +
             "JOIN scan_project p ON p.id=a.asset_id WHERE a.business_project_id=? AND p.enabled=1 " +
             "AND NOT EXISTS(SELECT 1 FROM project_scan_item i WHERE i.run_id=s.id)";
+    /** 从统一时间线选取最新扫描范围；负数标识原资产历史，不新增项目轮次。 */
     public Long latestRoundId(Long id) {
         List<Long> ids=db.queryForList("SELECT id FROM ("+TIMELINE+") timeline ORDER BY created_at DESC,id DESC LIMIT 1",Long.class,id,id);
         return ids.isEmpty()?null:ids.get(0);
     }
+    /** 按实际扫描时间分页读取项目轮次与原资产历史，返回全量匹配总数。 */
     public Map<String,Object> rounds(Long id,int page,int size) {
         require(id); size=Math.min(Math.max(size,1),100); page=Math.max(page,1);
         List<Long> ids=db.queryForList("SELECT id FROM ("+TIMELINE+") timeline ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",Long.class,id,id,size,(long)(page-1)*size);
         return Map.of("items",ids.stream().map(r->round(id,r)).collect(Collectors.toList()),"total",db.queryForObject("SELECT COUNT(*) FROM ("+TIMELINE+") timeline",Long.class,id,id),"page",page,"pageSize",size);
     }
+    /** 将负数视图 ID 解析为原扫描，校验当前归属并保留原问题及报告来源。 */
     private ProjectScanRound assetHistory(Long projectId,Long viewId) {
         BusinessProject project=require(projectId);
         if(viewId==Long.MIN_VALUE) throw new BusinessException(HttpStatus.NOT_FOUND,"历史扫描不存在");
@@ -94,6 +109,7 @@ public class BusinessProjectService {
         ProjectScanItem item=new ProjectScanItem();item.id=runId;item.roundId=viewId;item.assetId=asset.getId();item.assetName=asset.getDisplayName();item.sourceType=asset.getSourceType().name();item.targetJavaVersion=asset.getTargetJavaVersion();item.applicationType=asset.getApplicationType();item.targetNodeVersion=asset.getTargetNodeVersion();item.workspaceMode=run.getWorkspaceMode().name();item.scanRef=run.getScanRef();item.artifactPath=run.getArtifactPath();item.runId=runId;r.items=List.of(item);
         return hydrate(r);
     }
+    /** 校验轮次所属项目；历史视图与真实项目轮次分别解析。 */
     public ProjectScanRound round(Long projectId,Long roundId) {
         if(roundId<0) return assetHistory(projectId,roundId);
         List<ProjectScanRound> found=db.query("SELECT * FROM project_scan_round WHERE id=? AND business_project_id=?",new BeanPropertyRowMapper<>(ProjectScanRound.class),roundId,projectId);
@@ -104,6 +120,7 @@ public class BusinessProjectService {
         r.items=db.query("SELECT * FROM project_scan_item WHERE round_id=? ORDER BY id",new BeanPropertyRowMapper<>(ProjectScanItem.class),roundId);
         return hydrate(r);
     }
+    /** 根据各子任务当前状态汇总完成、失败和取消数量，不用旧结果补齐失败项。 */
     private ProjectScanRound hydrate(ProjectScanRound r) {
         int active=0, cancelled=0;
         for(ProjectScanItem item:r.items) {
@@ -117,7 +134,9 @@ public class BusinessProjectService {
         r.status=active>0?"RUNNING":r.completedCount==r.items.size()?"COMPLETED":cancelled==r.items.size()?"CANCELLED":r.completedCount>0 || r.items.stream().anyMatch(i->"PARTIAL".equals(i.status))?"PARTIAL":"FAILED";
         return r;
     }
+    /** 以请求键幂等创建项目扫描轮次；一项资产对应一个原有扫描任务。 */
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public ProjectScanRound start(Long id,ProjectScanRequest request) { return createRound(id,request,null); }
+    /** 校验资产范围与配置并固化轮次快照，同事务创建子任务关联。 */
     private ProjectScanRound createRound(Long id,ProjectScanRequest request,Long retryOf) {
         // 锁住项目后校验请求摘要：相同幂等键只复用同配置，防止双击或重试创建重复子任务。
         lock(id);
@@ -148,6 +167,7 @@ public class BusinessProjectService {
         }
         return round(id,roundId);
     }
+    /** 仅对原轮次失败项创建关联的新轮次，不覆盖原始记录。 */
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public ProjectScanRound retry(Long id,Long source,String requestKey) {
         ProjectScanRound previous=round(id,source);
         if(previous.assetHistory) throw bad("请从原扫描记录重新发起资产扫描，历史记录不能作为项目轮次重试");
@@ -155,6 +175,7 @@ public class BusinessProjectService {
         request.assets=previous.items.stream().filter(i->List.of("FAILED","PARTIAL","CANCELLED").contains(i.status)).map(i->{ ProjectScanRequest.Target t=new ProjectScanRequest.Target(); t.assetId=i.assetId; t.workspaceMode=WorkspaceMode.valueOf(i.workspaceMode); t.scanRef=i.scanRef; return t; }).collect(Collectors.toList());
         return createRound(id,request,source);
     }
+    /** 取消当前轮次中尚未结束的子任务，保留已执行证据及原轮次。 */
     @Transactional public ProjectScanRound cancel(Long id,Long roundId) {
         lock(id); ProjectScanRound r=round(id,roundId);
         if(r.assetHistory) throw bad("请从原扫描记录停止资产扫描");
@@ -163,10 +184,12 @@ public class BusinessProjectService {
         }
         return round(id,roundId);
     }
+    /** 保存本轮未选择资产的身份快照，用于报告覆盖范围说明。 */
     private String unselectedJson(Map<Long,ScanProject> owned,Set<Long> selected) {
         try { return json.writeValueAsString(owned.values().stream().filter(a->!selected.contains(a.getId())).map(a->Map.of("assetId",a.getId(),"assetName",a.getDisplayName(),"sourceType",a.getSourceType().name())).collect(Collectors.toList())); }
         catch(Exception e) { throw new IllegalStateException(e); }
     }
+    /** 对扫描配置和重试来源计算摘要，防止同一幂等键被用于不同请求。 */
     private String hash(ProjectScanRequest request,Long retryOf) {
         try { byte[] digest=MessageDigest.getInstance("SHA-256").digest((json.writeValueAsString(request)+":"+retryOf).getBytes(StandardCharsets.UTF_8)); StringBuilder out=new StringBuilder(); for(byte b:digest) out.append(String.format("%02x",b)); return out.toString(); }
         catch(Exception e) { throw new IllegalStateException(e); }

@@ -3,9 +3,12 @@ package io.codesentry.dashboard.mapper;
 import io.codesentry.dashboard.dto.DashboardSummary;
 import org.apache.ibatis.annotations.Select;
 
+/** 以独立聚合查询统计业务项目、资产及扫描，避免一对多关联导致重复计数。 */
 public interface DashboardMapper {
-    // 独立子查询避免项目、资产、扫描一对多关联放大数量；不受最近记录的分页上限影响。
-    // 新增问题按每轮历史累计，包含跨轮次再次新增的问题，不代表当前待整改存量。
+    /**
+     * 统计所有业务项目、有效资产和历史扫描，独立聚合避免一对多关联放大数量。
+     * 新增问题按每轮历史累计，包含跨轮次再次新增的问题，不代表当前待整改存量。
+     */
     @Select("SELECT (SELECT COUNT(*) FROM business_project) business_projects, " +
             "(SELECT COUNT(*) FROM scan_project WHERE enabled=1) assets, " +
             "(SELECT COUNT(*) FROM scan_project WHERE enabled=1 AND source_type!='JAR_UPLOAD') code_assets, " +

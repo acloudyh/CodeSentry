@@ -20,8 +20,11 @@ public class RemediationRefreshService {
     private final OnlineRemediationService online;
     private final TaskExecutor executor;
     private final TransactionTemplate failureTransaction;
+    /** 注入原扫描、联网核实及独立执行器，并为排队失败准备独立提交事务。 */
     public RemediationRefreshService(ScanRunMapper runs,OnlineRemediationService online,@Qualifier("remediationTaskExecutor") TaskExecutor executor,org.springframework.transaction.PlatformTransactionManager manager) { this.runs=runs;this.online=online;this.executor=executor;this.failureTransaction=new TransactionTemplate(manager);this.failureTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW); }
+    /** 服务启动时将未结束的历史补查标为可重试的失败状态。 */
     @EventListener(ApplicationReadyEvent.class) public void recover() { runs.recoverRemediationRefresh(); }
+    /** 校验原扫描模式和结束状态，原子认领补查；提交事务后才将任务投入后台。 */
     @Transactional public ScanRun start(Long id) {
         ScanRun run=runs.findById(id);
         if(run==null) throw new BusinessException(HttpStatus.NOT_FOUND,"扫描记录不存在");
@@ -34,6 +37,7 @@ public class RemediationRefreshService {
         else dispatch(id);
         run.setRemediationStatus("PENDING");run.setRemediationMessage("等待后台补充联网核实");return run;
     }
+    /** 提交独立后台核实作业；队列拒绝或执行中断时记录失败并保留原证据。 */
     private void dispatch(Long id) {
         try { executor.execute(() -> {
             try { ScanRun run=runs.findById(id); if(run!=null && "PENDING".equals(run.getRemediationStatus())) online.enrich(run); }

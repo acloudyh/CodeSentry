@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/** 聚合指定项目扫描范围的问题台账，复用原问题身份、人工结论与报告采纳口径。 */
 @Service
 public class ProjectLedgerService {
     private final JdbcTemplate db;
@@ -16,7 +17,9 @@ public class ProjectLedgerService {
     private final RemediationReportService reports;
     private final AiReviewService ai;
     private final io.codesentry.finding.service.FindingPersistenceService evidence;
+    /** 注入项目范围、原报告采纳、工具复核与扫描证据服务。 */
     public ProjectLedgerService(JdbcTemplate db,BusinessProjectService projects,RemediationReportService reports,AiReviewService ai,io.codesentry.finding.service.FindingPersistenceService evidence) { this.db=db;this.projects=projects;this.reports=reports;this.ai=ai;this.evidence=evidence; }
+    /** 按轮次和资产读取原扫描问题，计算全范围统计后筛选分页；失败项不借用历史结果。 */
     public Map<String,Object> page(Long projectId,Long roundId,Long assetId,String severity,String triage,String reportState,String keyword,int page,int size) {
         projects.require(projectId);
         if(roundId==null) roundId=projects.latestRoundId(projectId);
@@ -56,6 +59,7 @@ public class ProjectLedgerService {
         response.put("summary",Map.of("total",scopeTotal,"newCount",scopeNew,"fixedCount",scopeFixed));
         return response;
     }
+    /** 判断筛选值是否表示全部，以统一处理空条件和 ALL。 */
     private boolean all(String s) { return s==null || s.isEmpty() || "ALL".equals(s); }
     public static class LedgerFinding extends FindingView {
         public Long assetId; public String assetName; public String reportState;

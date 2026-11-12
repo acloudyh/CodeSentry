@@ -9,12 +9,14 @@ import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/** 按精确组件版本与 CVE 联网核实修复候选及 Java 要求，并保存带时效的原始依据。 */
 @Service
 public class OnlineRemediationService {
     private final RemediationHttpClient remote;
     private final ObjectMapper json;
     private final FindingPersistenceService findings;
     private final ScanRunMapper runs;
+    /** 注入受限外部查询、原问题读取和扫描依据持久化能力。 */
     public OnlineRemediationService(RemediationHttpClient remote, ObjectMapper json,
                                     FindingPersistenceService findings, ScanRunMapper runs) {
         this.remote = remote; this.json = json; this.findings = findings; this.runs = runs;
@@ -25,6 +27,7 @@ public class OnlineRemediationService {
     @org.springframework.beans.factory.annotation.Autowired
     private io.codesentry.project.mapper.ScanProjectMapper assets;
 
+    /** 按组件版本分组核实并更新进度，复用有效缓存；未核实项不得视为已修复。 */
     public void enrich(ScanRun run) {
         run.setRemediationStatus("RUNNING");
         run.setRemediationMessage("正在联网核实修复记录与 Java 要求");
@@ -73,6 +76,7 @@ public class OnlineRemediationService {
         runs.updateRemediation(run);
     }
 
+    /** 匹配本组 CVE 的上游记录，并对同发布线的候选版本逐一核实修复覆盖和 Java 要求。 */
     private void lookup(List<FindingView> group, List<OnlineRemediationEvidence> all,
                         Map<String, JsonNode> responses, Map<String,Integer> javaRequirements, Integer javaTarget, Budget budget) {
         String pkg = coordinate(group.get(0)), installed = installed(group.get(0));
@@ -163,6 +167,7 @@ public class OnlineRemediationService {
         }
     }
 
+    /** 查询精确组件版本，校验响应完整性并计入时间、请求和容量预算。 */
     private JsonNode query(String pkg, String version, Map<String, JsonNode> responses, Budget budget) throws Exception {
         String key = pkg + "@" + version;
         if (responses.containsKey(key)) return responses.get(key);
@@ -189,15 +194,21 @@ public class OnlineRemediationService {
         }
         return result;
     }
+    /** 要求来源生态与 Maven 坐标完全匹配，防止同名组件串用依据。 */
     private static boolean isPackage(JsonNode affected, String pkg) {
         return "Maven".equals(affected.path("package").path("ecosystem").asText())
                 && pkg.equals(affected.path("package").path("name").asText());
     }
+    /** 仅接纳支持比较的稳定版本格式，排除无法可靠排序的候选。 */
     private static boolean stable(String value) { return value.matches("[0-9]+(?:\\.[0-9]+)*(?:(?:\\.Final|\\.RELEASE)|-(?:jre|android))?"); }
+    /** 提取扫描片段首行的组件坐标与安装版本签名。 */
     public static String signature(FindingView f) { return f.getCodeSnippet() == null ? "" : f.getCodeSnippet().split("\\R",2)[0].trim(); }
+    /** 从组件签名解析 Maven 坐标，不包含安装版本。 */
     public static String coordinate(FindingView f) { String s = signature(f); int at = s.lastIndexOf('@'); return at < 0 ? "" : s.substring(0,at); }
+    /** 从组件签名解析本次扫描的实际安装版本。 */
     private static String installed(FindingView f) { String s = signature(f); int at = s.lastIndexOf('@'); return at < 0 ? "" : s.substring(at+1); }
 
+    /** 将保存的联网证据按组件版本和 CVE 关联回问题视图；报告导出无需重新联网。 */
     public static void attach(ScanRun run, List<FindingView> findings) {
         if (run.getRemediationEvidence() == null) return;
         try {
