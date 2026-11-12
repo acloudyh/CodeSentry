@@ -67,6 +67,7 @@ public class BusinessProjectService {
         db.update("DELETE FROM business_project_asset WHERE business_project_id=? AND asset_id=?",id,assetId);
     }
     /** Negative view IDs identify existing standalone scans; no synthetic database rounds are inserted. */
+    // 正数是项目轮次，负数只映射原资产扫描；排除已关联子任务，避免同次扫描重复出现。
     private static final String TIMELINE = "SELECT id,created_at FROM project_scan_round WHERE business_project_id=? UNION ALL " +
             "SELECT -s.id AS id,s.created_at FROM scan_run s JOIN business_project_asset a ON a.asset_id=s.project_id " +
             "JOIN scan_project p ON p.id=a.asset_id WHERE a.business_project_id=? AND p.enabled=1 " +
@@ -118,6 +119,7 @@ public class BusinessProjectService {
     }
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public ProjectScanRound start(Long id,ProjectScanRequest request) { return createRound(id,request,null); }
     private ProjectScanRound createRound(Long id,ProjectScanRequest request,Long retryOf) {
+        // 锁住项目后校验请求摘要：相同幂等键只复用同配置，防止双击或重试创建重复子任务。
         lock(id);
         String hash=hash(request,retryOf);
         List<ProjectScanRound> existing=db.query("SELECT * FROM project_scan_round WHERE business_project_id=? AND request_key=?",new BeanPropertyRowMapper<>(ProjectScanRound.class),id,request.requestKey);
@@ -133,6 +135,7 @@ public class BusinessProjectService {
         }
         if(request.fullScope && selected.size()!=owned.size()) throw bad("全项目扫描必须包含全部当前资产，请刷新项目");
         BusinessProject project=require(id);
+        // 固化本轮范围和未选资产，后续归属变化不能悄悄改变历史轮次的覆盖口径。
         db.update("INSERT INTO project_scan_round(business_project_id,project_name,request_key,request_hash,full_scope,asset_count,unselected_json,refresh_remote,network_mode,rule_profile,retry_of,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,NOW(3))",id,project.name,request.requestKey,hash,request.fullScope,owned.size(),unselectedJson(owned,selected),request.refreshRemote && request.networkMode==NetworkMode.ONLINE,request.networkMode.name(),request.ruleProfile,retryOf);
         Long roundId=db.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         for(ProjectScanRequest.Target target:request.assets) {

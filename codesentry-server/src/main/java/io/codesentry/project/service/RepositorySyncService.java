@@ -41,6 +41,7 @@ public class RepositorySyncService {
     @Scheduled(fixedDelay=2000)
     public void dispatch() {
         if (!ready) return;
+        // 数据库 PENDING 是持久队列；线程池满时保留该状态，下一次调度继续尝试，保存接口无需等待 Git。
         for (Long id: mapper.pendingRepositories()) {
             if (!running.add(id)) continue;
             try { executor.execute(() -> { try { perform(id, false); } finally { running.remove(id); } }); }
@@ -63,6 +64,7 @@ public class RepositorySyncService {
             mapper.updateSyncState(p); return p;
         });
         if (snapshot==null) return;
+        // 网络拉取放在事务外，避免长时间持有资产行锁，阻塞编辑或正常保存。
         RuntimeException failure=null;
         try {
             if (!StringUtils.hasText(snapshot.getManagedPath()))
@@ -74,7 +76,7 @@ public class RepositorySyncService {
             failure=error; snapshot.setLastSyncStatus("FAILED");
             snapshot.setLastSyncMessage(error instanceof BusinessException ? error.getMessage() : "代码拉取失败，请重试或检查网络与仓库配置");
         }
-        // Revision fencing prevents an old pull from overwriting a new URL, credentials or queue state.
+        // 仅相同配置版本可回写；用户修改地址/账号后，旧拉取结果不得覆盖新配置和排队状态。
         mapper.finishRepositorySync(snapshot);
         if (forScan && failure!=null) throw failure;
     }

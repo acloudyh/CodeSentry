@@ -34,6 +34,7 @@ public class OnlineRemediationService {
         Budget budget = new Budget(properties.getRemediation());
         Map<String, Integer> javaRequirements = new LinkedHashMap<>();
         Map<String, OnlineRemediationEvidence> previous = new LinkedHashMap<>();
+        // 仅复用本扫描 24 小时内的依据；使用最早缓存时间，反复补查不会无限延长有效期。
         String cacheCreatedAt = restoreSavedEvidence(run, responses, javaRequirements, previous);
         budget.responseBytes = responses.values().stream().mapToLong(v -> v.toString().length()).sum();
         Integer javaTarget = assets==null || run.getProjectId()==null ? null : Optional.ofNullable(assets.findById(run.getProjectId())).map(p -> p.getTargetJavaVersion()).orElse(null);
@@ -46,6 +47,7 @@ public class OnlineRemediationService {
             int completedGroups=0;
             for (List<FindingView> group : groups.values()) {
                 io.codesentry.process.CancellableTasks.check();
+                // 每个 CVE 都需有满足当前 Java 约束的已核实候选，才可跳过整个组件组。
                 boolean reusable=group.stream().allMatch(f -> previous.containsKey(signature(f)+"|"+f.getRuleId()) && "FOUND".equals(previous.get(signature(f)+"|"+f.getRuleId()).status) && (javaTarget==null || previous.get(signature(f)+"|"+f.getRuleId()).verifiedTargets.values().stream().anyMatch(j -> j<=javaTarget)));
                 if(reusable) group.stream().map(f -> previous.get(signature(f)+"|"+f.getRuleId())).distinct().forEach(evidence::add);
                 else lookup(group, evidence, responses, javaRequirements, javaTarget, budget);
@@ -118,6 +120,7 @@ public class OnlineRemediationService {
             LinkedHashSet<String> selected = new LinkedHashSet<>(branches.values()); selected.addAll(ordered);
             int checked = 0;
             for (String target : selected) {
+                // 兼容的候选已覆盖组内全部 CVE 时停止；Java 未确认时保留更多候选供人工选择。
                 if (javaTarget != null && records.values().stream().allMatch(e -> e.verifiedTargets.values().stream().anyMatch(j -> j<=javaTarget))) break;
                 if (++checked > 8) break;
                 if (matched.values().stream().allMatch(List::isEmpty)) break;
@@ -138,8 +141,8 @@ public class OnlineRemediationService {
                 javaRequirements.put(javaKey,minimumJava);
                 for (OnlineRemediationEvidence e : records.values()) {
                     if (e.fixedVersions.isEmpty() || !matching(targetResult, pkg, e.cve).isEmpty()) continue;
-                    // Known affected input + fixed event + exact target no longer affected.
-                    // Missing/unrecognized advisories alone never prove a fix.
+                    // 修复依据必须同时具备：原版本命中、同发布线的 fixed 事件、精确候选版本不再命中。
+                    // 查询不到漏洞或来源不识别组件，不能单独证明候选版本安全。
                     boolean eligible = e.fixedVersions.stream().anyMatch(v ->
                             UnifiedDependencyRemediation.sameReleaseLine(target, v)
                                     && UnifiedDependencyRemediation.compareVersions(target, v) >= 0);

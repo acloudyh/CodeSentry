@@ -25,6 +25,7 @@ public class ProjectLedgerService {
         ProjectScanRound round=projects.round(projectId,roundId);
         List<LedgerFinding> result=new ArrayList<>();
         int scopeTotal=0,scopeNew=0,scopeFixed=0;
+        // 只取本轮已完成/部分完成的原扫描，不用其他轮次补齐失败资产，也不合并跨资产问题。
         for(ProjectScanItem item:round.items) {
             if(item.runId==null || !List.of("COMPLETED","PARTIAL").contains(item.status) || (assetId!=null && !assetId.equals(item.assetId))) continue;
             Set<Long> included=new HashSet<>(reports.includedFindingIds(item.runId));
@@ -33,6 +34,7 @@ public class ProjectLedgerService {
             for(LedgerFinding f:rows) {
                 f.assetName=item.assetName; f.assetId=item.assetId;
                 f.reportState=included.contains(f.getId())?"INCLUDED":f.getTriageStatus()!=null || reviewed.contains(f.getId())?"EXCLUDED":"PENDING";
+                // 范围统计先于筛选计算，筛选总数则覆盖全部分页，二者不能用当前页条数代替。
                 scopeTotal++;
                 if ("NEW".equals(f.getResultStatus()) || "REOPENED".equals(f.getResultStatus())) scopeNew++;
                 if ("FIXED".equals(f.getResultStatus())) scopeFixed++;
@@ -48,6 +50,7 @@ public class ProjectLedgerService {
         int includedCount=(int)result.stream().filter(f->"INCLUDED".equals(f.reportState)).count();
         int from=(int)Math.min(result.size(),(long)(page-1)*size);
         List<LedgerFinding> pageRows = result.subList(from,Math.min(result.size(),from+size));
+        // 原文回读仅限当前页，避免大台账为分页之外的问题重复访问源码快照。
         pageRows.forEach(evidence::enrichSnippet);
         Map<String,Object> response = new LinkedHashMap<>(Map.of("items",pageRows,"total",result.size(),"page",page,"pageSize",size,"roundId",roundId,"pendingReviewCount",pendingReviewCount,"includedCount",includedCount));
         response.put("summary",Map.of("total",scopeTotal,"newCount",scopeNew,"fixedCount",scopeFixed));

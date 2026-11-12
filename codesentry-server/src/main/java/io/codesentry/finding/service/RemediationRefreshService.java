@@ -27,7 +27,9 @@ public class RemediationRefreshService {
         if(run==null) throw new BusinessException(HttpStatus.NOT_FOUND,"扫描记录不存在");
         if(run.getNetworkMode()!=NetworkMode.ONLINE) throw new BusinessException(HttpStatus.BAD_REQUEST,"仅联网扫描支持补充联网核实");
         if(!Set.of(ScanRunStatus.COMPLETED,ScanRunStatus.PARTIAL).contains(run.getStatus())) throw new BusinessException(HttpStatus.CONFLICT,"请在扫描结束后补充联网核实");
+        // 数据库条件更新认领任务，重复点击不会创建第二个后台作业。
         if(runs.claimRemediationRefresh(id)==0) return runs.findById(id);
+        // 等事务提交后再入队，确保后台线程读到 PENDING，且回滚的请求不会触发外部查询。
         if(TransactionSynchronizationManager.isSynchronizationActive()) TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() { @Override public void afterCommit() { dispatch(id); } });
         else dispatch(id);
         run.setRemediationStatus("PENDING");run.setRemediationMessage("等待后台补充联网核实");return run;
@@ -36,6 +38,6 @@ public class RemediationRefreshService {
         try { executor.execute(() -> {
             try { ScanRun run=runs.findById(id); if(run!=null && "PENDING".equals(run.getRemediationStatus())) online.enrich(run); }
             catch(Exception e) { runs.failRemediationRefresh(id,"后台联网补查中断，请重试；原扫描和审核记录保留"); }
-        }); } catch(RuntimeException full) { failureTransaction.executeWithoutResult(tx -> runs.failRemediationRefresh(id,"后台补查队列暂满，请稍后重试")); }
+        }); } catch(RuntimeException full) { /* afterCommit 之后使用独立事务，保证队列拒绝的失败状态真正提交。 */ failureTransaction.executeWithoutResult(tx -> runs.failRemediationRefresh(id,"后台补查队列暂满，请稍后重试")); }
     }
 }

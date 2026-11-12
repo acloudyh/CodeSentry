@@ -32,6 +32,7 @@ async function verifyOnline(run: RemediationReportSummary) {
   catch(e) { error.value=(e as Error).message }
   finally { verifying.value=null }
 }
+// 仅有可见的后台补查任务时轮询，离开页面即释放定时器，避免空闲列表持续请求。
 let poll: ReturnType<typeof setInterval> | undefined
 onMounted(() => { poll=setInterval(() => { if(!loading.value && runs.value.some(onlineBusy)) void loadReports() },5000) })
 onBeforeUnmount(() => { if(poll) clearInterval(poll) })

@@ -42,11 +42,13 @@ public class ProjectReportService {
         projects.round(projectId,roundId);
         List<String> existing=db.queryForList("SELECT content_json FROM project_report_snapshot WHERE round_id=?",String.class,roundId);
         try {
+            // 归档后直接复用快照；后续审核、联网补查或资产改名不能改写已交付的汇总报告。
             if(!existing.isEmpty()) return json.readValue(existing.get(0),Snapshot.class);
             Snapshot snapshot=new Snapshot(); snapshot.round=projects.round(projectId,roundId);
             if("RUNNING".equals(snapshot.round.status)) throw BusinessProjectService.conflict("该轮扫描尚未结束，请结束扫描后导出项目报告");
             StringBuilder sections=new StringBuilder(); String styles="";
             for(ProjectScanItem item:snapshot.round.items) {
+                // 失败、取消和未扫描项只列覆盖状态，不借用旧扫描生成貌似完整的整改明细。
                 if(!List.of("COMPLETED","PARTIAL").contains(item.status)) continue;
                 io.codesentry.project.model.ScanProject asset=new io.codesentry.project.model.ScanProject();
                 asset.setId(item.assetId); asset.setProjectName(item.assetName); asset.setSourceType(io.codesentry.project.model.ProjectSourceType.valueOf(item.sourceType)); asset.setTargetJavaVersion(item.targetJavaVersion); asset.setApplicationType(item.applicationType); asset.setTargetNodeVersion(item.targetNodeVersion);
