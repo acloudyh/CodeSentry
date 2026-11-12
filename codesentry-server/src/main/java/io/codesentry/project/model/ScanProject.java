@@ -3,7 +3,38 @@ package io.codesentry.project.model;
 import java.time.LocalDateTime;
 
 public class ScanProject {
+    private io.codesentry.project.model.ApplicationType applicationType = io.codesentry.project.model.ApplicationType.BACKEND;
+    public io.codesentry.project.model.ApplicationType getApplicationType() { return applicationType; }
+    public void setApplicationType(io.codesentry.project.model.ApplicationType value) { applicationType = value; }
+    private String targetNodeVersion;
+    public String getTargetNodeVersion() { return targetNodeVersion; }
+    public void setTargetNodeVersion(String value) { targetNodeVersion = value; }
+    private String gitUsername;
+    public String getGitUsername() { return gitUsername; }
+    public void setGitUsername(String value) { gitUsername = value; }
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String gitPasswordCiphertext;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public String getGitPasswordCiphertext() { return gitPasswordCiphertext; }
+    public void setGitPasswordCiphertext(String value) { gitPasswordCiphertext = value; }
+    private java.time.LocalDateTime lastSyncedAt;
+    public java.time.LocalDateTime getLastSyncedAt() { return lastSyncedAt; }
+    public void setLastSyncedAt(java.time.LocalDateTime value) { lastSyncedAt = value; }
+    private String lastSyncStatus;
+    public String getLastSyncStatus() { return lastSyncStatus; }
+    public void setLastSyncStatus(String value) { lastSyncStatus = value; }
+    private String lastSyncMessage;
+    public String getLastSyncMessage() { return lastSyncMessage; }
+    public void setLastSyncMessage(String value) { lastSyncMessage = value; }
+    public boolean isGitCredentialConfigured() { return gitPasswordCiphertext != null && !gitPasswordCiphertext.isEmpty(); }
 
+
+    private long repositoryRevision;
+    public long getRepositoryRevision() { return repositoryRevision; }
+    public void setRepositoryRevision(long value) { repositoryRevision = value; }
+    private Long businessProjectId;
+    public Long getBusinessProjectId() { return businessProjectId; }
+    public void setBusinessProjectId(Long value) { businessProjectId = value; }
     private Long id;
     private String projectName;
     private ProjectSourceType sourceType;

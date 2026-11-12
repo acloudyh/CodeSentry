@@ -20,7 +20,13 @@ import java.util.function.Consumer;
 public class CommandExecutor {
 
     public CommandResult execute(Path workingDirectory, List<String> command, Duration timeout) {
+        return execute(workingDirectory, command, timeout, java.util.Collections.emptyMap(), java.util.function.UnaryOperator.identity());
+    }
+
+    public CommandResult execute(Path workingDirectory, List<String> command, Duration timeout,
+                                 java.util.Map<String,String> environment, java.util.function.UnaryOperator<String> redact) {
         ProcessBuilder builder = new ProcessBuilder(command);
+        builder.environment().putAll(environment);
         if (workingDirectory != null) {
             builder.directory(workingDirectory.toFile());
         }
@@ -36,7 +42,7 @@ public class CommandExecutor {
             runningProcess = process;
             StringBuilder output = new StringBuilder();
             CompletableFuture<Void> outputFuture = CompletableFuture.runAsync(() ->
-                    readOutput(process, command, workingDirectoryText, startedAt, listener, output));
+                    readOutput(process, command, workingDirectoryText, startedAt, listener, output, redact));
 
             long executionStarted = System.nanoTime();
             long deadline = executionStarted + timeout.toNanos();
@@ -80,7 +86,7 @@ public class CommandExecutor {
             throw exception;
         } catch (IOException exception) {
             CommandTraceHolder.set(new CommandTrace(command, workingDirectoryText, null,
-                    exception.getMessage(), startedAt, LocalDateTime.now()));
+                    redact.apply(exception.getMessage()), startedAt, LocalDateTime.now()));
             throw new BusinessException(HttpStatus.BAD_REQUEST, "无法启动本地命令，请检查工具是否已安装");
         } catch (InterruptedException exception) {
             if (runningProcess != null) terminate(runningProcess);
@@ -102,13 +108,13 @@ public class CommandExecutor {
                             String workingDirectory,
                             LocalDateTime startedAt,
                             Consumer<CommandTrace> listener,
-                            StringBuilder output) {
+                            StringBuilder output, java.util.function.UnaryOperator<String> redact) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 synchronized (output) {
-                    output.append(line).append('\n');
+                    output.append(redact.apply(line)).append('\n');
                     if (listener != null) {
                         listener.accept(new CommandTrace(command, workingDirectory, null,
                                 output.toString().trim(), startedAt, LocalDateTime.now()));

@@ -1,22 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { repositorySyncLabel, repositorySyncBusy, repositoryReady } from '@/utils/labels'
 import { api } from '@/api/codesentry'
 import { useRoute, useRouter } from 'vue-router'
+import { applicationTypeLabel, runtimeVersionLabel } from '@/utils/labels'
+import { formatChinaTime } from '@/utils/datetime'
 import { formatChinaDate } from '@/utils/datetime'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import ActionDropdown from '@/components/ui/ActionDropdown.vue'
 import JarUploadForm from '@/components/ui/JarUploadForm.vue'
-import type { ScanProject, SourceType } from '@/types'
+import type { ApplicationType, GitValidationResult, ScanProject, SourceType } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
+const businessProjectId = computed(() => Number(route.query.businessProjectId) || null)
+const unassignedOnly = computed(() => route.query.unassigned === '1')
+async function associate(project: ScanProject) {
+  if (!businessProjectId.value) return
+  try { await api.attachAsset(businessProjectId.value, project.id) }
+  catch (reason) { throw new Error(`资产已保存，但关联项目失败：${reason instanceof Error ? reason.message : '请在项目中重新关联'}`) }
+}
 const uploadOpen = ref(useRoute().query.new === 'jar')
 const uploadBusy = ref(false)
 const savedMessage = ref('')
 async function uploaded(project: ScanProject) {
   uploadOpen.value = false
+  try { await associate(project) } catch (reason) { error.value = (reason as Error).message }
   listType.value = 'jar'
-  await router.replace({ path: '/projects', query: { type: 'jar' } })
+  await router.replace({ path: '/projects', query: { ...route.query, new: undefined, type: 'jar' } })
   await load()
   savedMessage.value = `“${displayName(project)}”已保存。点击“发起扫描”即可使用该 JAR，无需再次上传。`
 }
@@ -27,18 +39,28 @@ const jarJavaVersion = ref<number | null>(null)
 const scanAfterSave = ref(false)
 const projects = ref<ScanProject[]>([])
 const listType = ref<'repository' | 'jar'>(useRoute().query.type === 'jar' ? 'jar' : 'repository')
-const repositories = computed(() => projects.value.filter((project) => project.sourceType !== 'JAR_UPLOAD'))
-const jarUploads = computed(() => projects.value.filter((project) => project.sourceType === 'JAR_UPLOAD'))
-const visibleProjects = computed(() => listType.value === 'jar' ? jarUploads.value : repositories.value)
+const scopedProjects = computed(() => projects.value.filter(p => businessProjectId.value ? p.businessProjectId === businessProjectId.value : unassignedOnly.value ? !p.businessProjectId : true))
+const repositories = computed(() => scopedProjects.value.filter((project) => project.sourceType !== 'JAR_UPLOAD'))
+const jarUploads = computed(() => scopedProjects.value.filter((project) => project.sourceType === 'JAR_UPLOAD'))
+const visibleProjects = computed(() => (listType.value === 'jar' ? jarUploads.value : repositories.value).filter(p => businessProjectId.value ? p.businessProjectId === businessProjectId.value : unassignedOnly.value ? !p.businessProjectId : true))
 function displayName(project: ScanProject) {
   return project.sourceType === 'JAR_UPLOAD'
     ? project.projectName.replace(/ · [0-9a-f]{8}-[0-9a-f-]{27}$/i, '') : project.projectName
 }
 const showForm = ref(false)
 const saving = ref(false)
+const validatingGit = ref(false)
+const gitValidation = ref<GitValidationResult | null>(null)
+const gitValidationError = ref('')
+let gitValidationRequest = 0
 const editingId = ref<number | null>(null)
 const error = ref('')
-const form = reactive({ projectName: '', sourceType: 'LOCAL' as SourceType, localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+const syncingId = ref<number | null>(null)
+const nodeVersions = ['14', '16', '18', '20', '22', '24']
+const nodeVersionChoice = ref('')
+const form = reactive({ projectName: '', applicationType: 'BACKEND' as ApplicationType, targetNodeVersion: '', gitAuthMode: 'DEFAULT' as 'DEFAULT' | 'PASSWORD', gitUsername: '', gitPassword: '', sourceType: 'LOCAL' as SourceType, localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+
+watch(nodeVersionChoice, value => { if (value !== 'CUSTOM') form.targetNodeVersion = value }, { flush: 'sync' })
 
 async function load() {
   try { projects.value = await api.projects() } catch (reason) { error.value = reason instanceof Error ? reason.message : '加载失败' }
@@ -90,18 +112,20 @@ async function saveJar() {
 
 
 function register() {
+  nodeVersionChoice.value = ''
   jarEditing.value = null
   listType.value = 'repository'
   editingId.value = null
-  Object.assign(form, { projectName: '', sourceType: 'LOCAL', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+  Object.assign(form, { projectName: '', applicationType: 'BACKEND', targetNodeVersion: '', gitAuthMode: 'DEFAULT', gitUsername: '', gitPassword: '', sourceType: 'LOCAL', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
   showForm.value = true; error.value = ''
 }
 
 function edit(project: ScanProject) {
   jarEditing.value = null
   editingId.value = project.id
-  Object.assign(form, { projectName: project.projectName, sourceType: project.sourceType,
+  Object.assign(form, { projectName: project.projectName, applicationType: project.applicationType ?? 'BACKEND', targetNodeVersion: project.targetNodeVersion ?? '', gitAuthMode: project.gitCredentialConfigured ? 'PASSWORD' : 'DEFAULT', gitUsername: project.gitUsername ?? '', gitPassword: '', sourceType: project.sourceType,
     localPath: project.localPath ?? '', remoteUrl: project.remoteUrl ?? '', defaultBranch: project.defaultBranch ?? '', targetJavaVersion: project.targetJavaVersion ?? null })
+  nodeVersionChoice.value = project.targetNodeVersion ? nodeVersions.includes(project.targetNodeVersion) ? project.targetNodeVersion : 'CUSTOM' : ''
   showForm.value = true; error.value = ''
 }
 
@@ -114,16 +138,63 @@ async function save() {
       localPath: form.sourceType === 'LOCAL' ? form.localPath : undefined,
       remoteUrl: form.sourceType === 'GIT' ? form.remoteUrl : undefined,
       defaultBranch: form.defaultBranch,
-      targetJavaVersion: form.targetJavaVersion,
+      applicationType: form.applicationType,
+      targetJavaVersion: form.applicationType === 'FRONTEND' ? null : form.targetJavaVersion,
+      targetNodeVersion: form.applicationType === 'BACKEND' ? null : form.targetNodeVersion.trim() || null,
+      gitUsername: form.sourceType === 'GIT' && form.gitAuthMode === 'PASSWORD' ? form.gitUsername.trim() : undefined,
+      gitPassword: form.sourceType === 'GIT' && form.gitAuthMode === 'PASSWORD' && form.gitPassword ? form.gitPassword : undefined,
+      clearGitCredentials: form.sourceType === 'GIT' && form.gitAuthMode === 'DEFAULT',
+
     }
     if (editingId.value !== null) await api.updateProject(editingId.value, payload)
-    else await api.createProject(payload)
-    Object.assign(form, { projectName: '', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+    else {
+      const created = await api.createProject(payload)
+      try { await associate(created) } catch (reason) { showForm.value = false; await load(); throw reason }
+    }
+    savedMessage.value = form.sourceType === 'GIT' ? '仓库信息已保存；代码在后台拉取，可在列表查看进度或重试。' : '仓库信息已保存。'
+    Object.assign(form, { projectName: '', gitPassword: '', gitUsername: '', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
     showForm.value = false
     editingId.value = null
     await load()
   } catch (reason) { error.value = reason instanceof Error ? reason.message : '保存失败' } finally { saving.value = false }
 }
+
+const editingProject = computed(() => projects.value.find(p => p.id === editingId.value))
+const canKeepCredentials = computed(() => !!editingProject.value?.gitCredentialConfigured && form.remoteUrl.trim() === editingProject.value.remoteUrl && form.gitUsername.trim() === editingProject.value.gitUsername)
+async function validateGit() {
+  if (saving.value || validatingGit.value) return
+  gitValidation.value = null; gitValidationError.value = ''; error.value = ''
+  if (!form.remoteUrl.trim()) { gitValidationError.value = '请先填写 Git 仓库地址'; return }
+  const usePassword = form.gitAuthMode === 'PASSWORD'
+  if (usePassword && !form.gitUsername.trim()) { gitValidationError.value = '请先填写 Git 账号'; return }
+  if (usePassword && !form.gitPassword && !canKeepCredentials.value) { gitValidationError.value = '请先填写 Git 密码或访问令牌'; return }
+  validatingGit.value = true
+  const requestId = ++gitValidationRequest
+  try {
+    const result = await api.validateGit({
+      remoteUrl: form.remoteUrl.trim(),
+      gitUsername: usePassword ? form.gitUsername.trim() : undefined,
+      gitPassword: usePassword && form.gitPassword ? form.gitPassword : undefined,
+      projectId: usePassword && !form.gitPassword && canKeepCredentials.value ? editingId.value ?? undefined : undefined,
+      useStoredCredentials: usePassword && !form.gitPassword && canKeepCredentials.value,
+    })
+    if (requestId === gitValidationRequest) gitValidation.value = result
+  } catch (reason) { if (requestId === gitValidationRequest) gitValidationError.value = reason instanceof Error ? reason.message : 'Git 校验失败' }
+  finally { validatingGit.value = false }
+}
+watch(() => [form.sourceType, form.remoteUrl, form.gitUsername, form.gitPassword, form.gitAuthMode, editingId.value], () => { gitValidationRequest++; gitValidation.value = null; gitValidationError.value = '' })
+
+async function syncCode(project: ScanProject) {
+  if (syncingId.value !== null || saving.value) return
+  syncingId.value = project.id; error.value = ''; savedMessage.value = `正在同步“${displayName(project)}”，请稍候…`
+  try {
+    await api.syncProject(project.id)
+    await load()
+    savedMessage.value = `“${displayName(project)}”已提交后台拉取，请在列表查看状态。`
+  } catch (reason) { savedMessage.value = ''; error.value = reason instanceof Error ? reason.message : '同步失败'; await load() }
+  finally { syncingId.value = null }
+}
+watch(showForm, value => { if (!value) form.gitPassword = '' })
 
 function startProjectScan(project: ScanProject, mode: string) {
   void router.push({ path: '/scans/new', query: {
@@ -136,16 +207,22 @@ async function remove(project: ScanProject) {
   try { await api.deleteProject(project.id); await load() } catch (reason) { error.value = reason instanceof Error ? reason.message : '删除失败' }
 }
 
-onMounted(load)
+watch(() => route.query.type, value => { listType.value = value === 'jar' ? 'jar' : 'repository' })
+let syncTimer: ReturnType<typeof setInterval> | undefined
+onMounted(() => { syncTimer = setInterval(async () => { if (projects.value.some(repositorySyncBusy)) { try { await load() } catch { /* keep last visible status */ } } }, 3000) })
+onBeforeUnmount(() => { if (syncTimer) clearInterval(syncTimer) })
+onMounted(async () => { await load(); if (route.query.register === '1') register() })
 </script>
 
 <template>
   <div class="page-stack">
     <section class="section-heading">
-      <div><h2>扫描项目</h2><p>统一管理本地代码仓库、远程 Git 仓库和上传的 JAR 包。</p></div>
+      <div><h2>扫描资产</h2><p>统一管理本地代码仓库、远程 Git 仓库和上传的 JAR 包。</p></div>
       <div class="report-actions"><button type="button" class="button secondary" :disabled="saving" @click="uploadOpen = true">+ 新增 JAR 项目</button><button class="button primary" :disabled="saving" @click="register">+ 登记仓库</button></div>
     </section>
 
+    <div v-if="businessProjectId" class="notice"><RouterLink :to="`/business-projects/${businessProjectId}`">← 返回业务项目</RouterLink> · 当前仅展示该项目资产，新登记资产自动关联到项目。</div>
+    <div v-if="unassignedOnly" class="notice">当前仅展示未归属业务项目的资产。</div>
     <div v-if="savedMessage" class="notice" role="status">{{ savedMessage }}</div>
     <div v-if="error && !showForm && !jarEditing" class="error-banner">{{ error }}</div>
 
@@ -167,30 +244,46 @@ onMounted(load)
     </section>
     </AppModal>
 
-    <AppModal :open="showForm" :title="editingId !== null ? '编辑仓库' : '登记仓库'" :busy="saving" @close="showForm = false">
+    <AppModal :open="showForm" :title="editingId !== null ? '编辑仓库' : '登记仓库'" :busy="saving || validatingGit" @close="showForm = false">
       <section v-if="showForm" class="repository-edit-panel">
       <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
       <form class="form-grid" @submit.prevent="save">
         <div class="field span-2">
           <label>仓库来源</label>
           <div class="segmented">
-            <button type="button" :disabled="editingId !== null || saving" :class="{ active: form.sourceType === 'LOCAL' }" @click="form.sourceType = 'LOCAL'">已有本地目录</button>
-            <button type="button" :disabled="editingId !== null || saving" :class="{ active: form.sourceType === 'GIT' }" @click="form.sourceType = 'GIT'">远程 Git 地址</button>
+            <button type="button" :disabled="editingId !== null || saving || validatingGit" :class="{ active: form.sourceType === 'LOCAL' }" @click="form.sourceType = 'LOCAL'">已有本地目录</button>
+            <button type="button" :disabled="editingId !== null || saving || validatingGit" :class="{ active: form.sourceType === 'GIT' }" @click="form.sourceType = 'GIT'">远程 Git 地址</button>
           </div>
         </div>
         <div class="field"><label for="project-name">项目名称</label><input id="project-name" v-model.trim="form.projectName" :disabled="saving" class="input" required maxlength="128" placeholder="例如：订单中心" /></div>
         <div class="field"><label for="project-branch">默认基线分支</label><input id="project-branch" v-model.trim="form.defaultBranch" :disabled="saving" class="input" placeholder="main" /></div>
-        <div class="field span-2"><label for="project-java">业务系统 Java 版本</label><select id="project-java" v-model="form.targetJavaVersion" class="select" :disabled="saving"><option :value="null">未确认</option><option v-for="version in [8, 11, 17, 21, 25]" :key="version" :value="version">Java {{ version }}</option></select><small>用于筛选整改报告的依赖升级目标；填写被扫描业务系统的版本。</small></div>
+        <div class="field span-2"><label for="project-application">应用类型</label><select id="project-application" v-model="form.applicationType" class="select" :disabled="saving"><option value="FRONTEND">前端（Node.js）</option><option value="BACKEND">后端（Java）</option><option value="FULL_STACK">前后端混合</option></select></div>
+        <div v-if="form.applicationType !== 'FRONTEND'" class="field" :class="{ 'span-2': form.applicationType === 'BACKEND' }"><label for="project-java">业务系统 Java 版本</label><select id="project-java" v-model="form.targetJavaVersion" class="select" :disabled="saving"><option :value="null">未确认</option><option v-for="version in [8, 11, 17, 21, 25]" :key="version" :value="version">Java {{ version }}</option></select><small>用于筛选 Java 依赖整改建议的兼容目标。</small></div>
+        <div v-if="form.applicationType !== 'BACKEND'" class="field" :class="{ 'span-2': form.applicationType === 'FRONTEND' }"><label for="project-node">业务系统 Node.js 版本</label><select id="project-node" v-model="nodeVersionChoice" class="select" :disabled="saving"><option value="">未确认</option><option v-for="version in nodeVersions" :key="version" :value="version">Node.js {{ version }}</option><option value="CUSTOM">自定义版本</option></select><template v-if="nodeVersionChoice === 'CUSTOM'"><label for="project-node-custom">自定义 Node.js 版本</label><input id="project-node-custom" v-model.trim="form.targetNodeVersion" class="input" maxlength="32" placeholder="例如 18.20.8、20.19.0" required :disabled="saving" /></template><small>填写业务系统实际使用的 Node.js 版本。</small></div>
         <div v-if="form.sourceType === 'LOCAL'" class="field span-2">
           <label for="project-path">本地 Git 仓库绝对路径</label><input id="project-path" v-model.trim="form.localPath" :disabled="saving" class="input mono" required placeholder="/Users/neo/code/project-a" />
           <small>CodeSentry 不会切换分支或执行 git pull；当前目录模式可以审查未提交代码。</small>
         </div>
         <div v-else class="field span-2">
-          <label for="project-remote">Git 仓库地址</label><input id="project-remote" v-model.trim="form.remoteUrl" :disabled="saving" class="input mono" required placeholder="git@gitlab.example.com:group/project.git" />
-          <small>优先使用 SSH 和本机 ssh-agent。产品不保存私钥，也不调用 GitLab API。</small>
+          <label for="project-remote">Git 仓库地址</label><div class="git-url-row"><input id="project-remote" v-model.trim="form.remoteUrl" :disabled="saving || validatingGit" class="input mono" required placeholder="git@gitlab.example.com:group/project.git" /><button type="button" class="button secondary" :disabled="saving || validatingGit" @click="validateGit">{{ validatingGit ? '正在校验…' : '校验 Git' }}</button></div>
+          <small>支持 HTTP/HTTPS 或 SSH 地址；请勿把账号密码拼在仓库地址中。</small>
         </div>
-        <div class="field span-2"><div class="notice">{{ editingId !== null ? '编辑不切换仓库来源、不改写历史扫描记录。有扫描或工具审核执行时暂不能保存；修改远程地址会创建新的镜像。' : '远程仓库登记时会执行一次镜像克隆，耗时取决于仓库大小。扫描时只按需导出指定提交，不创建额外工作树。' }}</div></div>
-        <div class="form-actions field span-2"><button type="button" class="button secondary" :disabled="saving" @click="showForm = false">取消</button><button class="button primary" :disabled="saving">{{ saving ? '正在保存…' : editingId !== null ? '保存修改' : '确认登记' }}</button></div>
+        <template v-if="form.sourceType === 'GIT'">
+          <div class="field span-2"><label for="git-auth-mode">Git 认证方式</label><select id="git-auth-mode" v-model="form.gitAuthMode" class="select" :disabled="saving || validatingGit"><option value="DEFAULT">无需账号密码 / 使用本机凭据或 SSH</option><option value="PASSWORD">账号密码 / 访问令牌（HTTP/HTTPS）</option></select></div>
+          <template v-if="form.gitAuthMode === 'PASSWORD'">
+            <div class="field"><label for="git-username">Git 账号</label><input id="git-username" v-model="form.gitUsername" class="input" autocomplete="username" maxlength="256" required :disabled="saving || validatingGit" /></div>
+            <div class="field"><label for="git-password">Git 密码 / 访问令牌</label><input id="git-password" v-model="form.gitPassword" type="password" class="input" autocomplete="new-password" maxlength="4000" :required="!canKeepCredentials" :placeholder="canKeepCredentials ? '已配置，留空保留原密码或令牌' : '填写密码或访问令牌'" :disabled="saving || validatingGit" /><small>凭据加密保存，用于首次拉取及后续代码同步；修改账号或仓库地址后需重新填写。</small></div>
+          </template>
+          <div v-if="validatingGit" class="field span-2 notice" role="status">正在校验 Git 连接、证书及仓库读取权限，不下载代码、不保存账号密码。</div>
+          <div v-if="gitValidationError" class="field span-2 error-banner" role="alert">{{ gitValidationError }}</div>
+          <div v-if="gitValidation" class="field span-2 git-check-result" :class="gitValidation.valid ? 'notice' : 'error-banner'" :role="gitValidation.valid ? 'status' : 'alert'">
+            <strong>{{ gitValidation.message }}</strong>
+            <span v-if="gitValidation.defaultBranch">默认分支：{{ gitValidation.defaultBranch }} <button v-if="gitValidation.defaultBranch !== form.defaultBranch" type="button" class="row-action-link" :disabled="saving" @click="form.defaultBranch = gitValidation!.defaultBranch!">使用此分支</button></span>
+          </div>
+          <div v-if="editingProject?.managedPath" class="field span-2"><label>本地代码缓存</label><span class="mono">{{ editingProject.managedPath }}</span><small>最近成功同步：{{ formatChinaTime(editingProject.lastSyncedAt) }}。扫描默认复用本地缓存，需要时点击列表中的“同步代码”。</small></div>
+        </template>
+        <div class="field span-2"><div class="notice">{{ editingId !== null ? '编辑不切换仓库来源、不改写历史扫描记录。有扫描或工具审核执行时暂不能保存；修改远程地址会创建新的镜像。' : '远程仓库登记后在后台拉取并持久化到本地，保存无需等待；后续扫描默认使用缓存。需要更新代码时可手动同步，或选择扫描前同步，无需每次重新克隆。' }}</div></div>
+        <div class="form-actions field span-2"><button type="button" class="button secondary" :disabled="saving || validatingGit" @click="showForm = false">取消</button><button class="button primary" :disabled="saving || validatingGit">{{ saving ? '正在保存…' : editingId !== null ? '保存修改' : '确认登记' }}</button></div>
       </form>
     </section>
     </AppModal>
@@ -202,20 +295,23 @@ onMounted(load)
     <div v-if="listType === 'jar'" class="notice">新增时上传 JAR，发起扫描时直接使用已保存文件；通过“编辑”替换版本，历史扫描结果会保留。</div>
     <section class="panel">
       <div v-if="visibleProjects.length" class="table-scroll">
-        <table class="data-table projects-table">
-          <colgroup><col style="width:19%" /><col style="width:110px" /><col /><col v-if="listType !== 'jar'" style="width:96px" /><col style="width:128px" /><col style="width:250px" /></colgroup>
-          <thead><tr><th>编号 / 项目</th><th>来源</th><th>{{ listType === 'jar' ? '当前 JAR 文件' : '仓库位置' }}</th><th v-if="listType !== 'jar'">默认分支</th><th>登记时间</th><th class="actions-heading">操作</th></tr></thead>
+        <table class="data-table projects-table" :class="{ 'repository-table': listType !== 'jar' }">
+          <colgroup><col style="width:185px" /><col style="width:100px" /><col v-if="listType !== 'jar'" style="width:130px" /><col style="width:280px" /><col v-if="listType !== 'jar'" style="width:90px" /><col style="width:105px" /><col v-if="listType !== 'jar'" style="width:135px" /><col style="width:260px" /></colgroup>
+          <thead><tr><th>编号 / 项目</th><th>来源</th><th v-if="listType !== 'jar'">应用 / 运行环境</th><th>{{ listType === 'jar' ? '当前 JAR 文件' : '仓库位置' }}</th><th v-if="listType !== 'jar'">默认分支</th><th>登记时间</th><th v-if="listType !== 'jar'">代码同步</th><th class="actions-heading">操作</th></tr></thead>
           <tbody>
             <tr v-for="project in visibleProjects" :key="project.id">
               <td><span class="mono">P-{{ String(project.id).padStart(3, '0') }}</span><div style="margin-top:5px"><strong>{{ displayName(project) }}</strong></div></td>
               <td><span class="status-badge"><i></i>{{ project.sourceType === 'JAR_UPLOAD' ? 'JAR 上传' : project.sourceType === 'LOCAL' ? '本地目录' : '远程镜像' }}</span></td>
-              <td class="mono">{{ project.sourceType === 'JAR_UPLOAD' ? project.localPath?.split('/').pop() : project.localPath ?? project.remoteUrl }}</td>
+              <td v-if="listType !== 'jar'"><strong>{{ applicationTypeLabel(project.applicationType) }}</strong><div class="mono">{{ runtimeVersionLabel(project) }}</div></td>
+              <td class="mono"><span class="repository-location" :title="project.sourceType === 'JAR_UPLOAD' ? project.localPath?.split('/').pop() : project.localPath ?? project.remoteUrl">{{ project.sourceType === 'JAR_UPLOAD' ? project.localPath?.split('/').pop() : project.localPath ?? project.remoteUrl }}</span><small v-if="project.sourceType === 'GIT'" class="cache-location" :title="project.managedPath">缓存：{{ project.managedPath }}</small></td>
               <td v-if="listType !== 'jar'" class="mono">{{ project.defaultBranch ?? '-' }}</td>
               <td class="mono">{{ formatChinaDate(project.createdAt) }}</td>
+              <td v-if="listType !== 'jar'"><template v-if="project.sourceType === 'GIT'"><span :class="{ 'danger-text': project.lastSyncStatus === 'FAILED' }" :title="project.lastSyncMessage">{{ repositorySyncLabel(project) }}</span><small class="cache-location">{{ formatChinaTime(project.lastSyncedAt) }}</small></template><span v-else class="muted">本地目录</span></td>
               <td><div class="row-actions">
-                <ActionDropdown label="发起扫描" primary :disabled="saving" :items="[{ label: '本地扫描', value: 'LOCAL' }, { label: '联网扫描', value: 'ONLINE' }]" @select="startProjectScan(project, $event)" />
-                <button type="button" class="row-action-link" :disabled="saving" @click="project.sourceType === 'JAR_UPLOAD' ? editJar(project) : edit(project)">编辑</button>
-                <button type="button" class="row-action-link danger" :disabled="saving" @click="remove(project)">删除</button>
+                <button v-if="project.sourceType === 'GIT'" type="button" class="row-action-link" :disabled="saving || syncingId !== null || repositorySyncBusy(project)" @click="syncCode(project)">{{ repositorySyncBusy(project) ? repositorySyncLabel(project) : project.lastSyncStatus === 'FAILED' ? '重试拉取' : '同步代码' }}</button>
+                <ActionDropdown label="发起扫描" primary :disabled="saving || syncingId !== null || !repositoryReady(project)" :items="[{ label: '本地扫描', value: 'LOCAL' }, { label: '联网扫描', value: 'ONLINE' }]" @select="startProjectScan(project, $event)" />
+                <button type="button" class="row-action-link" :disabled="saving || syncingId !== null" @click="project.sourceType === 'JAR_UPLOAD' ? editJar(project) : edit(project)">编辑</button>
+                <button type="button" class="row-action-link danger" :disabled="saving || syncingId !== null" @click="remove(project)">删除</button>
               </div></td>
             </tr>
           </tbody>
@@ -227,9 +323,15 @@ onMounted(load)
 </template>
 
 <style scoped>
-.projects-table { min-width: 1040px; }
+.projects-table { min-width: 1040px; table-layout:fixed; }
+.repository-table { min-width:1300px; }
+.repository-location,.cache-location{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cache-location{margin-top:6px;color:var(--muted)}
+.git-url-row{display:flex;gap:10px;align-items:center}.git-url-row .input{flex:1;min-width:0}.git-url-row .button{flex-shrink:0}.git-check-result{display:grid;gap:6px}@media(max-width:640px){.git-url-row{align-items:stretch;flex-direction:column}}
 .actions-heading { text-align: right; }
 .projects-table td:nth-last-child(2) { white-space: nowrap; }
 .repository-edit-panel .field, .jar-edit-panel .field { align-content: start; }
 .repository-edit-panel .input, .repository-edit-panel .select, .jar-edit-panel .input, .jar-edit-panel .select { height: 44px; min-height: 44px; }
 </style>
+
+<style scoped>.repository-unready{opacity:.5;cursor:not-allowed}</style>

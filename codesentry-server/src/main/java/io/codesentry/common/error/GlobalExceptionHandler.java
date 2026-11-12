@@ -28,6 +28,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.failure(message));
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidBody(Exception exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.failure("请求内容格式错误，请检查扫描方式和资产配置"));
+    }
+
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<ApiResponse<Void>> handleDuplicate(DuplicateKeyException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)

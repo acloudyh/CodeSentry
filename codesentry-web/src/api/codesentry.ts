@@ -1,8 +1,14 @@
+import type { ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
 import { request } from './http'
 import type { ReportAcceptance } from '@/types'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, AiToolConfiguration, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, RuleLibraryStatus, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
 
 export interface CreateProjectPayload {
+  applicationType?: ApplicationType
+  targetNodeVersion?: string | null
+  gitUsername?: string
+  gitPassword?: string
+  clearGitCredentials?: boolean
   targetJavaVersion?: number | null
   projectName: string
   sourceType: SourceType
@@ -56,6 +62,21 @@ function displayProject(project: ScanProject): ScanProject {
 }
 
 export const api = {
+  businessProjects: () => request<BusinessProject[]>('/api/v1/business-projects'),
+  businessProject: (id: number) => request<BusinessProject>(`/api/v1/business-projects/${id}`),
+  saveBusinessProject: (id: number | null, payload: { name: string; description: string }) => request<BusinessProject>(`/api/v1/business-projects${id === null ? '' : `/${id}`}`, { method: id === null ? 'POST' : 'PUT', body: JSON.stringify(payload) }),
+  deleteBusinessProject: (id: number) => request<void>(`/api/v1/business-projects/${id}`, { method: 'DELETE' }),
+  businessAssets: (id: number) => request<ScanProject[]>(`/api/v1/business-projects/${id}/assets`).then(rows => rows.map(displayProject)),
+  attachAsset: (id: number, assetId: number) => request<void>(`/api/v1/business-projects/${id}/assets/${assetId}`, { method: 'PUT' }),
+  detachAsset: (id: number, assetId: number) => request<void>(`/api/v1/business-projects/${id}/assets/${assetId}`, { method: 'DELETE' }),
+  projectRounds: (id: number, page = 1, pageSize = 20) => request<PageResult<ProjectScanRound>>(`/api/v1/business-projects/${id}/rounds?page=${page}&pageSize=${pageSize}`),
+  projectRound: (id: number, roundId: number) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}`),
+  startProjectRound: (id: number, payload: ProjectScanPayload) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds`, { method: 'POST', body: JSON.stringify(payload) }),
+  retryProjectRound: (id: number, roundId: number, requestKey: string) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}/retry`, { method: 'POST', body: JSON.stringify({ requestKey }) }),
+  cancelProjectRound: (id: number, roundId: number) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}/cancel`, { method: 'POST' }),
+  projectFindings: (id: number, params: URLSearchParams) => request<PageResult<LedgerFinding> & { pendingReviewCount?: number; includedCount?: number; summary?: { total: number; newCount: number; fixedCount: number } }>(`/api/v1/business-projects/${id}/findings?${params}`),
+  projectReportUrl: (id: number, roundId: number, format: 'html' | 'docx' | 'pdf') => `/api/v1/business-projects/${id}/rounds/${roundId}/report/${format}`,
+
   dashboard: () => request<DashboardSummary>('/api/v1/dashboard/summary'),
   projects: () => request<ScanProject[]>('/api/v1/projects').then(projects => projects.map(displayProject)),
   createProject: (payload: CreateProjectPayload) => request<ScanProject>('/api/v1/projects', {
@@ -73,6 +94,8 @@ export const api = {
   updateProject: (id: number, payload: CreateProjectPayload) => request<ScanProject>(`/api/v1/projects/${id}`, {
     method: 'PUT', body: JSON.stringify(payload),
   }).then(displayProject),
+  validateGit: (payload: { remoteUrl: string; gitUsername?: string; gitPassword?: string; projectId?: number; useStoredCredentials?: boolean }) => request<GitValidationResult>('/api/v1/projects/git/validate', { method: 'POST', body: JSON.stringify(payload) }),
+  syncProject: (id: number) => request<ScanProject>(`/api/v1/projects/${id}/sync`, { method: 'POST' }).then(displayProject),
   branches: (id: number, refresh = false) => request<BranchView[]>(`/api/v1/projects/${id}/branches?refresh=${refresh}`),
   scanRuns: (limit = 100) => request<ScanRun[]>(`/api/v1/scan-runs?limit=${limit}`),
   scanRunDetail: (id: number) => request<ScanRunDetail>(`/api/v1/scan-runs/${id}/detail`),

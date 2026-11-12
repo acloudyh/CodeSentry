@@ -35,6 +35,12 @@ public class ScanProjectController {
         return ApiResponse.success(service.findAll());
     }
 
+    @PostMapping("/git/validate")
+    public ApiResponse<io.codesentry.project.dto.GitValidationResult> validateGit(
+            @Valid @RequestBody io.codesentry.project.dto.GitValidationRequest request) {
+        return ApiResponse.success(service.validateGit(request));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<ScanProject> findOne(@PathVariable Long id) {
         return ApiResponse.success(service.requireById(id));
@@ -51,6 +57,9 @@ public class ScanProjectController {
                                                    @RequestParam(defaultValue = "false") boolean refresh) {
         return ApiResponse.success(service.listBranches(id, refresh));
     }
+
+    @PostMapping("/{id}/sync")
+    public ApiResponse<ScanProject> sync(@PathVariable Long id) { return ApiResponse.success(service.sync(id)); }
 
     @PutMapping("/{id}")
     public ApiResponse<ScanProject> update(@PathVariable Long id, @Valid @RequestBody CreateProjectRequest request) {

@@ -30,6 +30,8 @@ public class ScanRunService {
     private final ScanOrchestrator orchestrator;
     private final ScanToolRunService toolRunService;
     private final TaskExecutor taskExecutor;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
     private final RuleProfileService ruleProfileService;
 
     public ScanRunService(ScanRunMapper mapper,
@@ -46,9 +48,11 @@ public class ScanRunService {
         this.taskExecutor = taskExecutor;
     }
 
+    @org.springframework.transaction.annotation.Transactional(noRollbackFor = BusinessException.class)
     public ScanRun start(CreateScanRunRequest request) {
         if (request.getNetworkMode() == null) throw new BusinessException(HttpStatus.BAD_REQUEST, "请选择本地扫描或联网扫描");
         ScanProject project = projectService.requireById(request.getProjectId());
+        if (project.getSourceType() == ProjectSourceType.GIT) project = projectService.requireReadyForScan(project.getId());
         validate(project, request);
 
         ScanRun run = new ScanRun();
@@ -71,6 +75,20 @@ public class ScanRunService {
         run.setCreatedAt(LocalDateTime.now());
         mapper.insert(run);
 
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override public void afterCommit() {
+                        org.springframework.transaction.support.TransactionTemplate tx = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+                        tx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                        tx.executeWithoutResult(status -> dispatch(run, request, true));
+                    }
+                });
+        } else dispatch(run, request, false);
+        return run;
+    }
+
+    private void dispatch(ScanRun run, CreateScanRunRequest request, boolean afterCommit) {
         try {
             tasks.submit(run.getId(), taskExecutor, () -> orchestrator.execute(run.getId(), request.isRefreshRemote()));
         } catch (RuntimeException error) {
@@ -78,9 +96,8 @@ public class ScanRunService {
             run.setErrorMessage("扫描任务队列已满");
             run.setFinishedAt(LocalDateTime.now());
             mapper.finish(run);
-            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "扫描任务队列已满，请稍后重试");
+            if (!afterCommit) throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "扫描任务队列已满，请稍后重试");
         }
-        return run;
     }
 
     public ScanRun cancel(Long id) {

@@ -30,14 +30,18 @@ class ScanNetworkModeTest {
         assertEquals(NetworkMode.LOCAL,run.getNetworkMode());assertEquals("NOT_REQUESTED",run.getRemediationStatus());
         verify(worker).execute(9L,false);
     }
-    @Test void onlineModeIsPersistedBeforeWorkerStarts() {
+    @Test void onlineModeIsPersistedAndUsesCachedCodeByDefault() {
         ScanRun run=service.start(request(NetworkMode.ONLINE));
         assertEquals(NetworkMode.ONLINE,run.getNetworkMode());assertEquals("PENDING",run.getRemediationStatus());
-        verify(worker).execute(9L,true);
+        verify(worker).execute(9L,false);
         assertEquals(8,projects.requireById(1L).getTargetJavaVersion());
     }
     @Test void localModeRejectsUncachedRulesRatherThanFetchingThemSilently() {
         CreateScanRunRequest r=request(NetworkMode.LOCAL);when(rules.semgrepConfigs(any())).thenReturn(List.of("p/default"));
         assertThrows(BusinessException.class,()->service.start(r));verify(mapper,never()).insert(any());verifyNoInteractions(worker);
     }
+    @Test void onlineModeOnlyRefreshesWhenExplicitlySelected() {
+        CreateScanRunRequest r=request(NetworkMode.ONLINE);r.setRefreshRemote(true);service.start(r);verify(worker).execute(9L,true);
+    }
+
 }

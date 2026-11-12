@@ -1,4 +1,4 @@
-import type { FindingView } from '@/types'
+import type { ApplicationType, ScanProject, FindingView } from '@/types'
 
 const statuses: Record<string, string> = {
   PENDING: '等待执行', PREPARING: '准备中', RUNNING: '执行中', COMPLETED: '已完成',
@@ -46,3 +46,17 @@ export function findingTitle(item: FindingView) {
   if (rule.includes('command-execution')) return '系统命令执行需要人工确认输入边界'
   return item.title
 }
+
+export const applicationTypeLabel = (type?: ApplicationType) => ({ FRONTEND: '前端', BACKEND: '后端', FULL_STACK: '前后端混合' })[type ?? 'BACKEND']
+export function runtimeVersionLabel(project: Pick<ScanProject, 'applicationType' | 'targetJavaVersion' | 'targetNodeVersion'>) {
+  const java = project.targetJavaVersion ? `Java ${project.targetJavaVersion}` : 'Java 版本未确认'
+  const node = project.targetNodeVersion ? `Node.js ${project.targetNodeVersion}` : 'Node.js 版本未确认'
+  return project.applicationType === 'FRONTEND' ? node : project.applicationType === 'FULL_STACK' ? `${java} / ${node}` : java
+}
+
+export const repositorySyncLabel = (asset: { lastSyncStatus?: string }) => ({ PENDING: '等待拉取', RUNNING: '拉取中', COMPLETED: '已同步', FAILED: '拉取失败' }[asset.lastSyncStatus ?? ''] ?? '尚未拉取')
+export const repositorySyncBusy = (asset: { lastSyncStatus?: string }) => ['PENDING', 'RUNNING'].includes(asset.lastSyncStatus ?? '')
+export const repositoryReady = (asset: { sourceType: string; managedPath?: string; lastSyncStatus?: string }) => asset.sourceType !== 'GIT' || (!!asset.managedPath && !repositorySyncBusy(asset))
+
+export const projectRoundLabel = (round: { id: number; assetHistory?: boolean }) => round.assetHistory ? `资产历史扫描 #${-round.id}` : `项目扫描 #P${round.id}`
+export const projectRoundScope = (round: { assetHistory?: boolean; fullScope: boolean }) => round.assetHistory ? '单次资产历史扫描' : round.fullScope ? '全部资产扫描' : '部分资产扫描'

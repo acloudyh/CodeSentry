@@ -10,6 +10,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
+@org.springframework.core.annotation.Order(0)
 @Component
 public class DatabaseCompatibilityInitializer implements ApplicationRunner {
 
@@ -33,6 +34,17 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
                 "ALTER TABLE scan_run ADD COLUMN rule_profile VARCHAR(64) NOT NULL DEFAULT 'COMMUNITY_GENERAL' AFTER baseline_ref");
         ensureColumn("scan_project", "target_java_version",
                 "ALTER TABLE scan_project ADD COLUMN target_java_version INT NULL");
+        ensureColumn("scan_project", "application_type", "ALTER TABLE scan_project ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
+        ensureColumn("scan_project", "target_node_version", "ALTER TABLE scan_project ADD COLUMN target_node_version VARCHAR(32) NULL");
+        ensureColumn("scan_project", "git_username", "ALTER TABLE scan_project ADD COLUMN git_username VARCHAR(256) NULL");
+        ensureColumn("scan_project", "git_password_ciphertext", "ALTER TABLE scan_project ADD COLUMN git_password_ciphertext TEXT NULL");
+        ensureColumn("scan_project", "repository_revision", "ALTER TABLE scan_project ADD COLUMN repository_revision BIGINT NOT NULL DEFAULT 0");
+        ensureColumn("scan_project", "last_synced_at", "ALTER TABLE scan_project ADD COLUMN last_synced_at DATETIME(3) NULL");
+        ensureColumn("scan_project", "last_sync_status", "ALTER TABLE scan_project ADD COLUMN last_sync_status VARCHAR(24) NULL");
+        ensureColumn("scan_project", "last_sync_message", "ALTER TABLE scan_project ADD COLUMN last_sync_message VARCHAR(1000) NULL");
+        ensureColumn("project_scan_item", "application_type", "ALTER TABLE project_scan_item ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
+        ensureColumn("project_scan_item", "target_node_version", "ALTER TABLE project_scan_item ADD COLUMN target_node_version VARCHAR(32) NULL");
+        ensureColumn("project_scan_round", "refresh_remote", "ALTER TABLE project_scan_round ADD COLUMN refresh_remote TINYINT(1) NOT NULL DEFAULT 0");
         ensureColumn("scan_run", "source_report_run_id",
                 "ALTER TABLE scan_run ADD COLUMN source_report_run_id BIGINT NULL");
         ensureColumn("scan_run", "artifact_path",

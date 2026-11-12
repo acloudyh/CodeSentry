@@ -8,6 +8,15 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @Configuration
 public class AsyncConfig {
 
+    @Bean("repositoryTaskExecutor")
+    public TaskExecutor repositoryTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2); executor.setMaxPoolSize(2); executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("codesentry-git-");
+        executor.setWaitForTasksToCompleteOnShutdown(false);
+        executor.setAwaitTerminationSeconds(5); executor.initialize(); return executor;
+    }
+
     @Bean("scanTaskExecutor")
     public TaskExecutor scanTaskExecutor(CodeSentryProperties properties) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

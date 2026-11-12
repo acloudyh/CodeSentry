@@ -82,7 +82,7 @@ public class ScanOrchestrator {
             io.codesentry.process.CancellableTasks.check();
             ScanProject project = projectService.requireById(run.getProjectId());
             if (refreshRemote && project.getSourceType() == ProjectSourceType.GIT) {
-                gitRepositoryService.refresh(project);
+                projectService.refreshForScan(project);
             }
             prepareRun(project, run);
             if (scanRunMapper.updatePrepared(run) == 0) return;

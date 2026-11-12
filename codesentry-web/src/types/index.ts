@@ -1,3 +1,4 @@
+export type ApplicationType = 'FRONTEND' | 'BACKEND' | 'FULL_STACK'
 export type SourceType = 'LOCAL' | 'GIT' | 'JAR_UPLOAD'
 export type ScanMode = 'FULL' | 'INCREMENTAL'
 export type WorkspaceMode = 'CURRENT' | 'BRANCH_SNAPSHOT' | 'JAR_UPLOAD'
@@ -11,6 +12,14 @@ export interface ApiResponse<T> {
 }
 
 export interface ScanProject {
+  applicationType?: ApplicationType
+  targetNodeVersion?: string | null
+  gitUsername?: string
+  gitCredentialConfigured?: boolean
+  lastSyncedAt?: string
+  lastSyncStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  lastSyncMessage?: string
+  businessProjectId?: number
   displayName?: string
   targetJavaVersion?: number | null
   id: number
@@ -228,4 +237,32 @@ export interface RuleLibraryStatus {
   updatedAt: string | null
   ruleCount: number | null
   message: string
+}
+
+export interface PageResult<T> { items: T[]; total: number; page: number; pageSize: number }
+export interface BusinessProject {
+  id: number; name: string; description?: string; repositoryCount: number; jarCount: number; latestRound?: ProjectScanRound
+}
+export interface ProjectScanItem {
+  id: number; assetId: number; assetName: string; sourceType: SourceType; workspaceMode: WorkspaceMode;
+  scanRef?: string; runId?: number; status: ScanStatus; errorMessage?: string; run?: ScanRun
+}
+export interface ProjectScanRound {
+  assetHistory?: boolean
+  id: number; businessProjectId: number; projectName: string; fullScope: boolean; assetCount: number;
+  networkMode: 'LOCAL' | 'ONLINE'; ruleProfile: string; retryOf?: number; createdAt: string; status: ScanStatus;
+  completedCount: number; failedCount: number; items: ProjectScanItem[]
+}
+export interface ProjectScanPayload {
+  requestKey: string; refreshRemote?: boolean; networkMode: 'LOCAL' | 'ONLINE'; ruleProfile: string; fullScope: boolean;
+  assets: Array<{ assetId: number; workspaceMode: WorkspaceMode; scanRef?: string }>
+}
+export interface LedgerFinding extends FindingView { assetId: number; assetName: string; reportState: 'INCLUDED' | 'EXCLUDED' | 'PENDING' }
+
+export interface GitValidationResult {
+  valid: boolean
+  code: string
+  message: string
+  defaultBranch?: string
+  branches: string[]
 }

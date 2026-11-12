@@ -30,6 +30,10 @@ public class GitRepositoryService {
 
     private final CommandExecutor commandExecutor;
     private final CodeSentryProperties properties;
+    @org.springframework.beans.factory.annotation.Autowired
+    private GitCredentialAccess credentialAccess;
+    @org.springframework.beans.factory.annotation.Autowired
+    private GitTlsTrust tlsTrust;
 
     public GitRepositoryService(CommandExecutor commandExecutor, CodeSentryProperties properties) {
         this.commandExecutor = commandExecutor;
@@ -52,7 +56,9 @@ public class GitRepositoryService {
         return repository;
     }
 
-    public Path cloneMirror(String remoteUrl) {
+    public Path cloneMirror(String remoteUrl) { return cloneMirror(remoteUrl, null); }
+
+    public Path cloneMirror(String remoteUrl, ScanProject project) {
         if (!StringUtils.hasText(remoteUrl)) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "Git 仓库地址不能为空");
         }
@@ -66,15 +72,23 @@ public class GitRepositoryService {
         }
 
         Path target = repositoryRoot.resolve(UUID.randomUUID() + ".git");
-        CommandResult result = execute(null, Arrays.asList(
-                properties.getGit().getExecutable(), "clone", "--mirror", remoteUrl, target.toString()));
-        if (!result.isSuccess()) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "Git 仓库克隆失败，请检查地址和本机 SSH 凭据");
+        boolean complete = false;
+        try {
+            CommandResult result = authenticated(null, Arrays.asList(
+                    properties.getGit().getExecutable(), "clone", "--mirror", remoteUrl.trim(), target.toString()), project, remoteUrl);
+            if (!result.isSuccess()) throw remoteFailure("克隆", result);
+            complete = true;
+        } finally {
+            if (!complete) {
+                try { if (Files.exists(target)) try (java.util.stream.Stream<Path> paths = Files.walk(target)) {
+                    paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (IOException ignored) { } });
+                } } catch (IOException ignored) { }
+            }
         }
         return target;
     }
 
-    private void validateRemoteUrl(String remoteUrl) {
+    public void validateRemoteUrl(String remoteUrl) {
         if (remoteUrl.startsWith("file:") || remoteUrl.startsWith("/") || remoteUrl.startsWith("~")) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "远程仓库仅支持 SSH、HTTP 或 HTTPS 地址");
         }
@@ -91,10 +105,12 @@ public class GitRepositoryService {
                     || "https".equalsIgnoreCase(uri.getScheme()))) {
                 throw new BusinessException(HttpStatus.BAD_REQUEST, "远程仓库协议不受支持");
             }
+            if (uri.getHost() == null || uri.getQuery() != null || uri.getFragment() != null)
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "请填写完整且不含查询参数的 Git 仓库地址");
             if (uri.getUserInfo() != null
                     && (!"ssh".equalsIgnoreCase(uri.getScheme()) || uri.getUserInfo().contains(":"))) {
                 throw new BusinessException(HttpStatus.BAD_REQUEST,
-                        "仓库地址不能内嵌用户名或令牌，请使用 ssh-agent 或 Git 凭据助手");
+                        "仓库地址不能内嵌账号或令牌，请在独立的认证输入框填写");
             }
         } catch (URISyntaxException exception) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "Git 仓库地址格式不正确");
@@ -105,10 +121,60 @@ public class GitRepositoryService {
         if (project.getSourceType() != ProjectSourceType.GIT) {
             return;
         }
-        CommandResult result = git(repositoryPath(project), "remote", "update", "--prune");
+        List<String> command = Arrays.asList(properties.getGit().getExecutable(), "remote", "update", "--prune");
+        CommandResult result = authenticated(repositoryPath(project), command, project, project.getRemoteUrl());
         if (!result.isSuccess()) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "远程仓库更新失败，请检查网络和凭据");
+            throw remoteFailure("同步", result);
         }
+    }
+
+    private BusinessException remoteFailure(String operation, CommandResult result) {
+        String output = result.getOutput() == null ? "" : result.getOutput().toLowerCase(java.util.Locale.ROOT);
+        String detail = output.contains("certificate") || output.contains("ssl peer")
+                ? "HTTPS 证书验证失败，请检查服务器证书与信任配置"
+                : output.contains("authentication failed") || output.contains("could not read username") || output.contains("401") || output.contains("403") || output.contains("access denied")
+                ? "认证失败，请检查账号、密码或访问令牌及仓库权限"
+                : "请检查仓库地址、网络连接及访问凭据";
+        return new BusinessException(HttpStatus.BAD_REQUEST, "Git 仓库" + operation + "失败：" + detail);
+    }
+
+    private CommandResult authenticated(Path directory, List<String> command, ScanProject project, String remoteUrl) {
+        if (tlsTrust != null) command = tlsTrust.configure(command, remoteUrl);
+        if (credentialAccess == null) return commandExecutor.execute(directory, command, Duration.ofSeconds(1800));
+        return credentialAccess.execute(commandExecutor, directory, command,
+                Duration.ofSeconds(1800), project);
+    }
+
+    public io.codesentry.project.dto.GitValidationResult validateConnection(String remoteUrl, String username, String password, ScanProject stored) {
+        validateRemoteUrl(remoteUrl);
+        List<String> command=List.of(properties.getGit().getExecutable(),"ls-remote","--symref",remoteUrl,"HEAD","refs/heads/*");
+        if(tlsTrust!=null) command=tlsTrust.configure(command,remoteUrl);
+        Duration timeout=Duration.ofSeconds(Math.min(30,properties.getGit().getCommandTimeoutSeconds()));
+        CommandResult result;
+        try {
+            if(credentialAccess==null) result=commandExecutor.execute(null,command,timeout);
+            else if(StringUtils.hasText(password)) result=credentialAccess.executeWithCredentials(commandExecutor,null,command,timeout,username,password);
+            else result=credentialAccess.execute(commandExecutor,null,command,timeout,stored);
+        } catch(BusinessException error) {
+            if(error.getStatus()==HttpStatus.REQUEST_TIMEOUT) return io.codesentry.project.dto.GitValidationResult.failure("TIMEOUT","Git 连接超时，请检查地址、网络或代理配置");
+            throw error;
+        }
+        if(!result.isSuccess()) return validationFailure(result);
+        java.util.Set<String> branches=new java.util.TreeSet<>(); String defaultBranch=null;
+        for(String line:result.getOutput().split("\\R")) {
+            if(line.startsWith("ref: refs/heads/") && line.endsWith("\tHEAD")) defaultBranch=line.substring("ref: refs/heads/".length(),line.indexOf('\t'));
+            else if(line.matches("[0-9a-fA-F]{40,64}\\trefs/heads/.+")) branches.add(line.substring(line.indexOf("refs/heads/")+11));
+        }
+        return new io.codesentry.project.dto.GitValidationResult(true,"SUCCESS",branches.isEmpty()?"Git 连接和访问校验通过，仓库暂无分支":"Git 连接和仓库读取校验通过，共发现 "+branches.size()+" 个分支",defaultBranch,new java.util.ArrayList<>(branches).subList(0,Math.min(200,branches.size())));
+    }
+
+    private io.codesentry.project.dto.GitValidationResult validationFailure(CommandResult result) {
+        String text=result.getOutput()==null?"":result.getOutput().toLowerCase(java.util.Locale.ROOT);
+        if(text.contains("certificate") || text.contains("ssl peer")) return io.codesentry.project.dto.GitValidationResult.failure("CERTIFICATE_ERROR","HTTPS 证书校验失败，请为该 Git 地址配置受信任证书；尚未完成账号认证");
+        if(text.contains("host key verification failed")) return io.codesentry.project.dto.GitValidationResult.failure("SSH_HOST_KEY_ERROR","SSH 主机身份校验失败，请先配置该主机的受信任公钥");
+        if(text.contains("authentication failed") || text.contains("could not read username") || text.contains("401") || text.contains("403") || text.contains("access denied") || text.contains("permission denied")) return io.codesentry.project.dto.GitValidationResult.failure("AUTHENTICATION_ERROR","Git 认证或授权失败，请检查账号、密码或访问令牌及仓库读取权限");
+        if(text.contains("not found") || text.contains("does not appear to be a git repository")) return io.codesentry.project.dto.GitValidationResult.failure("REPOSITORY_ACCESS_ERROR","无法访问该仓库，请检查仓库地址及当前账号的读取权限");
+        return io.codesentry.project.dto.GitValidationResult.failure("CONNECTION_ERROR","Git 连接失败，请检查地址、网络连通性及代理配置");
     }
 
     public List<BranchView> listBranches(ScanProject project) {

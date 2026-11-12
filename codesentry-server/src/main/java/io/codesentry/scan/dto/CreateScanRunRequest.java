@@ -27,7 +27,7 @@ public class CreateScanRunRequest {
 
     private String scanRef;
     private String baselineRef;
-    private boolean refreshRemote = true;
+    private boolean refreshRemote = false;
     private String ruleProfile = "COMMUNITY_GENERAL";
 
     public Long getProjectId() {
