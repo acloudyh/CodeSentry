@@ -20,6 +20,11 @@ import java.util.List;
 @RequestMapping("/api/v1/reports")
 public class ReportController {
     private final RemediationReportService service;
+    @org.springframework.beans.factory.annotation.Autowired private io.codesentry.finding.service.RemediationRefreshService refresh;
+
+    @org.springframework.web.bind.annotation.PostMapping("/scan-runs/{runId}/verify-online")
+    public ApiResponse<io.codesentry.scan.model.ScanRun> verifyOnline(@PathVariable Long runId) { return ApiResponse.success(refresh.start(runId)); }
+
 
     public ReportController(RemediationReportService service) {
         this.service = service;

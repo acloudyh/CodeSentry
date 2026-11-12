@@ -16,6 +16,17 @@ public class CodeSentryProperties {
     private final Scanning scanning = new Scanning();
     private final Scanners scanners = new Scanners();
     private final Ai ai = new Ai();
+    private final Remediation remediation = new Remediation();
+    public Remediation getRemediation() { return remediation; }
+    public static class Remediation {
+        private int timeoutSeconds=600, maxQueries=1000, maxResponseMegabytes=32;
+        public int getTimeoutSeconds() { return timeoutSeconds; }
+        public void setTimeoutSeconds(int v) { timeoutSeconds=v; }
+        public int getMaxQueries() { return maxQueries; }
+        public void setMaxQueries(int v) { maxQueries=v; }
+        public int getMaxResponseMegabytes() { return maxResponseMegabytes; }
+        public void setMaxResponseMegabytes(int v) { maxResponseMegabytes=v; }
+    }
 
     public Storage getStorage() {
         return storage;

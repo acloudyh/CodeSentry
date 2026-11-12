@@ -53,7 +53,7 @@ class OnlineRemediationServiceTest {
         assertEquals("升级到修复版本：请查阅漏洞公告",a.getRecommendation());
         assertFalse(String.join("\n",DependencyRemediationAdvice.versionRecords(List.of(a))).contains("官方补充"));
         assertTrue(a.getOnlineRemediation().description().contains("Java 要求至少 8"));
-        verify(runs,times(2)).updateRemediation(run);
+        verify(runs,times(3)).updateRemediation(run);
     }
 
     @Test void outageFallsBackAndNeverClaimsThatNoFixExists() throws Exception {
@@ -90,6 +90,7 @@ class OnlineRemediationServiceTest {
         ScanRun run=run(); service.enrich(run); OnlineRemediationService.attach(run,List.of(a));
         assertEquals("UNVERIFIED",a.getOnlineRemediation().status);
         when(remote.query(pkg,"2.0.1")).thenReturn(json.readTree("{\"next_page_token\":\"more\"}"));
+        run.setRemediationEvidence(null); // Force a fresh response for this pagination test.
         service.enrich(run); OnlineRemediationService.attach(run,List.of(a));
         assertEquals("QUERY_FAILED",a.getOnlineRemediation().status);
     }
@@ -101,4 +102,42 @@ class OnlineRemediationServiceTest {
         assertEquals("NO_FIXED_VERSION",a.getOnlineRemediation().status);
         assertTrue(a.getOnlineRemediation().description().contains("所查询记录未列修复版本"));
     }
+    @Test void defaultBudgetCoversMoreThanOneHundredActualLookups() throws Exception {
+        List<FindingView> group=new ArrayList<>();
+        for(int n=0;n<60;n++) { FindingView f=finding("CVE-2023-1111");f.setCodeSnippet("sample:library-"+n+"@2.0.0");group.add(f); }
+        when(findings.findByRunId(1L)).thenReturn(group);
+        when(remote.query(anyString(),eq("2.0.0"))).thenAnswer(c -> response(advisory("CVE-2023-1111","2.0.1",c.getArgument(0))));
+        when(remote.query(anyString(),eq("2.0.1"))).thenReturn(response());when(remote.minimumJava(anyString(),eq("2.0.1"))).thenReturn(8);
+        ScanRun run=run();service.enrich(run);OnlineRemediationService.attach(run,group);
+        assertEquals("COMPLETED",run.getRemediationStatus());assertTrue(group.stream().allMatch(f->"FOUND".equals(f.getOnlineRemediation().status)));
+        verify(remote,times(120)).query(anyString(),anyString());verify(remote,times(60)).minimumJava(anyString(),anyString());
+    }
+    @Test void resumesSavedSuccessWithoutSlidingItsCacheExpiryAndRefreshesExpiredEvidence() throws Exception {
+        FindingView f=finding("CVE-2023-1111");when(findings.findByRunId(1L)).thenReturn(List.of(f));
+        when(remote.query(pkg,"2.0.0")).thenReturn(response(advisory(f.getRuleId(),"2.0.1",pkg)));when(remote.query(pkg,"2.0.1")).thenReturn(response());when(remote.minimumJava(pkg,"2.0.1")).thenReturn(8);
+        ScanRun run=run();service.enrich(run);String origin=json.readTree(run.getRemediationEvidence()).path("cacheCreatedAt").asText();clearInvocations(remote);
+        service.enrich(run);verifyNoInteractions(remote);assertEquals(origin,json.readTree(run.getRemediationEvidence()).path("cacheCreatedAt").asText());
+        var saved=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(run.getRemediationEvidence());saved.put("cacheCreatedAt",java.time.Instant.now().minusSeconds(90000).toString());run.setRemediationEvidence(saved.toString());
+        service.enrich(run);verify(remote).query(pkg,"2.0.0");
+    }
+    @Test void compatibilityCoverageStopsAdditionalCandidateQueries() throws Exception {
+        FindingView a=finding("CVE-2023-1111"),b=finding("CVE-2023-2222");when(findings.findByRunId(1L)).thenReturn(List.of(a,b));
+        var assets=mock(io.codesentry.project.mapper.ScanProjectMapper.class);var project=new io.codesentry.project.model.ScanProject();project.setTargetJavaVersion(8);when(assets.findById(1L)).thenReturn(project);org.springframework.test.util.ReflectionTestUtils.setField(service,"assets",assets);
+        when(remote.query(pkg,"2.0.0")).thenReturn(response(advisory(a.getRuleId(),"2.0.2",pkg),advisory(b.getRuleId(),"2.0.3",pkg)));when(remote.query(pkg,"2.0.3")).thenReturn(response());when(remote.minimumJava(pkg,"2.0.3")).thenReturn(8);
+        ScanRun run=run();run.setProjectId(1L);service.enrich(run);OnlineRemediationService.attach(run,List.of(a,b));
+        assertEquals("FOUND",a.getOnlineRemediation().status);assertEquals("FOUND",b.getOnlineRemediation().status);verify(remote,never()).query(pkg,"2.0.2");
+    }
+    @Test void requestLimitReportsItsSpecificReasonWithoutClaimingAFix() throws Exception {
+        var settings=new io.codesentry.config.CodeSentryProperties();settings.getRemediation().setMaxQueries(1);org.springframework.test.util.ReflectionTestUtils.setField(service,"properties",settings);
+        FindingView f=finding("CVE-2023-1111");when(findings.findByRunId(1L)).thenReturn(List.of(f));when(remote.query(pkg,"2.0.0")).thenReturn(response(advisory(f.getRuleId(),"2.0.1",pkg)));
+        ScanRun run=run();service.enrich(run);OnlineRemediationService.attach(run,List.of(f));assertEquals("LIMIT_REACHED",f.getOnlineRemediation().status);assertTrue(f.getOnlineRemediation().message.contains("请求数"));assertTrue(f.getOnlineRemediation().verifiedTargets.isEmpty());assertTrue(f.getOnlineRemediation().description().contains("可补充核实"));
+    }
+
+    @Test void reportGroupsIdenticalOnlineNotesWhileKeepingEveryCveAndScannerRecord() {
+        FindingView a=finding("CVE-2023-1111"),b=finding("CVE-2023-2222");
+        for(FindingView f:List.of(a,b)) { OnlineRemediationEvidence e=new OnlineRemediationEvidence();e.status="LIMIT_REACHED";e.checkedAt="2026-11-12T09:04:05.819952Z";f.setOnlineRemediation(e); }
+        List<String> notes=DependencyRemediationAdvice.versionRecords(List.of(a,b));
+        assertEquals(1,notes.stream().filter(x->x.contains("联网核实")).count());assertTrue(notes.get(0).contains(a.getRuleId()+"、"+b.getRuleId()));assertTrue(notes.get(0).contains("2026-11-12 17:04:05"));assertFalse(notes.get(0).contains("819952Z"));assertEquals(2,notes.stream().filter(x->x.contains("扫描时漏洞库记录")).count());
+    }
+
 }

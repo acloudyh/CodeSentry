@@ -153,6 +153,9 @@ export interface AiReviewSummary {
 }
 
 export interface RemediationReportSummary {
+  networkMode?: 'LOCAL' | 'ONLINE'
+  remediationStatus?: string
+  remediationMessage?: string
   ledgerFindings: number
   detailGroups: number
   notIncludedFindings: number

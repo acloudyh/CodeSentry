@@ -5,6 +5,12 @@ import io.codesentry.scan.model.ScanRunStatus;
 import java.time.LocalDateTime;
 
 public class RemediationReportSummary {
+    private io.codesentry.scan.model.NetworkMode networkMode;
+    private String remediationStatus,remediationMessage;
+    public io.codesentry.scan.model.NetworkMode getNetworkMode() { return networkMode; }
+    public String getRemediationStatus() { return remediationStatus; }
+    public String getRemediationMessage() { return remediationMessage; }
+    public RemediationReportSummary withRemediation(io.codesentry.scan.model.ScanRun run) { networkMode=run.getNetworkMode();remediationStatus=run.getRemediationStatus();remediationMessage=run.getRemediationMessage();return this; }
     private final Long id;
     private final Long projectId;
     private final ScanMode scanMode;

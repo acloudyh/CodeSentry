@@ -477,7 +477,7 @@ class RemediationReportServiceTest {
         String html=new String(service.exportHtml(8L),StandardCharsets.UTF_8);
         assertTrue(html.contains("联网扫描：联网核实 1 项"));
         assertTrue(html.contains("统一候选版本：example:library:2.0.1"));
-        assertTrue(html.contains("2026-11-10T12:00:00Z")); assertTrue(html.contains("https://osv.dev/vulnerability/GHSA-test"));
+        assertTrue(html.contains("2026-11-10 20:00:00")); assertTrue(html.contains("https://osv.dev/vulnerability/GHSA-test"));
         try (org.apache.poi.xwpf.usermodel.XWPFDocument doc=new org.apache.poi.xwpf.usermodel.XWPFDocument(new java.io.ByteArrayInputStream(service.exportDocx(8L)))) {
             assertTrue(doc.getDocument().xmlText().contains("example:library:2.0.1"));
             assertTrue(doc.getDocument().xmlText().contains("联网扫描：联网核实 1 项"));

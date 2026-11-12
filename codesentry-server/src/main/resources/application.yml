@@ -111,6 +111,10 @@ codesentry:
       config: ${CODESENTRY_P3C_JAR:${user.home}/.codesentry/tools/p3c-pmd-2.1.1-jar-with-dependencies.jar}
       include: ${CODESENTRY_P3C_JAVA_VERSION:1.8}
       timeout-seconds: ${CODESENTRY_P3C_TIMEOUT_SECONDS:600}
+  remediation:
+    timeout-seconds: ${CODESENTRY_REMEDIATION_TIMEOUT_SECONDS:600}
+    max-queries: ${CODESENTRY_REMEDIATION_MAX_QUERIES:1000}
+    max-response-megabytes: ${CODESENTRY_REMEDIATION_MAX_RESPONSE_MEGABYTES:32}
   ai:
     enabled: ${CODESENTRY_AI_ENABLED:false}
     base-url: ${CODESENTRY_AI_BASE_URL:}

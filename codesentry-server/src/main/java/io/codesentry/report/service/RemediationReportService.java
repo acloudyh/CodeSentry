@@ -107,7 +107,7 @@ public class RemediationReportService {
             ReportData data = load(run.getId(), false);
             reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
                     run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt(),
-                    data.ledgerFindingCount, groupFindings(data.findings).size(), data.notIncludedFindingCount));
+                    data.ledgerFindingCount, groupFindings(data.findings).size(), data.notIncludedFindingCount).withRemediation(data.run));
         }
         reports.sort(Comparator.comparing(RemediationReportSummary::getCreatedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));

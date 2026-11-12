@@ -8,6 +8,12 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @Configuration
 public class AsyncConfig {
 
+    @Bean("remediationTaskExecutor")
+    public TaskExecutor remediationTaskExecutor() {
+        ThreadPoolTaskExecutor executor=new ThreadPoolTaskExecutor();executor.setCorePoolSize(2);executor.setMaxPoolSize(2);executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("codesentry-remediation-");executor.setWaitForTasksToCompleteOnShutdown(false);executor.setAwaitTerminationSeconds(5);executor.initialize();return executor;
+    }
+
     @Bean("repositoryTaskExecutor")
     public TaskExecutor repositoryTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

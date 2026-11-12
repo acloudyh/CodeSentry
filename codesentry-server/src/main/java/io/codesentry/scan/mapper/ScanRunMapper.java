@@ -20,8 +20,17 @@ public interface ScanRunMapper {
     int insert(ScanRun scanRun);
 
     @Update("UPDATE scan_run SET remediation_status = #{remediationStatus}, remediation_message = #{remediationMessage}, " +
-            "remediation_evidence = #{remediationEvidence} WHERE id = #{id} AND status IN ('PENDING','PREPARING','RUNNING')")
+            "remediation_evidence = #{remediationEvidence} WHERE id = #{id} AND (status IN ('PENDING','PREPARING','RUNNING') OR (status IN ('COMPLETED','PARTIAL') AND remediation_status IN ('PENDING','RUNNING')))")
     int updateRemediation(ScanRun run);
+
+    @Update("UPDATE scan_run SET remediation_status='PENDING',remediation_message='等待后台补充联网核实' WHERE id=#{id} AND network_mode='ONLINE' AND status IN ('COMPLETED','PARTIAL') AND (remediation_status IS NULL OR remediation_status NOT IN ('PENDING','RUNNING'))")
+    int claimRemediationRefresh(@Param("id") Long id);
+
+    @Update("UPDATE scan_run SET remediation_status='FAILED',remediation_message=#{message} WHERE id=#{id} AND status IN ('COMPLETED','PARTIAL') AND remediation_status IN ('PENDING','RUNNING')")
+    int failRemediationRefresh(@Param("id") Long id,@Param("message") String message);
+
+    @Update("UPDATE scan_run SET remediation_status='FAILED',remediation_message='服务重启，联网补查中断，可重新补查' WHERE status IN ('COMPLETED','PARTIAL') AND remediation_status IN ('PENDING','RUNNING')")
+    int recoverRemediationRefresh();
 
     @Select("SELECT * FROM scan_run WHERE source_report_run_id = #{id} ORDER BY id DESC LIMIT 100")
     List<ScanRun> findAcceptanceRuns(@Param("id") Long id);

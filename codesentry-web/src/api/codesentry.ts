@@ -151,6 +151,7 @@ export const api = {
   }),
   deleteAiTool: (id: number) => request<void>(`/api/v1/ai-tools/${id}`, { method: 'DELETE' }),
   reportAcceptance: (id: number, verificationId?: number) => request<ReportAcceptance>(`/api/v1/reports/scan-runs/${id}/acceptance${verificationId ? `?verificationId=${verificationId}` : ''}`),
+  verifyReportOnline: (runId: number) => request<ScanRun>(`/api/v1/reports/scan-runs/${runId}/verify-online`, { method: 'POST' }),
   reports: (limit = 100, businessProjectId?: number, assetId?: number) => request<RemediationReportSummary[]>(`/api/v1/reports?${new URLSearchParams({ limit: String(limit), ...(businessProjectId ? { businessProjectId: String(businessProjectId) } : {}), ...(assetId ? { assetId: String(assetId) } : {}) })}`),
   ruleProfiles: () => request<RuleProfile[]>('/api/v1/rule-profiles'),
   ruleLibraryStatus: () => request<RuleLibraryStatus>('/api/v1/rule-profiles/library'),

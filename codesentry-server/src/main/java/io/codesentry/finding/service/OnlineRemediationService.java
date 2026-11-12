@@ -20,22 +20,37 @@ public class OnlineRemediationService {
         this.remote = remote; this.json = json; this.findings = findings; this.runs = runs;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private io.codesentry.config.CodeSentryProperties properties = new io.codesentry.config.CodeSentryProperties();
+    @org.springframework.beans.factory.annotation.Autowired
+    private io.codesentry.project.mapper.ScanProjectMapper assets;
+
     public void enrich(ScanRun run) {
         run.setRemediationStatus("RUNNING");
         run.setRemediationMessage("正在联网核实修复记录与 Java 要求");
         if (runs.updateRemediation(run) == 0) return;
         List<OnlineRemediationEvidence> evidence = new ArrayList<>();
         Map<String, JsonNode> responses = new LinkedHashMap<>();
-        Budget budget = new Budget();
+        Budget budget = new Budget(properties.getRemediation());
+        Map<String, Integer> javaRequirements = new LinkedHashMap<>();
+        Map<String, OnlineRemediationEvidence> previous = new LinkedHashMap<>();
+        String cacheCreatedAt = restoreSavedEvidence(run, responses, javaRequirements, previous);
+        budget.responseBytes = responses.values().stream().mapToLong(v -> v.toString().length()).sum();
+        Integer javaTarget = assets==null || run.getProjectId()==null ? null : Optional.ofNullable(assets.findById(run.getProjectId())).map(p -> p.getTargetJavaVersion()).orElse(null);
         try {
             Map<String, List<FindingView>> groups = findings.findByRunId(run.getId()).stream()
                     .filter(f -> "Trivy".equalsIgnoreCase(f.getScanner()) && "VULNERABILITY".equals(f.getCategory())
                             && !"FIXED".equals(f.getResultStatus()) && String.valueOf(f.getRuleId()).matches("CVE-[0-9]{4}-[0-9]+")
                             && coordinate(f).matches("[^:@\\s]+:[^:@\\s]+"))
                     .collect(Collectors.groupingBy(f -> signature(f), LinkedHashMap::new, Collectors.toList()));
+            int completedGroups=0;
             for (List<FindingView> group : groups.values()) {
                 io.codesentry.process.CancellableTasks.check();
-                lookup(group, evidence, responses, budget);
+                boolean reusable=group.stream().allMatch(f -> previous.containsKey(signature(f)+"|"+f.getRuleId()) && "FOUND".equals(previous.get(signature(f)+"|"+f.getRuleId()).status) && (javaTarget==null || previous.get(signature(f)+"|"+f.getRuleId()).verifiedTargets.values().stream().anyMatch(j -> j<=javaTarget)));
+                if(reusable) group.stream().map(f -> previous.get(signature(f)+"|"+f.getRuleId())).distinct().forEach(evidence::add);
+                else lookup(group, evidence, responses, javaRequirements, javaTarget, budget);
+                run.setRemediationMessage("正在联网核实，已处理 "+(++completedGroups)+" / "+groups.size()+" 个组件版本组");
+                runs.updateRemediation(run);
             }
             long found = evidence.stream().filter(e -> "FOUND".equals(e.status)).count();
             long failed = evidence.stream().filter(e -> Set.of("QUERY_FAILED", "LIMIT_REACHED").contains(e.status)).count();
@@ -50,14 +65,14 @@ public class OnlineRemediationService {
         }
         try {
             run.setRemediationEvidence(json.writeValueAsString(Map.of("schema", 1,
-                    "checkedAt", Instant.now().toString(), "entries", evidence, "responses", responses)));
+                    "checkedAt", Instant.now().toString(), "entries", evidence, "responses", responses, "javaRequirements", javaRequirements, "cacheCreatedAt",cacheCreatedAt)));
         } catch (Exception e) { throw new IllegalStateException("联网依据保存失败", e); }
         io.codesentry.process.CancellableTasks.check();
         runs.updateRemediation(run);
     }
 
     private void lookup(List<FindingView> group, List<OnlineRemediationEvidence> all,
-                        Map<String, JsonNode> responses, Budget budget) {
+                        Map<String, JsonNode> responses, Map<String,Integer> javaRequirements, Integer javaTarget, Budget budget) {
         String pkg = coordinate(group.get(0)), installed = installed(group.get(0));
         Map<String, OnlineRemediationEvidence> records = new LinkedHashMap<>();
         for (FindingView f : group) records.computeIfAbsent(f.getRuleId(), cve -> {
@@ -66,8 +81,10 @@ public class OnlineRemediationService {
             e.sources.add("https://osv.dev/list?q=" + java.net.URLEncoder.encode(pkg + " " + cve, java.nio.charset.StandardCharsets.UTF_8));
             all.add(e); return e;
         });
+        boolean initialResolved=false;
         try {
             JsonNode initial = query(pkg, installed, responses, budget);
+            initialResolved=true;
             Map<String, List<JsonNode>> matched = new LinkedHashMap<>();
             for (OnlineRemediationEvidence e : records.values()) {
                 List<JsonNode> advisories = matching(initial, pkg, e.cve);
@@ -101,12 +118,15 @@ public class OnlineRemediationService {
             LinkedHashSet<String> selected = new LinkedHashSet<>(branches.values()); selected.addAll(ordered);
             int checked = 0;
             for (String target : selected) {
+                if (javaTarget != null && records.values().stream().allMatch(e -> e.verifiedTargets.values().stream().anyMatch(j -> j<=javaTarget))) break;
                 if (++checked > 8) break;
                 if (matched.values().stream().allMatch(List::isEmpty)) break;
                 JsonNode targetResult = query(pkg, target, responses, budget);
                 Integer minimumJava = UnifiedDependencyRemediation.minimumJava(pkg, target);
+                String javaKey=pkg+"@"+target;
+                if (minimumJava == null) minimumJava=javaRequirements.get(javaKey);
                 if (minimumJava == null) {
-                    budget.check();
+                    budget.reserve();
                     try { minimumJava = remote.minimumJava(pkg, target); }
                     catch (Exception e) {
                         if (e instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -115,6 +135,7 @@ public class OnlineRemediationService {
                     }
                 }
                 if (minimumJava == null) continue;
+                javaRequirements.put(javaKey,minimumJava);
                 for (OnlineRemediationEvidence e : records.values()) {
                     if (e.fixedVersions.isEmpty() || !matching(targetResult, pkg, e.cve).isEmpty()) continue;
                     // Known affected input + fixed event + exact target no longer affected.
@@ -132,8 +153,9 @@ public class OnlineRemediationService {
             if (error instanceof InterruptedException) Thread.currentThread().interrupt();
             io.codesentry.process.CancellableTasks.check();
             for (OnlineRemediationEvidence e : records.values()) {
-                if (!e.verifiedTargets.isEmpty()) continue;
+                if (!e.verifiedTargets.isEmpty() || (initialResolved && Set.of("NO_FIXED_VERSION","NOT_FOUND").contains(e.status))) continue;
                 e.status = error instanceof LimitReached ? "LIMIT_REACHED" : "QUERY_FAILED";
+                e.message = error instanceof LimitReached ? error.getMessage() : "远端服务暂不可用，可补充联网核实；本地漏洞库记录保留。";
             }
         }
     }
@@ -141,7 +163,7 @@ public class OnlineRemediationService {
     private JsonNode query(String pkg, String version, Map<String, JsonNode> responses, Budget budget) throws Exception {
         String key = pkg + "@" + version;
         if (responses.containsKey(key)) return responses.get(key);
-        budget.check();
+        budget.reserve();
         JsonNode answer = remote.query(pkg, version);
         // An empty object is OSV's documented no-vulnerabilities response; error payloads are not.
         if (answer == null || !answer.isObject() || (!answer.isEmpty() && !answer.has("vulns") && !answer.has("next_page_token"))
@@ -149,7 +171,7 @@ public class OnlineRemediationService {
                 || (answer.has("vulns") && !answer.path("vulns").isArray())) throw new IllegalStateException("无效的漏洞查询响应");
         if (!answer.path("next_page_token").asText().isBlank()) throw new IllegalStateException("漏洞查询未完整返回，覆盖尚未核实");
         budget.responseBytes += answer.toString().length();
-        if (budget.responseBytes > 4 * 1024 * 1024) throw new LimitReached();
+        if (budget.responseBytes > budget.maxResponseBytes) throw new LimitReached("本次累计响应数据达到配置上限，剩余项可继续补查。");
         responses.put(key, answer); return answer;
     }
 
@@ -186,14 +208,40 @@ public class OnlineRemediationService {
         } catch (Exception error) { throw new IllegalStateException("本次扫描的联网依据读取失败", error); }
     }
 
-    private static class LimitReached extends RuntimeException { }
+    /** Resume only this scan's dated, successful evidence; expired responses are queried again. */
+    private String restoreSavedEvidence(ScanRun run,Map<String,JsonNode> responses,Map<String,Integer> javaRequirements,Map<String,OnlineRemediationEvidence> previous) {
+        String now=Instant.now().toString();
+        if(run.getRemediationEvidence()==null) return now;
+        try {
+            JsonNode saved=json.readTree(run.getRemediationEvidence());
+            String origin=saved.hasNonNull("cacheCreatedAt")?saved.path("cacheCreatedAt").asText():saved.path("checkedAt").asText();
+            long age=Duration.between(Instant.parse(origin),Instant.now()).getSeconds();
+            if(age<0 || age>86400) return now;
+            saved.path("responses").fields().forEachRemaining(e -> responses.put(e.getKey(),e.getValue()));
+            saved.path("javaRequirements").fields().forEachRemaining(e -> { if(e.getValue().isInt() && e.getValue().asInt()>0) javaRequirements.put(e.getKey(),e.getValue().asInt()); });
+            for(JsonNode node:saved.path("entries")) {
+                OnlineRemediationEvidence e=json.treeToValue(node,OnlineRemediationEvidence.class);
+                previous.put(e.coordinate+"@"+e.installedVersion+"|"+e.cve,e);
+                e.verifiedTargets.forEach((version,java) -> { if(java!=null && java>0) javaRequirements.put(e.coordinate+"@"+version,java); });
+            }
+            return origin;
+        } catch(Exception ignored) { responses.clear();javaRequirements.clear();previous.clear(); return now; }
+    }
+    private static class LimitReached extends RuntimeException { LimitReached(String reason) { super(reason); } }
     private static class Budget {
-        final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(120);
+        final long deadline,maxResponseBytes;
+        final int maxQueries;
         int queries;
         long responseBytes;
-        void check() {
+        Budget(io.codesentry.config.CodeSentryProperties.Remediation settings) {
+            deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(Math.max(1,Math.min(1800,settings.getTimeoutSeconds())));
+            maxQueries=Math.max(1,Math.min(10000,settings.getMaxQueries()));
+            maxResponseBytes=Math.max(1,Math.min(128,settings.getMaxResponseMegabytes()))*1024L*1024;
+        }
+        void reserve() {
             io.codesentry.process.CancellableTasks.check();
-            if (++queries > 100 || System.nanoTime() > deadline) throw new LimitReached();
+            if(System.nanoTime()>deadline) throw new LimitReached("本次核实时长达到配置上限，剩余项可继续补查。");
+            if(++queries>maxQueries) throw new LimitReached("本次远端请求数达到配置上限，剩余项可继续补查。");
         }
     }
 }

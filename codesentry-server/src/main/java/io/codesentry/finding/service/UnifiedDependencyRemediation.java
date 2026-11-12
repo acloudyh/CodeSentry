@@ -94,10 +94,13 @@ final class UnifiedDependencyRemediation {
 
     static List<String> versionRecords(List<FindingView> members) {
         List<String> records = new ArrayList<>();
+        Map<String,Set<String>> onlineRecords = new LinkedHashMap<>();
+        for (FindingView finding : members) if (finding.getOnlineRemediation()!=null)
+            onlineRecords.computeIfAbsent(finding.getOnlineRemediation().description(),k->new LinkedHashSet<>()).add(finding.getRuleId());
+        onlineRecords.forEach((description,cves)->records.add(String.join("、",cves)+"："+description));
         for (FindingView finding : members) {
             List<Fix> facts = fixes(finding);
             String original = scanVersions(finding);
-            if (finding.getOnlineRemediation() != null) records.add(finding.getRuleId() + "：" + finding.getOnlineRemediation().description());
             String scan = original.isEmpty() ? "未记录明确修复版本" : original;
             records.add(finding.getRuleId() + "：" + scan + "（扫描时漏洞库记录）");
             List<String> upstream = facts.stream().filter(f -> f.upstream && !f.exact)
