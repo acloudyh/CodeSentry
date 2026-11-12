@@ -1,33 +1,23 @@
 package io.codesentry.dashboard.dto;
 
 public class DashboardSummary {
+    private long businessProjects;
+    private long assets;
+    private long codeAssets;
+    private long jarAssets;
+    private long unassignedAssets;
+    private long scans;
+    private long runningScans;
+    private long newFindings;
 
-    private final int projects;
-    private final int scans;
-    private final int runningScans;
-    private final int newFindings;
-
-    public DashboardSummary(int projects, int scans, int runningScans, int newFindings) {
-        this.projects = projects;
-        this.scans = scans;
-        this.runningScans = runningScans;
-        this.newFindings = newFindings;
-    }
-
-    public int getProjects() {
-        return projects;
-    }
-
-    public int getScans() {
-        return scans;
-    }
-
-    public int getRunningScans() {
-        return runningScans;
-    }
-
-    public int getNewFindings() {
-        return newFindings;
-    }
+    public long getBusinessProjects() { return businessProjects; }
+    public long getAssets() { return assets; }
+    public long getCodeAssets() { return codeAssets; }
+    public long getJarAssets() { return jarAssets; }
+    public long getUnassignedAssets() { return unassignedAssets; }
+    public long getScans() { return scans; }
+    public long getRunningScans() { return runningScans; }
+    public long getNewFindings() { return newFindings; }
+    // 旧客户端的 projects 表示扫描资产，保留别名，不改成业务项目数。
+    public long getProjects() { return assets; }
 }
-

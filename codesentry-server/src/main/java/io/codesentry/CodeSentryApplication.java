@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @org.springframework.scheduling.annotation.EnableScheduling
 @EnableAsync
 @MapperScan({
+        "io.codesentry.dashboard.mapper",
         "io.codesentry.project.mapper",
         "io.codesentry.scan.mapper",
         "io.codesentry.finding.mapper",

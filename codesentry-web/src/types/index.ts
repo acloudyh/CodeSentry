@@ -219,6 +219,11 @@ export interface RuleProfile {
 export type TriageStatus = 'CONFIRMED' | 'FALSE_POSITIVE' | 'ACCEPTED_RISK' | 'FIXED_PENDING'
 
 export interface DashboardSummary {
+  businessProjects: number
+  assets: number
+  codeAssets: number
+  jarAssets: number
+  unassignedAssets: number
   projects: number
   scans: number
   runningScans: number
