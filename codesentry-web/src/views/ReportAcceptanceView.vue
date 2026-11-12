@@ -63,7 +63,7 @@ onBeforeUnmount(() => { generation++; if (timer) clearTimeout(timer) })
     <section v-if="data" class="panel panel-pad">
       <div class="acceptance-toolbar">
         <div><span class="muted">原报告清单</span><h3>{{ data.items.length }} 条问题</h3></div>
-        <div class="report-actions"><button class="button secondary" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新结果' }}</button><RouterLink :to="{ path: '/scans/new', query: { sourceReportRunId: data.source.id } }" class="button primary">发起验收复扫</RouterLink></div>
+        <div class="report-actions"><button class="button secondary" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新结果' }}</button><RouterLink :to="{ path: '/projects', query: { scan: '1', sourceReportRunId: data.source.id } }" class="button primary">发起验收复扫</RouterLink></div>
       </div>
       <p class="muted">首次导出或进入验收时归档问题清单。此前导出的旧文件无法自动还原，请核对清单后开始验收。依赖漏洞按每个 CVE 验证。</p>
       <div class="field"><label for="verification-batch">验证批次</label><select id="verification-batch" v-model="selectedBatch" class="select" @change="load"><option :value="undefined">最新验收复扫</option><option v-for="run in data.history" :key="run.id" :value="run.id">#{{ run.id }} · {{ formatChinaTime(run.createdAt) }}</option></select></div>

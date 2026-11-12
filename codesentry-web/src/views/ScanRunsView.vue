@@ -54,7 +54,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
 
 <template>
   <div class="page-stack">
-    <section class="section-heading"><div><h2>执行历史</h2><p>页面每 5 秒刷新一次；扫描器缺失时任务会标记为部分完成，而不是伪装成零风险。</p></div><RouterLink to="/scans/new" class="button primary">+ 发起扫描</RouterLink></section>
+    <section class="section-heading"><div><h2>执行历史</h2><p>页面每 5 秒刷新一次；扫描器缺失时任务会标记为部分完成，而不是伪装成零风险。</p></div><RouterLink to="/projects?scan=1" class="button primary">+ 发起扫描</RouterLink></section>
     <div v-if="error" class="error-banner">{{ error }}</div>
     <section class="panel">
       <div v-if="runs.length" class="table-scroll">
@@ -82,7 +82,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
           <div class="pager-buttons"><button class="button secondary compact" :disabled="page <= 1" @click="page--">上一页</button><button class="button secondary compact" :disabled="page >= totalPages" @click="page++">下一页</button></div>
         </div>
       </footer>
-      <EmptyState v-else title="尚无扫描记录" description="选择一个代码仓库，执行全量基线扫描或基于分支的增量扫描。" action="发起第一轮扫描" to="/scans/new" />
+      <EmptyState v-else title="尚无扫描记录" description="选择一个代码仓库，执行全量基线扫描或基于分支的增量扫描。" action="发起第一轮扫描" to="/projects?scan=1" />
     </section>
   </div>
 </template>

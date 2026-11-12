@@ -8,9 +8,9 @@ import { formatChinaTime } from '@/utils/datetime'
 import { formatChinaDate } from '@/utils/datetime'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import ActionDropdown from '@/components/ui/ActionDropdown.vue'
+import AssetScanDialog from '@/components/AssetScanDialog.vue'
 import JarUploadForm from '@/components/ui/JarUploadForm.vue'
-import type { ApplicationType, GitValidationResult, ScanProject, SourceType } from '@/types'
+import type { ApplicationType, GitValidationResult, ScanProject, ScanRun, SourceType } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -101,8 +101,7 @@ async function saveJar() {
     replacementFile.value = null
     await load()
     if (scanAfterSave.value) {
-      const run = await api.startScan({ projectId: project.id, scanMode: 'FULL', workspaceMode: 'JAR_UPLOAD', refreshRemote: false, ruleProfile: 'COMMUNITY_GENERAL' })
-      await router.push(`/scans/${run.id}`)
+      startProjectScan(project)
     }
   } catch (reason) {
     const detail = reason instanceof Error ? reason.message : '保存失败'
@@ -196,11 +195,44 @@ async function syncCode(project: ScanProject) {
 }
 watch(showForm, value => { if (!value) form.gitPassword = '' })
 
-function startProjectScan(project: ScanProject, mode: string) {
-  void router.push({ path: '/scans/new', query: {
-    source: project.sourceType === 'JAR_UPLOAD' ? 'jar' : 'repository', projectId: project.id, networkMode: mode,
-  } })
+const scanAsset = ref<ScanProject | null>(null)
+const scanNetworkMode = ref<'LOCAL' | 'ONLINE'>('LOCAL'), scanRuleProfile = ref(''), scanSourceReportId = ref<number>()
+let scanRouteRequest = 0
+function startProjectScan(project: ScanProject) {
+  scanRouteRequest++
+  if (!repositoryReady(project)) { error.value = '代码尚未就绪，请等待拉取完成。'; return }
+  scanNetworkMode.value = route.query.networkMode === 'ONLINE' ? 'ONLINE' : 'LOCAL'
+  scanRuleProfile.value = String(route.query.ruleProfile ?? ''); scanSourceReportId.value = undefined
+  scanAsset.value = project
 }
+async function clearScanQuery() {
+  if(route.query.scan || route.query.sourceReportRunId || route.query.projectId) {
+    const query = { ...route.query }; for(const key of ['scan','sourceReportRunId','projectId','source','networkMode','ruleProfile']) delete query[key]
+    await router.replace({ path: '/projects', query })
+  }
+}
+async function closeScan() { scanRouteRequest++; scanAsset.value = null; scanSourceReportId.value = undefined; await clearScanQuery() }
+async function scanStarted(run: ScanRun) {
+  const reportId = scanSourceReportId.value
+  scanAsset.value = null; scanSourceReportId.value = undefined
+  await clearScanQuery()
+  await router.push(reportId ? `/reports/${reportId}/acceptance` : `/scans/${run.id}`)
+}
+async function openScanFromRoute() {
+  if (route.query.scan !== '1') return
+  const token = ++scanRouteRequest
+  try {
+    const reportId = Number(route.query.sourceReportRunId) || undefined
+    let assetId = Number(route.query.projectId)
+    let profile = String(route.query.ruleProfile ?? '')
+    if (reportId) { const data = await api.reportAcceptance(reportId); if(token !== scanRouteRequest) return; assetId = data.source.projectId; profile = data.source.ruleProfile }
+    const asset = projects.value.find(p => p.id === assetId)
+    if (!asset) { if(assetId) error.value = '扫描资产不存在或已移除'; else savedMessage.value = '请选择下面的资产，点击“发起扫描”配置任务。'; return }
+    listType.value = asset.sourceType === 'JAR_UPLOAD' ? 'jar' : 'repository'
+    startProjectScan(asset); scanRuleProfile.value = profile; scanSourceReportId.value = reportId
+  } catch(e) { error.value = (e as Error).message }
+}
+watch(() => [route.query.scan,route.query.projectId,route.query.sourceReportRunId], () => { if(projects.value.length) void openScanFromRoute() })
 
 async function remove(project: ScanProject) {
   if (!window.confirm(`确认从 CodeSentry 删除“${project.projectName}”？不会删除你的本地源码。`)) return
@@ -211,11 +243,12 @@ watch(() => route.query.type, value => { listType.value = value === 'jar' ? 'jar
 let syncTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => { syncTimer = setInterval(async () => { if (projects.value.some(repositorySyncBusy)) { try { await load() } catch { /* keep last visible status */ } } }, 3000) })
 onBeforeUnmount(() => { if (syncTimer) clearInterval(syncTimer) })
-onMounted(async () => { await load(); if (route.query.register === '1') register() })
+onMounted(async () => { await load(); if (route.query.register === '1') register(); await openScanFromRoute() })
 </script>
 
 <template>
   <div class="page-stack">
+    <AssetScanDialog v-if="scanAsset" :key="`${scanAsset.id}-${scanSourceReportId ?? 0}`" :asset="scanAsset" :initial-network-mode="scanNetworkMode" :initial-rule-profile="scanRuleProfile" :source-report-run-id="scanSourceReportId" @close="closeScan" @started="scanStarted" />
     <section class="section-heading">
       <div><h2>扫描资产</h2><p>统一管理本地代码仓库、远程 Git 仓库和上传的 JAR 包。</p></div>
       <div class="report-actions"><button type="button" class="button secondary" :disabled="saving" @click="uploadOpen = true">+ 新增 JAR 项目</button><button class="button primary" :disabled="saving" @click="register">+ 登记仓库</button></div>
@@ -309,7 +342,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
               <td v-if="listType !== 'jar'"><template v-if="project.sourceType === 'GIT'"><span :class="{ 'danger-text': project.lastSyncStatus === 'FAILED' }" :title="project.lastSyncMessage">{{ repositorySyncLabel(project) }}</span><small class="cache-location">{{ formatChinaTime(project.lastSyncedAt) }}</small></template><span v-else class="muted">本地目录</span></td>
               <td><div class="row-actions">
                 <button v-if="project.sourceType === 'GIT'" type="button" class="row-action-link" :disabled="saving || syncingId !== null || repositorySyncBusy(project)" @click="syncCode(project)">{{ repositorySyncBusy(project) ? repositorySyncLabel(project) : project.lastSyncStatus === 'FAILED' ? '重试拉取' : '同步代码' }}</button>
-                <ActionDropdown label="发起扫描" primary :disabled="saving || syncingId !== null || !repositoryReady(project)" :items="[{ label: '本地扫描', value: 'LOCAL' }, { label: '联网扫描', value: 'ONLINE' }]" @select="startProjectScan(project, $event)" />
+                <button type="button" class="button primary compact" :disabled="saving || syncingId !== null || !repositoryReady(project)" @click="startProjectScan(project)">发起扫描</button>
                 <button type="button" class="row-action-link" :disabled="saving || syncingId !== null" @click="project.sourceType === 'JAR_UPLOAD' ? editJar(project) : edit(project)">编辑</button>
                 <button type="button" class="row-action-link danger" :disabled="saving || syncingId !== null" @click="remove(project)">删除</button>
               </div></td>

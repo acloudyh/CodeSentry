@@ -38,7 +38,7 @@ onUnmounted(() => { disposed = true; clearTimeout(timer) })
   <div class="page-stack">
     <section class="section-heading">
       <div><h2>扫描规则中心</h2><p>规则不限定单一厂商，按 OWASP、CWE、CERT 和社区通用规范组织；发起扫描时可选择规则集。</p></div>
-      <RouterLink to="/scans/new" class="button primary">使用规则发起扫描</RouterLink>
+      <RouterLink to="/projects?scan=1" class="button primary">使用规则发起扫描</RouterLink>
     </section>
     <section class="panel library-panel" aria-label="社区规则库更新" :aria-busy="updating">
       <div class="library-info">
@@ -57,7 +57,7 @@ onUnmounted(() => { disposed = true; clearTimeout(timer) })
         <div class="rule-block"><b>标准映射</b><div class="tag-row"><span v-for="item in profile.standards" :key="item">{{ standardLabel(item) }}</span></div></div>
         <div class="rule-block"><b>扫描引擎</b><div class="tag-row"><span v-for="item in profile.scanners" :key="item">{{ scannerLabel(item) }}</span></div></div>
         <div v-if="profile.rules?.length" class="rule-block"><b>本地专项规则（JSP / 前端）</b><div class="tag-row rule-detail-row"><span v-for="item in profile.rules" :key="item">{{ item }}</span></div></div>
-        <footer><code>{{ profile.id }}</code><RouterLink :to="{ path: '/scans/new', query: { ruleProfile: profile.id } }">选择此规则集 →</RouterLink></footer>
+        <footer><code>{{ profile.id }}</code><RouterLink :to="{ path: '/projects', query: { scan: '1', ruleProfile: profile.id } }">选择此规则集 →</RouterLink></footer>
       </article>
     </section>
     <EmptyState v-else-if="!error" title="暂无可用规则集" description="请检查本地服务状态。" />

@@ -4,10 +4,17 @@ const baseUrl = process.env.CODESENTRY_WEB_URL ?? 'http://127.0.0.1:5173'
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })
 
-await page.goto(`${baseUrl}/scans/new`, { waitUntil: 'networkidle' })
-await page.getByLabel('扫描规则集').waitFor()
-const ruleOptions = await page.getByLabel('扫描规则集').locator('option').count()
-if (ruleOptions < 3) throw new Error(`扫描规则集数量异常: ${ruleOptions}`)
+await page.goto(`${baseUrl}/projects`, { waitUntil: 'networkidle' })
+const startButton = page.getByRole('button', { name: '发起扫描', exact: true }).first()
+if (await startButton.count() && await startButton.isEnabled()) {
+  await startButton.click()
+  const dialog = page.getByRole('dialog', { name: '发起资产扫描' })
+  await dialog.getByRole('button', { name: '提交扫描', exact: true }).waitFor()
+  await dialog.locator('#asset-scan-profile option').nth(2).waitFor({ state: 'attached' })
+  const ruleOptions = await dialog.getByLabel('规则集', { exact: true }).locator('option').count()
+  if (ruleOptions < 3) throw new Error(`扫描规则集数量异常: ${ruleOptions}`)
+  await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click()
+}
 
 await page.goto(`${baseUrl}/rules`, { waitUntil: 'networkidle' })
 await page.getByRole('heading', { name: '扫描规则中心' }).waitFor()
@@ -53,16 +60,21 @@ if (await reviewButton.count()) {
 }
 
 await page.goto(`${baseUrl}/reports`, { waitUntil: 'networkidle' })
-for (const format of ['HTML', 'DOCX', 'PDF']) {
-  const exportButton = page.locator('.report-actions').first().getByRole('button', { name: format, exact: true })
-  if (await exportButton.count()) {
+const reportRow = page.locator('.reports-table tbody tr').first()
+if (await reportRow.count()) {
+  const popupPromise = page.waitForEvent('popup')
+  await reportRow.getByRole('button', { name: '在线查看', exact: true }).click()
+  const reportPage = await popupPromise
+  await reportPage.waitForLoadState('domcontentloaded')
+  if (!(await reportPage.locator('body').innerText()).includes('整改报告')) throw new Error('HTML 报告未显示')
+  await reportPage.close()
+  for (const [label, extension] of [['Word 文档', 'docx'], ['PDF 文档', 'pdf']]) {
+    await reportRow.getByRole('button', { name: '导出', exact: true }).click()
     const downloadPromise = page.waitForEvent('download')
-    await exportButton.click()
+    await page.getByRole('menuitem', { name: label, exact: true }).click()
     const download = await downloadPromise
-    if (!download.suggestedFilename().toLowerCase().endsWith(`.${format.toLowerCase()}`)) {
-      throw new Error(`整改报告下载文件格式不是 ${format}`)
-    }
-    await page.waitForTimeout(1300)
+    if (!(await download.failure()) && download.suggestedFilename().toLowerCase().endsWith(`.${extension}`)) continue
+    throw new Error(`整改报告 ${extension} 下载失败`)
   }
 }
 
