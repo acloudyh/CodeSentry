@@ -21,3 +21,14 @@ scripts
 !scripts/
 scripts/*
 !scripts/update-trivy-db.sh
+
+# Keep optional local fonts out of release commits; production uses these two tracked fonts.
+/codesentry-server/docker/fonts/*
+!/codesentry-server/docker/fonts/simsun.ttf
+!/codesentry-server/docker/fonts/simhei.ttf
+!/codesentry-server/docker/fonts/README.md
+
+# Publish the maintained product inventory without adding other local document drafts.
+!/docs/
+/docs/*
+!/docs/CodeSentry功能清单.md
