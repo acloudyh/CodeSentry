@@ -69,7 +69,7 @@ async function exportReport(format: 'html' | 'docx' | 'pdf') {
   if(format === 'html') { window.open(`/business-projects/${id}/reports/${current.value.id}/view`, '_blank', 'noopener,noreferrer'); return }
   await attempt(async () => {
     const response = await fetch(api.projectReportUrl(id, current.value!.id, format)); if(!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.message ?? '项目报告导出失败') }
-    const url = URL.createObjectURL(await response.blob()), a = document.createElement('a'); a.href = url; a.download = `${project.value?.name.replace(/[\\/:*?"<>|]/g, '_')}-${current.value!.assetHistory ? `资产历史扫描${-current.value!.id}` : `项目整改报告-P${current.value!.id}`}.${format}`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); message.value = current.value!.assetHistory ? '已导出原始资产扫描报告，保留原扫描与审核记录。' : '项目报告已归档。本轮报告内容固定，可重复导出。'
+    const url = URL.createObjectURL(await response.blob()), a = document.createElement('a'); a.href = url; a.download = `${(project.value?.name ?? '项目').replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, '_').trim()}安全扫描.${format}`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); message.value = current.value!.assetHistory ? '已导出原始资产扫描报告，保留原扫描与审核记录。' : '项目报告已归档。本轮报告内容固定，可重复导出。'
   })
 }
 function toggle(a: ScanProject) { selectedIds.value = selectedIds.value.includes(a.id) ? selectedIds.value.filter(v => v !== a.id) : [...selectedIds.value, a.id] }

@@ -36,7 +36,8 @@ public class ProjectReportService {
     }
     /** 沿用历史资产原报告的下载名称。 */
     public String assetHistoryReportName(Long projectId,Long viewId,String format) {
-        return reports.exportFileName(projects.round(projectId,viewId).items.get(0).runId,format);
+        projects.round(projectId,viewId);
+        return io.codesentry.report.service.ReportFileNames.securityScan(projects.require(projectId).name,format);
     }
     /** 串行化首次归档并保存内容快照；已归档报告直接复用，后续审核或联网补查不改写。 */
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public Snapshot archive(Long projectId,Long roundId) {

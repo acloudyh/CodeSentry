@@ -104,14 +104,11 @@ public class RemediationReportService {
     /** 读取未采纳问题及排除理由，支持与台账逐项对账。 */
     public List<ReportExclusion> excludedFindings(Long runId) { return load(runId, false).exclusions; }
 
-    /** 按资产显示名和代码/JAR 类型生成安全文件名，过滤路径分隔符及控制字符。 */
+    /** 按项目显示名生成下载名称，类型继续在报告正文说明。 */
     public String exportFileName(Long runId, String extension) {
         ScanRun run = scanRunService.requireById(runId);
         ScanProject project = projectService.requireById(run.getProjectId());
-        String projectName = project.getDisplayName();
-        String safeName = projectName.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
-        String projectType = project.getSourceType() == io.codesentry.project.model.ProjectSourceType.JAR_UPLOAD ? "jar包" : "代码";
-        return safeName + projectType + "安全扫描." + extension;
+        return ReportFileNames.securityScan(project.getDisplayName(), extension);
     }
 
     /** 兼容最近报告列表接口，仍沿用原采纳统计；完整历史由分页接口提供。 */

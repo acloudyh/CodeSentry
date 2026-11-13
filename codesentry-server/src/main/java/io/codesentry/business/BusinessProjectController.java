@@ -47,7 +47,7 @@ public class BusinessProjectController {
         ProjectReportService.Snapshot snapshot=reports.archive(id,roundId);
         byte[] data="html".equals(format)?reports.html(snapshot):"pdf".equals(format)?reports.pdf(snapshot):reports.docx(snapshot);
         MediaType type="html".equals(format)?new MediaType("text","html",StandardCharsets.UTF_8):"pdf".equals(format)?MediaType.APPLICATION_PDF:MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-        String name=snapshot.round.projectName.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]","_")+"-项目整改报告-P"+roundId+"."+format;
+        String name=io.codesentry.report.service.ReportFileNames.securityScan(snapshot.round.projectName,format);
         HttpHeaders headers=new HttpHeaders();headers.setContentType(type);headers.setCacheControl("no-store");headers.set("X-Content-Type-Options","nosniff");
         headers.setContentDisposition(("html".equals(format)?ContentDisposition.inline():ContentDisposition.attachment()).filename(name,StandardCharsets.UTF_8).build());
         if("html".equals(format)) headers.set("Content-Security-Policy","sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
