@@ -20,6 +20,8 @@ import java.util.List;
 public class SemgrepScannerAdapter extends AbstractCliScannerAdapter {
 
     private final RuleProfileService ruleProfileService;
+    // 同一适配器可同时服务多个扫描，检测原因按调用线程隔离。
+    private final ThreadLocal<String> availabilityFailure = new ThreadLocal<>();
 
     public SemgrepScannerAdapter(CommandExecutor commandExecutor,
                                  ObjectMapper objectMapper,
@@ -42,6 +44,30 @@ public class SemgrepScannerAdapter extends AbstractCliScannerAdapter {
     @Override
     protected String executable() {
         return properties.getScanners().getSemgrep().getExecutable();
+    }
+
+    /** 只检查本地程序，禁止版本探测联网查更新，避免网络延迟被误判为工具未安装。 */
+    @Override
+    public boolean available() {
+        availabilityFailure.remove();
+        try {
+            CommandResult result = execute(null, List.of(executable(), "--disable-version-check", "--metrics=off", "--version"),
+                    Duration.ofSeconds(30));
+            if (result.isSuccess()) return true;
+            availabilityFailure.set("Semgrep 本地版本检测失败（退出码 " + result.getExitCode() + "），请检查可执行程序与运行环境");
+        } catch (java.util.concurrent.CancellationException cancelled) {
+            throw cancelled;
+        } catch (BusinessException error) {
+            availabilityFailure.set("Semgrep 本地版本检测失败：" + error.getMessage());
+        } catch (RuntimeException error) {
+            availabilityFailure.set("Semgrep 本地版本检测异常（" + error.getClass().getSimpleName() + "），请检查运行环境");
+        }
+        return false;
+    }
+
+    @Override
+    public String unavailabilityReason() {
+        return availabilityFailure.get() == null ? "Semgrep 本地版本检测未通过" : availabilityFailure.get();
     }
 
     @Override

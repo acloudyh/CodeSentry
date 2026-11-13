@@ -99,9 +99,11 @@ public class ScanOrchestrator {
                     .filter(adapter -> adapter.enabled() && adapter.available())
                     .collect(Collectors.toList());
             int unavailableTools = enabledAdapters.size() - activeAdapters.size();
+            String unavailableNames = enabledAdapters.stream().filter(adapter -> !activeAdapters.contains(adapter))
+                    .map(ScannerAdapter::name).collect(Collectors.joining("、"));
             enabledAdapters.stream()
                     .filter(adapter -> !activeAdapters.contains(adapter))
-                    .forEach(adapter -> toolRunService.skipped(runId, adapter.name(), "扫描器不可用或版本检测失败"));
+                    .forEach(adapter -> toolRunService.skipped(runId, adapter.name(), adapter.unavailabilityReason()));
 
             if (activeAdapters.isEmpty()) {
                 finish(run, ScanRunStatus.PARTIAL, 0, 0, 0,
@@ -129,7 +131,7 @@ public class ScanOrchestrator {
                 ScanRunStatus status = unavailableTools > 0 || batch.failedTools > 0
                         ? ScanRunStatus.PARTIAL : ScanRunStatus.COMPLETED;
                 finish(run, status, currentMap.size(), currentMap.size(), 0,
-                        warningMessage(unavailableTools, batch.failedTools));
+                        warningMessage(unavailableTools, batch.failedTools, unavailableNames));
                 return;
             }
 
@@ -154,7 +156,7 @@ public class ScanOrchestrator {
             ScanRunStatus status = unavailableTools > 0 || batch.failedTools > 0
                     ? ScanRunStatus.PARTIAL : ScanRunStatus.COMPLETED;
             finish(run, status, currentMap.size(), newCount, fixedCount,
-                    warningMessage(unavailableTools, batch.failedTools));
+                    warningMessage(unavailableTools, batch.failedTools, unavailableNames));
         } catch (Exception exception) {
             if (Thread.currentThread().isInterrupted() || exception instanceof java.util.concurrent.CancellationException) return;
             LOGGER.error("Scan run {} failed", runId, exception);
@@ -362,11 +364,12 @@ public class ScanOrchestrator {
         scanRunMapper.finish(run);
     }
 
-    private String warningMessage(int unavailableTools, int failedTools) {
+    private String warningMessage(int unavailableTools, int failedTools, String unavailableNames) {
         if (unavailableTools == 0 && failedTools == 0) {
             return null;
         }
-        return String.format("扫描部分完成：%d 个工具不可用，%d 个工具执行失败", unavailableTools, failedTools);
+        return String.format("扫描部分完成：%d 个工具不可用%s，%d 个工具执行失败", unavailableTools,
+                unavailableTools == 0 ? "" : "（" + unavailableNames + "，详见工具执行记录）", failedTools);
     }
 
     private String safeMessage(Exception exception) {

@@ -25,6 +25,30 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SemgrepScannerAdapterTest {
+    @Test
+    void availabilityChecksInstalledVersionWithoutNetworkOrMetrics() {
+        CommandExecutor commands = mock(CommandExecutor.class);
+        when(commands.execute(any(), anyList(), any())).thenReturn(new CommandResult(0, "1.119.0"));
+        SemgrepScannerAdapter adapter = new SemgrepScannerAdapter(commands, new ObjectMapper(),
+                new CodeSentryProperties(), mock(RuleProfileService.class));
+        assertTrue(adapter.available());
+        verify(commands).execute(eq(null), eq(List.of("semgrep", "--disable-version-check", "--metrics=off", "--version")),
+                eq(java.time.Duration.ofSeconds(30)));
+    }
+
+    @Test
+    void availabilityReportsActualLocalFailureAndDoesNotHideCancellation() {
+        CommandExecutor commands = mock(CommandExecutor.class);
+        when(commands.execute(any(), anyList(), any())).thenThrow(new io.codesentry.common.error.BusinessException(
+                org.springframework.http.HttpStatus.REQUEST_TIMEOUT, "本地命令执行超时"));
+        SemgrepScannerAdapter adapter = new SemgrepScannerAdapter(commands, new ObjectMapper(),
+                new CodeSentryProperties(), mock(RuleProfileService.class));
+        org.junit.jupiter.api.Assertions.assertFalse(adapter.available());
+        assertTrue(adapter.unavailabilityReason().contains("本地命令执行超时"));
+        org.mockito.Mockito.doThrow(new java.util.concurrent.CancellationException("已停止")).when(commands).execute(any(), anyList(), any());
+        org.junit.jupiter.api.Assertions.assertThrows(java.util.concurrent.CancellationException.class, adapter::available);
+    }
+
 
     @TempDir
     Path temp;
