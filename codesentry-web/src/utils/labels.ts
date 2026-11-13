@@ -2,7 +2,7 @@ import type { ApplicationType, ScanProject, FindingView } from '@/types'
 
 const statuses: Record<string, string> = {
   PENDING: '等待执行', PREPARING: '准备中', RUNNING: '执行中', COMPLETED: '已完成',
-  PARTIAL: '部分完成', FAILED: '执行失败', CANCELLED: '已停止', SKIPPED: '已跳过',
+  PARTIAL: '部分完成', FAILED: '执行失败', BUDGET_EXHAUSTED: '预算已用尽', CANCELLED: '已停止', SKIPPED: '已跳过',
   NEW: '新增', EXISTING: '存量', FIXED: '已修复', REOPENED: '重新出现',
   CRITICAL: '严重', HIGH: '高危', MEDIUM: '中危', LOW: '低危', INFO: '提示',
   CONFIRMED: '确认风险', FALSE_POSITIVE: '误报', ACCEPTED_RISK: '接受风险', FIXED_PENDING: '已整改待验证',

@@ -23,9 +23,10 @@ try {
   await page.goto(`${base}/findings?businessProjectId=${projectId}`, { waitUntil: 'networkidle' })
   await loaded(); assert.equal(requests.length, 1, 'Initialization must not load the ledger twice')
   const filters = page.locator('.ledger-filters select')
+  await change(() => filters.nth(2).selectOption('ALL'), { issueType: 'ALL', page: '1' })
   if (process.env.CODESENTRY_LEDGER_ASSET_ID) await change(() => filters.nth(1).selectOption(process.env.CODESENTRY_LEDGER_ASSET_ID), { assetId: process.env.CODESENTRY_LEDGER_ASSET_ID, page: '1' })
   await change(() => page.getByRole('button', { name: '下一页', exact: true }).click(), { page: '2' })
-  await change(() => filters.nth(2).selectOption('HIGH'), { page: '1', severity: 'HIGH' })
+  await change(() => filters.nth(3).selectOption('HIGH'), { page: '1', severity: 'HIGH' })
   await change(() => page.getByRole('button', { name: '下一页', exact: true }).click(), { page: '2' })
   await change(() => page.getByPlaceholder('问题、规则、位置或资产').fill('')
     .then(() => page.getByRole('button', { name: '查询', exact: true }).click()), { page: '1' })
@@ -39,8 +40,8 @@ try {
     try { await route.fulfill({ json: { success: true, data: { items: [], total: 0, page: 1, pageSize: 20, summary: { total: severity === 'LOW' ? 999 : 321, newCount: 0, fixedCount: 0 } } } }) }
     catch { /* 被 AbortController 取消的旧请求无需回写。 */ }
   })
-  await filters.nth(2).selectOption('LOW'); await page.waitForTimeout(80)
-  await filters.nth(2).selectOption('MEDIUM'); await loaded(); await page.waitForTimeout(600)
+  await filters.nth(3).selectOption('LOW'); await page.waitForTimeout(80)
+  await filters.nth(3).selectOption('MEDIUM'); await loaded(); await page.waitForTimeout(600)
   assert.ok(aborted >= 1, 'A superseded request must be cancelled')
   assert.ok((await page.locator('body').innerText()).includes('321'))
   assert.ok(!(await page.locator('body').innerText()).includes('999'))

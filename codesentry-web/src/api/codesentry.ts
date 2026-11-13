@@ -1,4 +1,4 @@
-import type { GitCredentialProfile, ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
+import type { ReviewBudgetPolicy, ReviewPlan, GitCredentialProfile, ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
 import { request } from './http'
 import type { ReportAcceptance } from '@/types'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, AiToolConfiguration, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, RuleLibraryStatus, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
@@ -75,7 +75,7 @@ export const api = {
   startProjectRound: (id: number, payload: ProjectScanPayload) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds`, { method: 'POST', body: JSON.stringify(payload) }),
   retryProjectRound: (id: number, roundId: number, requestKey: string) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}/retry`, { method: 'POST', body: JSON.stringify({ requestKey }) }),
   cancelProjectRound: (id: number, roundId: number) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}/cancel`, { method: 'POST' }),
-  projectFindings: (id: number, params: URLSearchParams, signal?: AbortSignal) => request<PageResult<LedgerFinding> & { pendingReviewCount?: number; includedCount?: number; summary?: { total: number; newCount: number; fixedCount: number } }>(`/api/v1/business-projects/${id}/findings?${params}`, { signal }),
+  projectFindings: (id: number, params: URLSearchParams, signal?: AbortSignal) => request<PageResult<LedgerFinding> & { pendingReviewCount?: number; includedCount?: number; classificationCounts?: { quality: number; security: number; audit: number }; summary?: { total: number; newCount: number; fixedCount: number } }>(`/api/v1/business-projects/${id}/findings?${params}`, { signal }),
   projectReportUrl: (id: number, roundId: number, format: 'html' | 'docx' | 'pdf') => `/api/v1/business-projects/${id}/rounds/${roundId}/report/${format}`,
 
   dashboard: () => request<DashboardSummary>('/api/v1/dashboard/summary'),
@@ -122,7 +122,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload),
   }),
-  findings: (limit = 200) => request<FindingView[]>(`/api/v1/findings?limit=${limit}`),
+  findings: (limit = 200, issueType = 'ALL') => request<FindingView[]>(`/api/v1/findings?limit=${limit}&issueType=${issueType}`),
   runFindings: (runId: number) => request<FindingView[]>(`/api/v1/findings/scan-runs/${runId}`),
   reportExclusions: (runId: number) => request<{ findingId: number; reason: string }[]>(`/api/v1/reports/scan-runs/${runId}/excluded-findings`),
   reportIncludedFindingIds: (runId: number) => request<number[]>(`/api/v1/reports/scan-runs/${runId}/included-finding-ids`),
@@ -132,6 +132,11 @@ export const api = {
   batchTriageFindings: (runId: number, payload: BatchTriageFindingPayload) => request<BatchTriageResult>(`/api/v1/findings/scan-runs/${runId}/triage/batch`, {
     method: 'POST', body: JSON.stringify(payload),
   }),
+  reviewBudgetPolicy: () => request<ReviewBudgetPolicy>('/api/v1/ai-reviews/budget-policy'),
+  saveReviewBudgetPolicy: (payload: ReviewBudgetPolicy) => request<ReviewBudgetPolicy>('/api/v1/ai-reviews/budget-policy', { method: 'PUT', body: JSON.stringify(payload) }),
+  previewReview: (runId: number, options: {findingId?: number;failedOnly?: boolean;includeDependencies?: boolean;maxRequests?: number;maxInputTokens?: number;maxOutputTokens?: number;maxCost?: number}) => request<ReviewPlan>(`/api/v1/ai-reviews/scan-runs/${runId}/preview`, { method: 'POST', body: JSON.stringify(options) }),
+  startReviewPlan: (planId: string, allowPaid: boolean) => request<AiReviewJob>(`/api/v1/ai-reviews/plans/${planId}/start`, { method:'POST', body:JSON.stringify({allowPaid}) }),
+  reviewBudgetUsage: (jobId: number) => request<Record<string, unknown>>(`/api/v1/ai-reviews/jobs/${jobId}/budget`),
   aiReviewConfig: () => request<AiReviewConfiguration>('/api/v1/ai-reviews/config'),
   updateAiReviewConfig: (payload: AiReviewConfigurationPayload) => request<AiReviewConfiguration>('/api/v1/ai-reviews/config', {
     method: 'PUT', body: JSON.stringify(payload),

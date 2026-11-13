@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FindingRuleSettings from '@/components/FindingRuleSettings.vue'
+import AiBudgetSettings from '@/components/AiBudgetSettings.vue'
 import GitCredentialSettings from '@/components/GitCredentialSettings.vue'
 import { currentTheme, setTheme, themes } from '@/utils/theme'
 const tools = [
@@ -26,6 +28,8 @@ const tools = [
       <article class="panel"><header class="panel-header"><h3>扫描器适配</h3><small>命令行工具</small></header><div class="table-scroll"><table class="data-table"><thead><tr><th>工具</th><th>运行时</th><th>职责</th><th>配置</th></tr></thead><tbody><tr v-for="tool in tools" :key="tool.name"><td><strong>{{ tool.name }}</strong></td><td class="mono">{{ tool.runtime }}</td><td>{{ tool.purpose }}</td><td class="mono">{{ tool.env }}</td></tr></tbody></table></div></article>
       <article class="panel panel-pad"><span class="eyebrow">部署模式</span><h3 style="font-size:24px;margin:16px 0 8px">单机本地模式</h3><p class="muted" style="line-height:1.8;font-size:12px">Java 服务、Vue 静态资源、MySQL 和扫描器全部运行在用户控制的机器中。未启用工具时不会向外发送源码；启用工具后仅向配置的工具接口发送限长且已执行凭据脱敏的源码证据。</p><div class="notice" style="margin-top:22px">正式运行前应将 Semgrep 规则与 Trivy 漏洞库同步到本地，避免受公网可用性影响。</div></article>
     </section>
+    <AiBudgetSettings />
+    <FindingRuleSettings />
     <section class="panel panel-pad ai-config-panel">
       <div class="section-heading"><div><span class="eyebrow">工具辅助复核</span><h3>模型工具统一管理</h3><p>模型服务、默认模型与加密密钥现在统一在工具管理页面维护，支持多条配置的新增、编辑、切换和删除。</p></div><RouterLink to="/tools" class="button primary">进入工具管理</RouterLink></div>
       <div class="notice">工具配置写入本地数据库，API Key 使用本机持久化主密钥加密；容器和服务重启后会自动恢复，无需重复填写。</div>

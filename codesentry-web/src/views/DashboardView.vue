@@ -21,7 +21,7 @@ const formatTime = formatChinaTime
 onMounted(async () => {
   try {
     const [summaryData, runData, findingData, projectData] = await Promise.all([
-      api.dashboard(), api.scanRuns(8), api.findings(6), api.projects(),
+      api.dashboard(), api.scanRuns(8), api.findings(6,'SECURITY'), api.projects(),
     ])
     summary.value = summaryData
     runs.value = runData
@@ -42,7 +42,7 @@ onMounted(async () => {
       <MetricCard index="02" label="扫描资产" :value="summary.assets" :note="`代码 ${summary.codeAssets} / JAR ${summary.jarAssets} · 未归属 ${summary.unassignedAssets}`" tone="calm" />
       <MetricCard index="03" label="扫描批次" :value="summary.scans" note="全部历史扫描批次" tone="neutral" />
       <MetricCard index="04" label="执行中的扫描" :value="summary.runningScans" note="含排队、准备与执行中" tone="signal" />
-      <MetricCard index="05" label="累计新增问题" :value="summary.newFindings" note="各扫描批次新增数累计" tone="danger" />
+      <MetricCard index="05" label="累计安全候选" :value="summary.securityFindings ?? 0" :note="`规范 ${summary.qualityFindings ?? 0} 条，独立统计`" tone="danger" />
     </section>
 
     <section class="split-grid">

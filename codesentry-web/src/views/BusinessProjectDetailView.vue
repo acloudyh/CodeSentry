@@ -31,7 +31,7 @@ async function load(keepRound = true) {
   selectedIds.value = selectedIds.value.filter(v => a.some(item => item.id === v))
   const currentId = keepRound ? current.value?.id : undefined
   current.value = currentId ? r.items.find(v => v.id === currentId) ?? await api.projectRound(id, currentId) : r.items[0]
-  if(current.value) stats.value = await api.projectFindings(id, new URLSearchParams({ roundId: String(current.value.id), pageSize: '1' }))
+  if(current.value) stats.value = await api.projectFindings(id, new URLSearchParams({ issueType: 'SECURITY', roundId: String(current.value.id), pageSize: '1' }))
   else stats.value = {}
 }
 async function attempt(action: () => Promise<void>) { if(busy.value) return; busy.value = true; error.value = ''; try { await action() } catch(e) { error.value = (e as Error).message } finally { busy.value = false } }
@@ -73,7 +73,7 @@ async function exportReport(format: 'html' | 'docx' | 'pdf') {
   })
 }
 function toggle(a: ScanProject) { selectedIds.value = selectedIds.value.includes(a.id) ? selectedIds.value.filter(v => v !== a.id) : [...selectedIds.value, a.id] }
-watch(() => current.value?.id, async roundId => { if(roundId) { try { stats.value = await api.projectFindings(id, new URLSearchParams({ roundId: String(roundId), pageSize: '1' })) } catch(e) { error.value = (e as Error).message } } })
+watch(() => current.value?.id, async roundId => { if(roundId) { try { stats.value = await api.projectFindings(id, new URLSearchParams({ issueType: 'SECURITY', roundId: String(roundId), pageSize: '1' })) } catch(e) { error.value = (e as Error).message } } })
 watch(roundPage, () => attempt(async () => { current.value = undefined; await load(false) }))
 onMounted(async () => { await attempt(async () => { await load(); if(route.query.scan === 'all') { await configure(assets.value, true); await router.replace({ path: route.path }) } }); timer = setInterval(async () => { if(!busy.value && (current.value?.status === 'RUNNING' || rounds.value.some(r => r.status === 'RUNNING') || assets.value.some(repositorySyncBusy))) { try { await load() } catch(e) { error.value = (e as Error).message } } }, 5000) })
 onBeforeUnmount(() => { if(timer) clearInterval(timer) })

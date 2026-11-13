@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AiReviewPlanner from '@/components/AiReviewPlanner.vue'
 import ProjectLedger from '@/components/ProjectLedger.vue'
 import type { BusinessProject } from '@/types'
 import { api } from '@/api/codesentry'
@@ -42,6 +43,9 @@ const selectedFindingIds = ref<number[]>([])
 const batchReviewOpen = ref(false)
 const batchReviewSaving = ref(false)
 const batchReviewResult = ref('')
+const reviewPlannerOpen=ref(false),reviewPlannerFinding=ref<number>(),reviewPlannerFailed=ref(false)
+const reviewPlannerRuns=computed(()=>selectedRunId.value?[{runId:selectedRunId.value,assetName:selectedProject.value?.projectName??`扫描 #${selectedRunId.value}`}]:[])
+function plannedReviews(jobs:AiReviewJob[]){if(jobs[0]){aiJob.value=jobs[0];pollAiJob(jobs[0].id)}}
 const aiConfig = ref<AiReviewConfiguration>({ enabled: false, provider: 'OPENAI_COMPATIBLE', apiKeyConfigured: false })
 const aiReviews = ref<Record<number, AiReviewSummary>>({})
 const aiReviewingId = ref<number | null>(null)
@@ -178,29 +182,8 @@ async function loadAiReviews(runId: number) {
   aiJob.value = job
 }
 
-async function reviewWithAi(item: FindingView) {
-  aiReviewingId.value = item.id; error.value = ''
-  try {
-    const summary = await api.aiReviewFinding(item.id)
-    aiReviews.value = { ...aiReviews.value, [item.id]: summary }
-    if (selectedRunId.value) {
-      findings.value = await api.runFindings(selectedRunId.value)
-      await loadReportStatus(selectedRunId.value)
-    }
-  } catch (reason) { error.value = reason instanceof Error ? reason.message : '工具审核失败' }
-  finally { aiReviewingId.value = null }
-}
-
-async function startBatchAiReview(failedOnly = false) {
-  if (!selectedRunId.value) return
-  startingAiBatch.value = true; error.value = ''
-  try {
-    aiJob.value = await (failedOnly ? api.aiRetryFailedRun(selectedRunId.value) : api.aiReviewRun(selectedRunId.value))
-    aiJobRecords.value = []
-    pollAiJob(aiJob.value.id)
-  } catch (reason) { error.value = reason instanceof Error ? reason.message : '批量工具审核启动失败' }
-  finally { startingAiBatch.value = false }
-}
+async function reviewWithAi(item:FindingView){reviewPlannerFinding.value=item.id;reviewPlannerFailed.value=false;reviewPlannerOpen.value=true}
+async function startBatchAiReview(failedOnly=false){reviewPlannerFinding.value=undefined;reviewPlannerFailed.value=failedOnly;reviewPlannerOpen.value=true}
 
 function pollAiJob(jobId: number) {
   if (aiPollTimer) window.clearTimeout(aiPollTimer)
@@ -353,6 +336,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
 </script>
 
 <template>
+  <AiReviewPlanner :open="reviewPlannerOpen" :runs="reviewPlannerRuns" :finding-id="reviewPlannerFinding" :failed-only="reviewPlannerFailed" @close="reviewPlannerOpen=false" @started="plannedReviews" />
   <div class="page-stack">
     <div class="panel" style="padding:20px"><div class="field"><label for="ledger-business-project">业务项目</label><select id="ledger-business-project" class="select" v-model="businessProjectId" :disabled="businessProjectsLoading || !businessProjects.length" @change="changeBusinessProject"><option v-if="!businessProjectId" :value="null" disabled>{{ businessProjectsLoading ? '正在加载业务项目…' : '请先创建业务项目' }}</option><option v-for="p in businessProjects" :key="p.id" :value="p.id">{{ p.name }}</option></select></div></div>
     <div v-if="error && !assetDetailsOpen" class="error-banner" role="alert">{{ error }}</div>

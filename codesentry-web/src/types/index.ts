@@ -89,6 +89,9 @@ export interface ScanRunDetail {
 }
 
 export interface FindingView {
+  issueType?: 'QUALITY' | 'SECURITY' | 'AUDIT'
+  precheck?: { route: string; reason: string; recommendation: string; policyVersion: string }
+
   id: number
   instanceId?: number
   fingerprint: string
@@ -154,6 +157,8 @@ export interface AiReviewSummary {
 }
 
 export interface RemediationReportSummary {
+ qualityFindings?: number
+ legacyQualityInReport?: number
   networkMode?: 'LOCAL' | 'ONLINE'
   remediationStatus?: string
   remediationMessage?: string
@@ -175,7 +180,7 @@ export interface AiReviewJob {
   scanRunId: number
   provider: string
   model: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED' | 'BUDGET_EXHAUSTED'
   totalFindings: number
   completedFindings: number
   failedFindings: number
@@ -220,6 +225,8 @@ export interface RuleProfile {
 export type TriageStatus = 'CONFIRMED' | 'FALSE_POSITIVE' | 'ACCEPTED_RISK' | 'FIXED_PENDING'
 
 export interface DashboardSummary {
+  securityFindings?: number
+  qualityFindings?: number
   businessProjects: number
   assets: number
   codeAssets: number
@@ -277,3 +284,13 @@ export interface GitValidationResult {
 }
 
 export interface GitCredentialProfile { id: number; name: string; serverUrl: string; username: string; usageCount: number; updatedAt: string }
+
+export interface ReviewBudgetPolicy {
+ paidEnabled: boolean; pricedModelSignature?: string; pricedModel?: string; pricedProvider?: string; inputPricePerMillion: number; outputPricePerMillion: number
+ maxCost: number; dailyCostLimit: number; maxRequests: number; maxInputTokens: number; maxOutputTokens: number; outputTokensPerRequest: number
+}
+export interface ReviewPlan {
+ id: string; scanRunId: number; jobId?: number; model: string; provider: string; budget: ReviewBudgetPolicy
+ total: number; quality: number; security: number; audit: number; localPrecheck: number; alreadyReviewed: number; reusable: number; modelCandidates: number
+ estimatedRequests: number; estimatedInputTokens: number; estimatedOutputTokens: number; estimatedCost: number; expiresAt: string
+}
