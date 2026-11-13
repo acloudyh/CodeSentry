@@ -180,14 +180,14 @@ watch([roundId, assetId, severity, triage, reportState, pageSize, issueType, pag
         <div class="row-actions"><button class="button secondary compact" :disabled="toolsLoading" @click="restoreToolJobs">{{ toolsLoading ? '刷新中…' : '刷新审核进度' }}</button><span>完成 {{ toolProgress.completed }} / {{ toolProgress.total }} 个审核单元 · 失败 {{ toolProgress.failed }}</span></div>
         <div v-if="toolsError" class="error-banner">{{ toolsError }}</div>
         <div v-for="a in toolScope" :key="a.assetId" class="muted">{{ a.assetName }} · 扫描 #{{ a.runId }}</div>
-        <button class="button primary" :disabled="toolsBusy || toolsLoading || !!toolsError || !toolScope.length || activeTools" @click="startTools">{{ toolsBusy ? '正在提交…' : activeTools ? '审核正在后台执行' : '规则预审与预算预览' }}</button>
+        <button class="button primary" :disabled="toolsBusy || toolsLoading || !!toolsError || !toolScope.length || activeTools" @click="startTools">{{ toolsBusy ? '正在提交…' : activeTools ? '审核正在后台执行' : '规则预审与审核预览' }}</button>
         <div v-for="message in toolErrors" :key="message" class="error-banner">{{ message }}</div>
         <section v-for="job in scopedToolJobs" :key="job.id" class="panel tool-job">
           <strong>{{ current?.items.find(a => a.runId === job.scanRunId)?.assetName }} · 扫描 #{{ job.scanRunId }} · 任务 #{{ job.id }}</strong>
           <div class="row-actions"><StatusBadge :value="job.status" /><span>完成 {{ job.completedFindings }} / {{ job.totalFindings }} · 失败 {{ job.failedFindings }} · {{ toolPercent(job) }}%</span></div>
           <progress :value="job.completedFindings + job.failedFindings" :max="job.totalFindings || 1" style="width:100%" :aria-label="`任务 #${job.id} 审核进度`"></progress>
-          <span v-if="toolBudgets[job.id]?.requests_used !== undefined" class="muted">模型请求 {{toolBudgets[job.id]?.requests_used}} 次 · 保守费用占额 {{toolBudgets[job.id]?.cost_reserved}} 元 · 复用 {{toolBudgets[job.id]?.reusedFindings}} 条 · 已知实际 Token {{toolBudgets[job.id]?.input_actual}} / {{toolBudgets[job.id]?.output_actual}} · usage 缺失 {{toolBudgets[job.id]?.usage_missing}} 次</span>
-          <span v-else class="muted">历史任务未记录新预算账本；原审核记录保留。</span>
+          <span v-if="toolBudgets[job.id]?.requests_used !== undefined" class="muted">模型请求 {{toolBudgets[job.id]?.requests_used}} 次 · 复用 {{toolBudgets[job.id]?.reusedFindings}} 条 · 已知实际 Token {{toolBudgets[job.id]?.input_actual}} / {{toolBudgets[job.id]?.output_actual}} · usage 缺失 {{toolBudgets[job.id]?.usage_missing}} 次</span>
+          <span v-else class="muted">历史任务未记录模型用量；原审核记录保留。</span>
           <span class="muted">开始时间：<time class="datetime-text">{{ formatChinaTime(job.startedAt ?? job.createdAt) }}</time></span>
           <div v-if="job.errorMessage" class="error-banner">{{ job.errorMessage }}</div>
           <div class="row-actions"><RouterLink :to="`/findings?runId=${job.scanRunId}`" @click="emit('openAsset', job.scanRunId)">查看问题明细</RouterLink><button v-if="['PARTIAL','FAILED'].includes(job.status)" class="button secondary compact" @click="retryTool(job)">重试失败项</button><button v-if="['CANCELLED','BUDGET_EXHAUSTED'].includes(job.status)" class="button secondary compact" @click="remainingTool(job)">预览剩余项</button><button v-if="['PENDING','RUNNING'].includes(job.status)" class="button danger compact" :disabled="stoppingTool === job.id" @click="stopTool(job)">停止审核</button></div>

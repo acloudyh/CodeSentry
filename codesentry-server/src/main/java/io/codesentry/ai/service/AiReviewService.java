@@ -152,9 +152,9 @@ public class AiReviewService {
         return job;
     }
 
-    /** 正式模型调用只接受绑定具体范围的预算预览；旧入口不能绕过付费授权。 */
+    /** 正式模型调用只接受绑定具体范围的规则预审；旧入口不能绕过分类分流。 */
     private void requirePreview() {
-        if(costControl!=null)throw new BusinessException(HttpStatus.CONFLICT,"请先进行规则预审和预算预览，再明确确认付费审核");
+        if(costControl!=null)throw new BusinessException(HttpStatus.CONFLICT,"请先进行规则预审，再确认提交模型审核");
     }
     public AiReviewCostControl.Plan preview(Long runId,AiReviewCostControl.Options options) {
         return costControl.preview(runId,options,latestPolicyForRun(runId));
@@ -170,7 +170,7 @@ public class AiReviewService {
         if(units.isEmpty())throw new BusinessException(HttpStatus.BAD_REQUEST,"无需新增模型调用：规范已分流，其余项已审核或待人工确认");
         AiReviewProvider selected=snapshotProvider();AiReviewJob job=createJob(plan.scanRunId,units.size(),selected);
         try {costControl.bind(plan,job.getId());}
-        catch(RuntimeException e){mapper.finishJob(job.getId(),"FAILED","预算预览已提交或绑定失败",LocalDateTime.now());throw e;}
+        catch(RuntimeException e){mapper.finishJob(job.getId(),"FAILED","审核预览已提交或绑定失败",LocalDateTime.now());throw e;}
         try {tasks.submit(job.getId(),taskExecutor,()->executeJob(job.getId(),units,selected,job.getConcurrency()));}
         catch(RuntimeException e){mapper.finishJob(job.getId(),"FAILED","审核队列已满，可重新预览后提交",LocalDateTime.now());throw e;}
         return job;

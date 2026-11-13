@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
-/** 真实 MySQL 验证预览不计费、所有付费路径受限、并发预算和来源可追溯的跨扫描复用。 */
+/** 真实 MySQL 验证预览不计费、显式提交、并发用量记录和来源可追溯的跨扫描复用。 */
 @SpringBootTest(properties={"spring.main.web-application-type=none","logging.level.root=WARN","codesentry.ai.enabled=false"})
 @DirtiesContext
 @EnabledIfEnvironmentVariable(named="CODESENTRY_INTEGRATION_DB_URL",matches=".*codesentry_business_test_.*")
@@ -71,13 +71,15 @@ class AiReviewCostControlIntegrationTest {
   Long changed=run(a,"c".repeat(40));instance(f,changed);assertEquals(0,ai.preview(changed,new AiReviewCostControl.Options()).reusable);
   db.update("UPDATE scan_run SET repository_dirty=1 WHERE id=?",next);assertEquals(0,ai.preview(next,new AiReviewCostControl.Options()).reusable);
   Long other=asset(),otherRun=run(other,"b".repeat(40));finding(other,otherRun,"Semgrep","security","sql-injection","s");assertEquals(0,ai.preview(otherRun,new AiReviewCostControl.Options()).reusable);
-  properties.getAi().setModel("other-fixture-model");var changedModel=ai.preview(changed,new AiReviewCostControl.Options());assertEquals(0,changedModel.reusable);assertFalse(changedModel.budget.paidEnabled);
+  properties.getAi().setModel("other-fixture-model");var changedModel=ai.preview(changed,new AiReviewCostControl.Options());assertEquals(0,changedModel.reusable);assertNotEquals(p.modelSignature,changedModel.modelSignature);
  }
- @Test void oneRequestBudgetStopsBeforeSecondRoundWithoutFakeFailures() throws Exception {
-  Long a=asset(),r=run(a,"d".repeat(40));finding(a,r,"Semgrep","security","sql-injection","s");AiReviewCostControl.Options o=new AiReviewCostControl.Options();o.maxRequests=1;
-  var p=ai.preview(r,o);AiReviewJob j=await(ai.startApproved(p.id,true).getId());assertEquals("BUDGET_EXHAUSTED",j.getStatus());assertEquals(0,j.getFailedFindings());
-  verify(http,times(1)).postJson(anyString(),anyString(),anyString(),anyInt());assertEquals(1,((Number)costs.usage(j.getId()).get("requests_used")).intValue());
-  assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM scan_ai_review WHERE review_job_id=?",Integer.class,j.getId()));
+ @Test void legacyBudgetsAndMissingPricesDoNotBlockEitherRound() throws Exception {
+  Long a=asset(),r=run(a,"d".repeat(40));finding(a,r,"Semgrep","security","sql-injection","s");
+  var legacy=costs.policy();legacy.paidEnabled=false;legacy.maxRequests=1;legacy.maxInputTokens=1;legacy.maxOutputTokens=1;legacy.maxCost=new BigDecimal("0.00000001");legacy.dailyCostLimit=legacy.maxCost;legacy.inputPricePerMillion=BigDecimal.ZERO;legacy.outputPricePerMillion=BigDecimal.ZERO;costs.savePolicy(legacy);
+  AiReviewCostControl.Options o=new AiReviewCostControl.Options();o.maxRequests=1;o.maxInputTokens=1;o.maxOutputTokens=1;o.maxCost=legacy.maxCost;
+  var p=ai.preview(r,o);AiReviewJob j=await(ai.startApproved(p.id,true).getId());assertEquals("COMPLETED",j.getStatus());assertEquals(0,j.getFailedFindings());
+  verify(http,times(2)).postJson(anyString(),anyString(),anyString(),anyInt());assertEquals(2,((Number)costs.usage(j.getId()).get("requests_used")).intValue());
+  assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM scan_ai_review WHERE review_job_id=?",Integer.class,j.getId()));
  }
  @Test void optionalCacheFailureDoesNotRepeatPaidReview() throws Exception {
   Long a=asset(),r=run(a,"8".repeat(40));finding(a,r,"Semgrep","security","sql-injection","s");
@@ -89,17 +91,17 @@ class AiReviewCostControlIntegrationTest {
   Long a=asset(),r=run(a,"9".repeat(40));finding(a,r,"Semgrep","security","sql-injection","s");
   when(http.postJson(anyString(),anyString(),anyString(),anyInt())).thenReturn("{\"choices\":[{\"finish_reason\":\"length\"}]}");
   AiReviewCostControl.Options o=new AiReviewCostControl.Options();o.maxRequests=3;var p=ai.preview(r,o);
-  AiReviewJob job=await(ai.startApproved(p.id,true).getId());assertEquals("BUDGET_EXHAUSTED",job.getStatus());
-  verify(http,times(3)).postJson(anyString(),anyString(),anyString(),anyInt());assertEquals(3,((Number)costs.usage(job.getId()).get("requests_used")).intValue());
-  assertEquals(3,((Number)costs.usage(job.getId()).get("usage_missing")).intValue());
+  AiReviewJob job=await(ai.startApproved(p.id,true).getId());assertEquals("FAILED",job.getStatus());assertEquals(1,job.getFailedFindings());
+  verify(http,times(4)).postJson(anyString(),anyString(),anyString(),anyInt());assertEquals(4,((Number)costs.usage(job.getId()).get("requests_used")).intValue());
+  assertEquals(4,((Number)costs.usage(job.getId()).get("usage_missing")).intValue());
  }
- @Test void concurrentReservationAndDailyLimitAreAtomic() throws Exception {
+ @Test void concurrentUsageIsCountedWithoutEnforcingLegacyLimits() throws Exception {
   Long a=asset(),r=run(a,"e".repeat(40));finding(a,r,"Semgrep","security","sql-injection","s");var p=ai.preview(r,new AiReviewCostControl.Options());p.budget.maxRequests=2;
   db.update("INSERT INTO scan_ai_review_job(scan_run_id,provider,model,status,total_findings,created_at) VALUES(?,'fixture','fixture-model','COMPLETED',1,NOW(3))",r);Long job=db.queryForObject("SELECT LAST_INSERT_ID()",Long.class);costs.bind(p,job);
-  ExecutorService executor=Executors.newFixedThreadPool(8);try{List<Future<Boolean>> fs=new ArrayList<>();for(int n=0;n<8;n++)fs.add(executor.submit(()->{try{costs.reserve(job,"fixture",1024);return true;}catch(AiReviewCostControl.BudgetExceeded e){return false;}}));int success=0;for(Future<Boolean> f:fs)if(f.get())success++;assertEquals(2,success);}finally{executor.shutdownNow();}
-  assertEquals(2,((Number)costs.usage(job).get("requests_used")).intValue());
+  ExecutorService executor=Executors.newFixedThreadPool(8);try{List<Future<Boolean>> fs=new ArrayList<>();for(int n=0;n<8;n++)fs.add(executor.submit(()->{try{costs.reserve(job,"fixture",1024);return true;}catch(AiReviewCostControl.BudgetExceeded e){return false;}}));int success=0;for(Future<Boolean> f:fs)if(f.get())success++;assertEquals(8,success);}finally{executor.shutdownNow();}
+  assertEquals(8,((Number)costs.usage(job).get("requests_used")).intValue());
   var policy=costs.policy();policy.dailyCostLimit=new BigDecimal("0.00000001");costs.savePolicy(policy);var next=ai.preview(r,new AiReviewCostControl.Options());
-  assertEquals("BUDGET_EXHAUSTED",await(ai.startApproved(next.id,true).getId()).getStatus());verifyNoInteractions(http);
+  assertEquals("COMPLETED",await(ai.startApproved(next.id,true).getId()).getStatus());verify(http,times(2)).postJson(anyString(),anyString(),anyString(),anyInt());
  }
  @Test void expiredOrChangedPlanCannotStartAndUnknownRuleCanBeClassified(){
   Long a=asset(),r=run(a,"f".repeat(40));finding(a,r,"Alibaba-P3C","CODE_STANDARD","Alibaba-P3C.SqlInjectionRule","s");

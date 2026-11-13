@@ -22,7 +22,7 @@ import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** 审核预览、明确付费授权、来源可追溯的结果复用及保守预算记账，均不修改人工复核结论。 */
+/** 审核预览、来源可追溯的结果复用及模型用量记录，均不修改人工复核结论。 */
 @Service
 public class AiReviewCostControl {
     public static class Policy {
@@ -63,7 +63,7 @@ public class AiReviewCostControl {
         this.db=db;this.json=json;this.findings=findings;this.runs=runs;this.projects=projects;this.evidence=evidence;
         this.provider=provider;this.properties=properties;this.tx=new TransactionTemplate(transactions);
     }
-    /** 默认关闭自动付费；单价由用户维护，不把未知厂商价格当作零费用。 */
+    /** 兼容历史预算接口及存档；新审核不读取这些额度，也不要求维护单价。 */
     public Policy policy() {
         List<String> rows=db.queryForList("SELECT content_json FROM ai_review_cost_policy WHERE id=1",String.class);
         return rows.isEmpty()?new Policy():read(rows.get(0),Policy.class);
@@ -94,12 +94,9 @@ public class AiReviewCostControl {
     private Plan calculate(Long runId,Options options,List<AiReviewSummary> reviews) {
         ScanRun run=runs.requireById(runId);
         if(!Set.of("COMPLETED","PARTIAL").contains(run.getStatus().name())) throw bad("扫描结束后才能预审");
-        Plan p=new Plan();p.scanRunId=runId;p.options=options;p.budget=policy();if(!Objects.equals(p.budget.pricedModelSignature,modelSignature()))p.budget.paidEnabled=false;p.model=provider.modelName();p.provider=provider.providerName();p.modelSignature=modelSignature();
-        if(options.maxRequests!=null) p.budget.maxRequests=Math.min(p.budget.maxRequests,options.maxRequests);
-        if(options.maxInputTokens!=null) p.budget.maxInputTokens=Math.min(p.budget.maxInputTokens,options.maxInputTokens);
-        if(options.maxOutputTokens!=null) p.budget.maxOutputTokens=Math.min(p.budget.maxOutputTokens,options.maxOutputTokens);
-        if(options.maxCost!=null) p.budget.maxCost=p.budget.maxCost.min(options.maxCost);
-        validate(p.budget);
+        Plan p=new Plan();p.scanRunId=runId;p.options=options;p.budget=new Policy();
+        p.budget.outputTokensPerRequest=Math.min(8192,Math.max(1024,properties.getAi().getMaxOutputTokens()));
+        p.model=provider.modelName();p.provider=provider.providerName();p.modelSignature=modelSignature();
         List<FindingView> raw=findings.findAuditInputsByRunId(runId);
         Map<Long,AiReviewSummary> known=reviews.stream().collect(Collectors.toMap(AiReviewSummary::getFindingId,s->s,(a,b)->a));
         List<FindingView> eligible=new ArrayList<>();
@@ -141,14 +138,14 @@ public class AiReviewCostControl {
                 &&Objects.equals(provider.providerName(),a.getProvider())&&Objects.equals(provider.providerName(),b.getProvider())
                 &&"COMPLETED".equals(a.getStatus())&&"COMPLETED".equals(b.getStatus());
     }
-    /** 审批绑定具体来源与预算；过期或上下文变化必须重新预览，重复提交返回同一任务。 */
+    /** 确认绑定具体来源；过期或上下文变化必须重新预览，重复提交返回同一任务。 */
     public Plan approve(String id,boolean allowPaid,List<AiReviewSummary> reviews) {
         Plan saved=require(id);
         if(saved.jobId!=null)return saved;
         if(saved.expiresAt.isBefore(LocalDateTime.now()))throw bad("审核预览已过期，请重新预览");
         Plan current=calculate(saved.scanRunId,saved.options,reviews);
         if(!current.sourceHash.equals(saved.sourceHash))throw bad("审核范围、已有结果或模型配置已变化，请重新预览");
-        if(current.modelCandidates>0&&(!allowPaid||!current.budget.paidEnabled))throw bad("付费审核未授权，请先启用预算并明确确认本次模型调用");
+        if(current.modelCandidates>0&&!allowPaid)throw bad("请确认本次模型审核后提交");
         return saved;
     }
     public Plan require(String id) {
@@ -167,28 +164,15 @@ public class AiReviewCostControl {
         List<Map<String,Object>> rows=db.queryForList("SELECT requests_used,input_reserved,output_reserved,cost_reserved,input_actual,output_actual,usage_missing,content_json FROM ai_review_budget WHERE job_id=?",jobId);
         if(rows.isEmpty())return Map.of();Map<String,Object> data=rows.get(0);data.put("limits",read((String)data.remove("content_json"),Policy.class));data.put("reusedFindings",db.queryForObject("SELECT COUNT(*) FROM ai_review_reuse_log WHERE job_id=?",Integer.class,jobId));return data;
     }
-    /** 先按最坏输入字节数和最大输出额度占预算；失败与重试不退占额，防止并发在途突破上限。 */
+    /** 仅记录真实请求与用量；历史预算、日额度及单价不再拦截审核或重试。 */
     public void reserve(Long jobId,String request,int outputLimit) {
         long input=request.getBytes(StandardCharsets.UTF_8).length;
-        tx.execute(status->{
-            Map<String,Object> row=db.queryForMap("SELECT * FROM ai_review_budget WHERE job_id=? FOR UPDATE",jobId);
-            Policy p=read((String)row.get("content_json"),Policy.class);
-            if(!policy().paidEnabled)throw new BudgetExceeded("系统付费审核已关闭，停止提交新请求");
-            BigDecimal charge=cost(input,outputLimit,p);
-            if(((Number)row.get("requests_used")).intValue()+1>p.maxRequests || ((Number)row.get("input_reserved")).longValue()+input>p.maxInputTokens
-                    ||((Number)row.get("output_reserved")).longValue()+outputLimit>p.maxOutputTokens
-                    ||((BigDecimal)row.get("cost_reserved")).add(charge).compareTo(p.maxCost)>0)throw new BudgetExceeded("本批审核达到请求、Token 或费用预算，未处理项保留待复核");
-            db.update("INSERT IGNORE INTO ai_review_daily_budget(spend_date,cost_reserved) VALUES(CURRENT_DATE(),0)");
-            BigDecimal daily=db.queryForObject("SELECT cost_reserved FROM ai_review_daily_budget WHERE spend_date=CURRENT_DATE() FOR UPDATE",BigDecimal.class);
-            if(daily.add(charge).compareTo(policy().dailyCostLimit)>0)throw new BudgetExceeded("今日审核预算已用尽，未处理项保留待复核");
-            db.update("UPDATE ai_review_daily_budget SET cost_reserved=cost_reserved+? WHERE spend_date=CURRENT_DATE()",charge);
-            db.update("UPDATE ai_review_budget SET requests_used=requests_used+1,usage_missing=usage_missing+1,input_reserved=input_reserved+?,output_reserved=output_reserved+?,cost_reserved=cost_reserved+? WHERE job_id=?",input,outputLimit,charge,jobId);return null;
-        });
+        db.update("UPDATE ai_review_budget SET requests_used=requests_used+1,usage_missing=usage_missing+1,input_reserved=input_reserved+?,output_reserved=output_reserved+? WHERE job_id=?",input,outputLimit,jobId);
     }
     public void recordUsage(Long jobId,JsonNode usage) {
         if(usage.path("prompt_tokens").isIntegralNumber()&&usage.path("completion_tokens").isIntegralNumber()&&usage.path("prompt_tokens").asLong()>=0&&usage.path("completion_tokens").asLong()>=0)db.update("UPDATE ai_review_budget SET usage_missing=GREATEST(0,usage_missing-1),input_actual=input_actual+?,output_actual=output_actual+? WHERE job_id=?",Math.max(0,usage.path("prompt_tokens").asLong()),Math.max(0,usage.path("completion_tokens").asLong()),jobId);
     }
-    public int outputLimit(Long jobId) {return read(db.queryForObject("SELECT content_json FROM ai_review_budget WHERE job_id=?",String.class,jobId),Policy.class).outputTokensPerRequest;}
+    public int outputLimit(Long jobId) {return Math.min(8192,Math.max(1024,properties.getAi().getMaxOutputTokens()));}
     private BigDecimal cost(long input,long output,Policy p) {return p.inputPricePerMillion.multiply(BigDecimal.valueOf(input)).add(p.outputPricePerMillion.multiply(BigDecimal.valueOf(output))).divide(new BigDecimal("1000000"),8,java.math.RoundingMode.UP);}
     public static class BudgetExceeded extends RuntimeException {public BudgetExceeded(String message){super(message);}}
     /** 仅同资产、干净的完整提交/制品摘要和相同模型/规则/上下文允许跨扫描复用。 */
