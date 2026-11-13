@@ -31,8 +31,11 @@ async function show(focusLast = false) {
     top: `${top}px`,
     left: `${Math.max(8, Math.min(anchor.right - bounds.width, window.innerWidth - bounds.width - 8))}px`,
   }
+  // 先应用定位，再移动焦点；禁止焦点滚动导致刚打开的浮层被滚动监听器关闭。
+  await nextTick()
+  if (!open.value || !menu.value) return
   const options = menu.value.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
-  options[focusLast ? options.length - 1 : 0]?.focus()
+  options[focusLast ? options.length - 1 : 0]?.focus({ preventScroll: true })
 }
 
 function select(value: string) {
