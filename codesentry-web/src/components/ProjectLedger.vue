@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { formatChinaTime } from '@/utils/datetime'
 import { api } from '@/api/codesentry'
 import type { LedgerFinding, ProjectScanRound, TriageStatus, AiReviewJob } from '@/types'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
@@ -21,6 +22,37 @@ const checked = ref<LedgerFinding[]>([]), batchOpen = ref(false), batchBusy = re
 const batchStatus = ref<TriageStatus>('CONFIRMED'), batchComment = ref(''), reviewer = ref(localStorage.getItem('codesentry-reviewer') ?? '本地复核人'), expiresAt = ref('')
 const toolsOpen = ref(false), toolsBusy = ref(false), toolJobs = ref<AiReviewJob[]>([]), toolErrors = ref<string[]>([])
 const toolScope = computed(() => (current.value?.items ?? []).filter(a => (!assetId.value || String(a.assetId) === assetId.value) && a.runId && ['COMPLETED','PARTIAL'].includes(a.status)))
+const toolsLoading = ref(false), toolsError = ref(''), stoppingTool = ref<number | null>(null)
+const scopedToolJobs = computed(() => toolJobs.value.filter(job => toolScope.value.some(a => a.runId === job.scanRunId)))
+const toolProgress = computed(() => scopedToolJobs.value.reduce((sum, job) => ({ total: sum.total + job.totalFindings, completed: sum.completed + job.completedFindings, failed: sum.failed + job.failedFindings }), { total: 0, completed: 0, failed: 0 }))
+const activeTools = computed(() => scopedToolJobs.value.some(job => ['PENDING','RUNNING'].includes(job.status)))
+let toolGeneration = 0, pollingTools = false
+/** 从持久化任务恢复进度；离开页面只停止轮询，不会取消后台审核。 */
+async function restoreToolJobs() {
+  const token = ++toolGeneration
+  const scope = (current.value?.items ?? []).filter(a => a.runId && ['COMPLETED','PARTIAL'].includes(a.status))
+  toolsLoading.value = true; toolsError.value = ''
+  const results = await Promise.allSettled(scope.map(a => api.latestAiReviewJob(a.runId!)))
+  if (token !== toolGeneration || disposed) return
+  const jobs: AiReviewJob[] = []
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') { if (result.value) jobs.push(result.value) }
+    else {
+      const previous = toolJobs.value.find(job => job.scanRunId === scope[index]?.runId)
+      if (previous) jobs.push(previous)
+      toolsError.value = '审核进度暂未刷新，保留上次结果；请稍后重试。'
+    }
+  })
+  toolJobs.value = jobs; toolsLoading.value = false
+}
+async function showTools() { toolsOpen.value = true; await restoreToolJobs() }
+async function stopTool(job: AiReviewJob) {
+  stoppingTool.value = job.id
+  try { const updated = await api.cancelAiReview(job.id); toolJobs.value = toolJobs.value.map(j => j.id === job.id ? updated : j) }
+  catch(e) { toolsError.value = (e as Error).message }
+  finally { stoppingTool.value = null }
+}
+function toolPercent(job: AiReviewJob) { return job.totalFindings ? Math.min(100, Math.round((job.completedFindings + job.failedFindings) / job.totalFindings * 100)) : 0 }
 const allChecked = computed(() => rows.value.length > 0 && rows.value.every(f => checked.value.some(c => c.id === f.id)))
 function toggle(f: LedgerFinding) { checked.value = checked.value.some(c => c.id === f.id) ? checked.value.filter(c => c.id !== f.id) : [...checked.value, f] }
 function togglePage() { checked.value = allChecked.value ? [] : [...rows.value] }
@@ -58,11 +90,12 @@ async function retryTool(job: AiReviewJob) {
 }
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => { timer = setInterval(async () => {
-  const active = toolJobs.value.filter(j => ['PENDING','RUNNING'].includes(j.status))
-  if (!active.length || busy.value) return
-  try { for (const job of active) { const next = await api.aiReviewJob(job.id); toolJobs.value = toolJobs.value.map(j => j.id === next.id ? next : j) }; await load(); emit('changed') } catch { /* next poll retries */ }
+  if (pollingTools || toolsBusy.value || stoppingTool.value !== null || initializing || (!toolsOpen.value && !toolJobs.value.some(j => ['PENDING','RUNNING'].includes(j.status)))) return
+  pollingTools = true
+  try { await restoreToolJobs(); if (!busy.value) await load() }
+  finally { pollingTools = false }
 }, 5000) })
-onBeforeUnmount(() => { disposed = true; generation++; initialization++; controller?.abort(); if(timer) clearInterval(timer) })
+onBeforeUnmount(() => { disposed = true; generation++; initialization++; toolGeneration++; controller?.abort(); if(timer) clearInterval(timer) })
 watch([roundId, assetId, severity, triage, reportState, keyword, page, pageSize], () => { checked.value = [] })
 watch(() => props.businessProjectId, () => { checked.value = []; toolJobs.value = []; toolsOpen.value = false; batchOpen.value = false })
 let generation = 0, initialization = 0
@@ -92,7 +125,7 @@ async function initialize(keepRequestedRound = true) {
     roundTotal.value = data.total; rounds.value = choices; roundId.value = chosen
     page.value = 1; assetId.value = ''; await nextTick()
     if (token !== initialization || disposed) return
-    initializing = false; await load()
+    initializing = false; await Promise.all([load(), restoreToolJobs()])
   } catch(e) { if (token === initialization && !disposed) error.value = (e as Error).message }
   finally { if (token === initialization && initializing) { initializing = false; busy.value = false } }
 }
@@ -118,6 +151,7 @@ watch([roundId, assetId, severity, triage, reportState, pageSize, page], (values
     return
   }
   void load()
+  if (values[0] !== previous[0]) void restoreToolJobs()
 })
 </script>
 <template>
@@ -134,14 +168,33 @@ watch([roundId, assetId, severity, triage, reportState, pageSize, page], (values
     </form>
     <section class="panel ledger-summary" aria-label="项目问题统计" :aria-busy="busy"><div class="summary-heading"><strong>问题统计</strong><span class="muted">{{ current ? projectRoundLabel(current) : '暂无扫描轮次' }} · {{ scopeLabel }} · 按问题条数统计</span></div><dl class="summary-grid"><div><dt>{{ current?.assetHistory ? '历史扫描问题' : '本轮问题' }}</dt><dd>{{ busy ? '…' : summary.total }}<small> 条</small></dd></div><div><dt>新增 / 重新打开</dt><dd>{{ busy ? '…' : summary.newCount }}<small> 条</small></dd></div><div><dt>已修复</dt><dd>{{ busy ? '…' : summary.fixedCount }}<small> 条</small></dd></div><div><dt>筛选结果</dt><dd>{{ busy ? '…' : total }}<small> 条</small></dd></div></dl><p class="muted summary-note">本轮统计随轮次和资产切换；筛选结果对应当前全部筛选条件，包含所有分页。</p></section>
     <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
-    <div class="panel batch-toolbar"><span>已选 {{ checked.length }} 条（当前页）</span><button class="button secondary compact" :disabled="!toolScope.length || toolsBusy" @click="toolsOpen = true">批量工具审核</button><button class="button primary compact" :disabled="!checked.length || batchBusy" @click="openBatch">批量人工复核</button><span v-if="batchMessage">{{ batchMessage }}</span></div>
+    <div class="panel batch-toolbar"><span>已选 {{ checked.length }} 条（当前页）</span><button class="button secondary compact" :disabled="!toolScope.length || toolsBusy" @click="showTools">批量工具审核</button><button class="button primary compact" :disabled="!checked.length || batchBusy" @click="openBatch">批量人工复核</button><button class="button secondary compact" @click="showTools">查看审核进度</button><span v-if="toolsLoading">正在恢复审核进度…</span><span v-else-if="scopedToolJobs.length">审核已完成 {{ toolProgress.completed }} / {{ toolProgress.total }} · 失败 {{ toolProgress.failed }}<template v-if="activeTools"> · 后台执行中</template></span><span v-if="batchMessage">{{ batchMessage }}</span></div>
+    <div v-if="toolsError" class="notice">{{ toolsError }} <button class="button secondary compact" @click="restoreToolJobs">刷新审核进度</button></div>
     <section class="panel"><div v-if="busy" class="notice">正在加载项目问题…</div><div v-else-if="rows.length" class="table-scroll"><table class="data-table project-ledger-table"><thead><tr><th><input type="checkbox" aria-label="选择本页全部问题" :checked="allChecked" @change="togglePage" /></th><th>问题 / 来源扫描</th><th>所属资产</th><th>等级</th><th>问题与位置</th><th>人工结论</th><th>报告采纳</th><th class="actions-heading">操作</th></tr></thead><tbody><tr v-for="f in rows" :key="`${f.scanRunId}-${f.id}`"><td><input type="checkbox" :aria-label="`选择问题 F-${f.id}`" :checked="checked.some(c => c.id === f.id)" @change="toggle(f)" /></td><td><span class="mono">F-{{ f.id }}</span><div><RouterLink :to="`/scans/${f.scanRunId}`">扫描 #{{ f.scanRunId }}</RouterLink></div></td><td>{{ f.assetName }}</td><td><StatusBadge :value="f.severity" /></td><td><strong>{{ findingTitle(f) }}</strong><div class="mono muted location">{{ f.filePath }}{{ f.startLine ? `:${f.startLine}` : '' }}</div></td><td><StatusBadge v-if="f.triageStatus" :value="f.triageStatus" /><span v-else>待复核</span></td><td>{{ reportLabels[f.reportState] }}</td><td class="actions-cell"><div class="row-actions"><button class="row-action-link" @click="open(f)">详情 / 复核</button><RouterLink class="row-action-link" :to="`/findings?runId=${f.scanRunId}`" @click="emit('openAsset', f.scanRunId)">工具审核</RouterLink></div></td></tr></tbody></table></div><EmptyState v-else title="没有匹配的问题" description="可调整筛选条件；未扫描或失败的资产不会显示历史结果。" /><footer class="table-pager"><span>共 {{ total }} 条 · 第 {{ page }} / {{ Math.max(1, Math.ceil(total/pageSize)) }} 页</span><div class="row-actions"><select class="select" v-model.number="pageSize" aria-label="每页条数"><option :value="20">20 条/页</option><option :value="50">50 条/页</option><option :value="100">100 条/页</option></select><button class="button secondary compact" :disabled="page <= 1 || busy" @click="page--">上一页</button><button class="button secondary compact" :disabled="page*pageSize >= total || busy" @click="page++">下一页</button></div></footer></section>
     <AppModal :open="batchOpen" title="批量人工复核" :busy="batchBusy" @close="batchOpen = false"><form class="page-stack" @submit.prevent="saveBatch"><p>统一处理已选 {{ checked.length }} 条问题，按来源扫描分别保存。</p><div class="field"><label>复核结论</label><select class="select" v-model="batchStatus"><option value="CONFIRMED">确认风险</option><option value="FALSE_POSITIVE">误报</option><option value="ACCEPTED_RISK">接受风险</option><option value="FIXED_PENDING">已整改待验证</option></select></div><div class="field"><label>复核人</label><input v-model.trim="reviewer" class="input" required maxlength="128" /></div><div class="field"><label>统一复核说明</label><textarea v-model="batchComment" class="input" maxlength="2000" /></div><div v-if="batchStatus === 'ACCEPTED_RISK'" class="field"><label>风险接受到期时间（可选）</label><input type="datetime-local" class="input" v-model="expiresAt" /></div><div v-if="error" class="error-banner">{{ error }}</div><div class="form-actions"><button type="button" class="button secondary" :disabled="batchBusy" @click="batchOpen = false">取消</button><button class="button primary" :disabled="batchBusy || !checked.length">{{ batchBusy ? '正在批量保存…' : `保存 ${checked.length} 条复核结论` }}</button></div></form></AppModal>
-    <AppModal :open="toolsOpen" title="批量工具审核" :busy="toolsBusy" @close="toolsOpen = false"><div class="page-stack"><p>审核当前轮次、所选资产的 {{ toolScope.length }} 个来源扫描批次中的全部问题。严重等级、关键字及问题勾选不限制工具审核范围。依赖漏洞沿用原有合并审核规则。</p><div v-for="a in toolScope" :key="a.assetId">{{ a.assetName }} · 扫描 #{{ a.runId }}</div><button class="button primary" :disabled="toolsBusy || !toolScope.length || toolJobs.some(j => ['PENDING','RUNNING'].includes(j.status))" @click="startTools">{{ toolsBusy ? '正在提交…' : '启动批量工具审核' }}</button><div v-for="message in toolErrors" :key="message" class="error-banner">{{ message }}</div><div v-for="job in toolJobs" :key="job.id" class="panel tool-job"><span>扫描 #{{ job.scanRunId }} · <StatusBadge :value="job.status" /> · 已处理 {{ job.completedFindings }}/{{ job.totalFindings }}</span><RouterLink :to="`/findings?runId=${job.scanRunId}`" @click="emit('openAsset', job.scanRunId)">查看执行详情</RouterLink><button v-if="['PARTIAL','FAILED'].includes(job.status)" class="button secondary compact" @click="retryTool(job)">重试失败项</button></div></div></AppModal>
+    <AppModal :open="toolsOpen" title="批量工具审核进度" :busy="toolsBusy" @close="toolsOpen = false">
+      <div class="page-stack">
+        <p>审核当前轮次、所选资产的 {{ toolScope.length }} 个来源扫描批次。任务在后台执行，离开页面后可随时从“查看审核进度”重新进入。严重等级、关键字及问题勾选不限制工具审核范围；依赖漏洞按文件和版本合并为审核单元。</p>
+        <div class="row-actions"><button class="button secondary compact" :disabled="toolsLoading" @click="restoreToolJobs">{{ toolsLoading ? '刷新中…' : '刷新审核进度' }}</button><span>完成 {{ toolProgress.completed }} / {{ toolProgress.total }} 个审核单元 · 失败 {{ toolProgress.failed }}</span></div>
+        <div v-if="toolsError" class="error-banner">{{ toolsError }}</div>
+        <div v-for="a in toolScope" :key="a.assetId" class="muted">{{ a.assetName }} · 扫描 #{{ a.runId }}</div>
+        <button class="button primary" :disabled="toolsBusy || toolsLoading || !!toolsError || !toolScope.length || activeTools || toolScope.every(a => toolJobs.some(j => j.scanRunId === a.runId))" @click="startTools">{{ toolsBusy ? '正在提交…' : activeTools ? '审核正在后台执行' : '启动批量工具审核' }}</button>
+        <div v-for="message in toolErrors" :key="message" class="error-banner">{{ message }}</div>
+        <section v-for="job in scopedToolJobs" :key="job.id" class="panel tool-job">
+          <strong>{{ current?.items.find(a => a.runId === job.scanRunId)?.assetName }} · 扫描 #{{ job.scanRunId }} · 任务 #{{ job.id }}</strong>
+          <div class="row-actions"><StatusBadge :value="job.status" /><span>完成 {{ job.completedFindings }} / {{ job.totalFindings }} · 失败 {{ job.failedFindings }} · {{ toolPercent(job) }}%</span></div>
+          <progress :value="job.completedFindings + job.failedFindings" :max="job.totalFindings || 1" style="width:100%" :aria-label="`任务 #${job.id} 审核进度`"></progress>
+          <span class="muted">开始时间：<time class="datetime-text">{{ formatChinaTime(job.startedAt ?? job.createdAt) }}</time></span>
+          <div v-if="job.errorMessage" class="error-banner">{{ job.errorMessage }}</div>
+          <div class="row-actions"><RouterLink :to="`/findings?runId=${job.scanRunId}`" @click="emit('openAsset', job.scanRunId)">查看问题明细</RouterLink><button v-if="['PARTIAL','FAILED'].includes(job.status)" class="button secondary compact" @click="retryTool(job)">重试失败项</button><button v-if="['PENDING','RUNNING'].includes(job.status)" class="button danger compact" :disabled="stoppingTool === job.id" @click="stopTool(job)">停止审核</button></div>
+        </section>
+        <p v-if="!toolsLoading && !scopedToolJobs.length" class="muted">该范围尚未发起工具审核。</p>
+      </div>
+    </AppModal>
     <AppModal :open="!!selected" title="问题详情与人工复核" :busy="saving" @close="selected = null"><form v-if="selected" class="page-stack" @submit.prevent="save"><h3>F-{{ selected.id }} · {{ findingTitle(selected) }}</h3><p>{{ selected.assetName }} · {{ selected.filePath }}{{ selected.startLine ? `:${selected.startLine}` : '' }}</p><p class="muted">扫描 #{{ selected.scanRunId }} · {{ selected.scanner }} / {{ selected.ruleId }}</p><p v-if="selected.codeSnippet?.trim() === '[REDACTED]'" class="notice">未能读取原始代码：扫描快照可能已清理、文件过大或无法作为文本预览。请根据上述文件位置核验。</p><pre v-else class="source">{{ selected.codeSnippet || selected.description || '扫描器未提供原始片段，请根据文件位置核验。' }}</pre><p>{{ selected.recommendation }}</p><div class="field"><label>人工结论</label><select class="select" v-model="reviewStatus"><option value="CONFIRMED">确认风险</option><option value="FALSE_POSITIVE">误报</option><option value="ACCEPTED_RISK">接受风险</option><option value="FIXED_PENDING">已整改待验证</option></select></div><div class="field"><label>复核说明</label><textarea v-model="comment" class="input" rows="3" /></div><div v-if="error" class="error-banner">{{ error }}</div><div class="form-actions"><button type="button" class="button secondary" :disabled="saving" @click="selected = null">取消</button><button class="button primary" :disabled="saving">{{ saving ? '保存中…' : '保存复核结论' }}</button></div></form></AppModal>
   </div>
 </template>
-<style scoped>.ledger-summary{padding:20px}.summary-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:18px 0 12px;gap:16px}.summary-grid dt{color:var(--muted);font-size:13px}.summary-grid dd{margin:8px 0 0;font-size:24px;font-weight:700}.summary-grid small{font-size:13px;font-weight:400}.summary-note{font-size:12px;margin:0}@media(max-width:600px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}.batch-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px}.tool-job{display:flex;gap:12px;flex-wrap:wrap;padding:12px}.ledger-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:20px}.search-row{display:flex;gap:8px}.search-row .button{flex-shrink:0;white-space:nowrap}.location{max-width:350px;overflow-wrap:anywhere;margin-top:6px}.source{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;background:var(--code-bg);padding:14px}.table-pager{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px}.table-pager .select{width:auto}.table-pager .row-actions{flex-wrap:wrap}@media(max-width:850px){.ledger-filters{grid-template-columns:1fr}.table-pager{flex-wrap:wrap}}</style>
+<style scoped>.ledger-summary{padding:20px}.summary-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:18px 0 12px;gap:16px}.summary-grid dt{color:var(--muted);font-size:13px}.summary-grid dd{margin:8px 0 0;font-size:24px;font-weight:700}.summary-grid small{font-size:13px;font-weight:400}.summary-note{font-size:12px;margin:0}@media(max-width:600px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}.batch-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px}.tool-job{display:grid;gap:12px;padding:16px}.tool-job .row-actions{justify-content:flex-start}.tool-job strong{overflow-wrap:anywhere}.ledger-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:20px}.search-row{display:flex;gap:8px}.search-row .button{flex-shrink:0;white-space:nowrap}.location{max-width:350px;overflow-wrap:anywhere;margin-top:6px}.source{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;background:var(--code-bg);padding:14px}.table-pager{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px}.table-pager .select{width:auto}.table-pager .row-actions{flex-wrap:wrap}@media(max-width:850px){.ledger-filters{grid-template-columns:1fr}.table-pager{flex-wrap:wrap}}</style>
 
 <style scoped>
 .project-ledger-table { min-width: 1280px; }
