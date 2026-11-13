@@ -37,6 +37,37 @@ public class ReportSnapshotStore {
         } catch (Exception e) { throw new IllegalStateException("报告归档读取失败", e); }
     }
 
+    /** 列表统计仅读取归档的身份、变化状态和依赖分组字段，不反序列化长证据。 */
+    public List<FindingView> readSummary(Long runId) {
+        String value = mapper.find(runId);
+        if (value == null) return null;
+        List<FindingView> result = new java.util.ArrayList<>();
+        try (com.fasterxml.jackson.core.JsonParser parser = json.getFactory().createParser(value)) {
+            if (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.START_ARRAY) throw new IllegalStateException("归档格式错误");
+            while (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.END_ARRAY) {
+                if (parser.currentToken() != com.fasterxml.jackson.core.JsonToken.START_OBJECT) throw new IllegalStateException("归档内容不完整");
+                FindingView finding = new FindingView();
+                while (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.END_OBJECT) {
+                    if (parser.currentToken() == null) throw new IllegalStateException("归档内容不完整");
+                    String field = parser.currentName(); parser.nextToken();
+                    switch (field) {
+                        case "id": finding.setId(parser.getValueAsLong()); break;
+                        case "scanner": finding.setScanner(parser.getValueAsString()); break;
+                        case "category": finding.setCategory(parser.getValueAsString()); break;
+                        case "filePath": finding.setFilePath(parser.getValueAsString()); break;
+                        case "resultStatus": finding.setResultStatus(parser.getValueAsString()); break;
+                        case "codeSnippet":
+                            String snippet = parser.getValueAsString();
+                            finding.setCodeSnippet(snippet == null ? null : snippet.split("\n",2)[0]); break;
+                        default: parser.skipChildren();
+                    }
+                }
+                result.add(finding);
+            }
+            return result;
+        } catch (Exception e) { throw new IllegalStateException("报告归档读取失败", e); }
+    }
+
     public List<FindingView> freeze(Long runId, List<FindingView> findings) {
         try { mapper.insert(runId, json.writeValueAsString(findings)); }
         catch (Exception e) { throw new IllegalStateException("报告归档保存失败", e); }

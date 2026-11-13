@@ -49,6 +49,40 @@ class RemediationReportServiceTest {
         org.mockito.Mockito.verifyNoInteractions(findings, ai);
     }
 
+    @Test void largeReportListUsesMetadataAndFrozenCountsWithoutSourceReadback() {
+        ScanRunService runs=mock(ScanRunService.class); FindingPersistenceService findings=mock(FindingPersistenceService.class);
+        AiReviewService reviews=mock(AiReviewService.class); ReportSnapshotStore snapshots=snapshotStore();
+        RemediationReportService service=new RemediationReportService(runs,mock(ScanProjectService.class),findings,reviews,snapshots);
+        when(runs.recentForReports(100,null,null)).thenReturn(List.of(reportRun(99L,LocalDateTime.now())));
+        List<FindingView> raw=new java.util.ArrayList<>();
+        for(int n=0;n<10000;n++) { FindingView f=finding((long)n,"large",n%2==0?"CONFIRMED":null);f.setFilePath("src/"+n+".java");raw.add(f); }
+        when(findings.findPolicyByRunId(99L)).thenReturn(raw);
+        when(reviews.latestPolicyForRun(99L)).thenReturn(List.of());
+        io.codesentry.report.dto.RemediationReportSummary summary=service.recent(100).get(0);
+        assertEquals(10000,summary.getLedgerFindings()); assertEquals(5000,summary.getTotalFindings());assertEquals(5000,summary.getNotIncludedFindings());
+        FindingView archived=finding(1L,"archived",null); archived.setResultStatus("REOPENED");
+        when(snapshots.readSummary(99L)).thenReturn(List.of(archived));
+        summary=service.recent(100).get(0);
+        assertEquals(1,summary.getTotalFindings()); assertEquals(1,summary.getNewFindings()); assertEquals(9999,summary.getNotIncludedFindings());
+        org.mockito.Mockito.verify(findings,org.mockito.Mockito.never()).findStoredByRunId(99L);
+        org.mockito.Mockito.verify(reviews,org.mockito.Mockito.never()).latestForRun(99L);
+    }
+
+    @Test void largeHtmlReportRestoresSourceOnlyForIncludedFindings() {
+        ScanRunService runs=mock(ScanRunService.class); FindingPersistenceService findings=mock(FindingPersistenceService.class);
+        AiReviewService reviews=mock(AiReviewService.class); ScanProjectService projects=mock(ScanProjectService.class);
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
+        ScanRun run=reportRun(99L,LocalDateTime.now()); when(runs.requireById(99L)).thenReturn(run);
+        ScanProject project=new ScanProject();project.setId(1L);project.setProjectName("大报告");when(projects.requireById(1L)).thenReturn(project);
+        List<FindingView> raw=new java.util.ArrayList<>();
+        for(int n=0;n<10000;n++) { FindingView f=finding((long)n,"large",n==0?"CONFIRMED":null);f.setFilePath("src/"+n+".java");raw.add(f); }
+        when(findings.findStoredByRunId(99L)).thenReturn(raw);when(reviews.latestForRun(99L)).thenReturn(List.of());
+        String html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);
+        assertTrue(html.contains("10000 条台账问题 = 1 条纳入整改 + 9999 条未纳入"));
+        org.mockito.Mockito.verify(findings).enrichSnippets(List.of(raw.get(0)));
+        org.mockito.Mockito.verify(findings,org.mockito.Mockito.never()).findByRunId(99L);
+    }
+
     private String riskBody(String html) {
         return html.substring(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
     }
@@ -56,6 +90,7 @@ class RemediationReportServiceTest {
     private ReportSnapshotStore snapshotStore() {
         ReportSnapshotStore store = mock(ReportSnapshotStore.class);
         when(store.read(org.mockito.ArgumentMatchers.anyLong())).thenReturn(null);
+        when(store.readSummary(org.mockito.ArgumentMatchers.anyLong())).thenReturn(null);
         when(store.freeze(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyList()))
                 .thenAnswer(call -> call.getArgument(1));
         return store;
@@ -95,9 +130,16 @@ class RemediationReportServiceTest {
 
         when(runs.requireById(8L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(
+                autoExcluded, humanOverride, disagreement, manualExcluded, oldProtocol, differentEvidence));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(
                 autoExcluded, humanOverride, disagreement, manualExcluded, oldProtocol, differentEvidence));
         when(aiReviews.latestForRun(8L)).thenReturn(List.of(
+                aiSummary(101L, "FALSE_POSITIVE", true, false, "COMPLETED"),
+                aiSummary(102L, "FALSE_POSITIVE", true, false, "COMPLETED"),
+                aiSummary(103L, "NEEDS_HUMAN", false, true, "NEEDS_HUMAN"),
+                oldProtocolReview, differentEvidenceReview));
+        when(aiReviews.latestPolicyForRun(8L)).thenReturn(List.of(
                 aiSummary(101L, "FALSE_POSITIVE", true, false, "COMPLETED"),
                 aiSummary(102L, "FALSE_POSITIVE", true, false, "COMPLETED"),
                 aiSummary(103L, "NEEDS_HUMAN", false, true, "NEEDS_HUMAN"),
@@ -130,9 +172,12 @@ class RemediationReportServiceTest {
         when(runs.recentForReports(100,null,null)).thenReturn(List.of(run));
         when(runs.requireById(8L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(
+                finding(101L, "VISIBLE", null), finding(102L, "EXCLUDED", "FALSE_POSITIVE")));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(
                 finding(101L, "VISIBLE", null), finding(102L, "EXCLUDED", "FALSE_POSITIVE")));
         when(aiReviews.latestForRun(8L)).thenReturn(List.of(aiSummary(101L, "CONFIRMED", true, false, "COMPLETED")));
+        when(aiReviews.latestPolicyForRun(8L)).thenReturn(List.of(aiSummary(101L, "CONFIRMED", true, false, "COMPLETED")));
 
         io.codesentry.report.dto.RemediationReportSummary summary = service.recent(100).get(0);
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
@@ -162,8 +207,10 @@ class RemediationReportServiceTest {
         when(runs.recentForReports(100,null,null)).thenReturn(List.of(run));
         when(runs.requireById(47L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(47L)).thenReturn(raw);
+        when(findings.findStoredByRunId(47L)).thenReturn(raw);
+        when(findings.findPolicyByRunId(47L)).thenReturn(raw);
         when(reviews.latestForRun(47L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(47L)).thenReturn(List.of());
 
         io.codesentry.report.dto.RemediationReportSummary summary = service.recent(100).get(0);
         assertEquals(157, summary.getLedgerFindings());
@@ -195,10 +242,14 @@ class RemediationReportServiceTest {
         when(runs.requireById(31L)).thenReturn(older);
         when(runs.requireById(35L)).thenReturn(newer);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(31L)).thenReturn(List.of());
-        when(findings.findByRunId(35L)).thenReturn(List.of());
+        when(findings.findStoredByRunId(31L)).thenReturn(List.of());
+        when(findings.findPolicyByRunId(31L)).thenReturn(List.of());
+        when(findings.findStoredByRunId(35L)).thenReturn(List.of());
+        when(findings.findPolicyByRunId(35L)).thenReturn(List.of());
         when(reviews.latestForRun(31L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(31L)).thenReturn(List.of());
         when(reviews.latestForRun(35L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(35L)).thenReturn(List.of());
 
         List<io.codesentry.report.dto.RemediationReportSummary> result = service.recent(100);
 
@@ -229,8 +280,10 @@ class RemediationReportServiceTest {
                 "src/main/webapp/WEB-INF/lib/poi-4.0.jar", "org.apache.poi:poi@4.0");
         when(runs.requireById(8L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(first, second, poiFirst, poiSecond, poiOtherVersion));
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(first, second, poiFirst, poiSecond, poiOtherVersion));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(first, second, poiFirst, poiSecond, poiOtherVersion));
         when(reviews.latestForRun(8L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(8L)).thenReturn(List.of());
 
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
         byte[] docxBytes = service.exportDocx(8L);
@@ -278,8 +331,10 @@ class RemediationReportServiceTest {
         dependency.setStartLine(null);
         when(runs.requireById(8L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(dependency));
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(dependency));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(dependency));
         when(reviews.latestForRun(8L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(8L)).thenReturn(List.of());
 
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
 
@@ -323,7 +378,9 @@ class RemediationReportServiceTest {
         ScanProject project = new ScanProject();project.setId(1L);project.setProjectName("Java8业务");project.setTargetJavaVersion(8);
         FindingView poi = dependencyFinding(203L,"CVE-2019-12415","POI XXE","lib/poi-3.7.jar37","org.apache.poi:poi@3.7");
         when(runs.requireById(8L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(poi));when(reviews.latestForRun(8L)).thenReturn(List.of());
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(poi));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(poi));when(reviews.latestForRun(8L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(8L)).thenReturn(List.of());
         String html = new String(service.exportHtml(8L),StandardCharsets.UTF_8);
         assertTrue(html.contains("业务 Java 版本：Java 8"));assertTrue(html.contains("统一 POI 组件至 5.5.1"));
         assertFalse(html.contains("规则集：")); assertFalse(html.contains("两者分别统计"));
@@ -354,7 +411,9 @@ class RemediationReportServiceTest {
         FindingView dependency = dependencyFinding(204L, "CVE-2023-34462", "Netty TLS", "app.jar/BOOT-INF/lib/nacos-client-2.2.0.jar", "io.netty:netty-handler@4.1.48.Final");
         dependency.setRecommendation("升级到修复版本：4.1.94.Final");
         when(runs.requireById(8L)).thenReturn(run); when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(dependency)); when(reviews.latestForRun(8L)).thenReturn(List.of());
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(dependency));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(dependency)); when(reviews.latestForRun(8L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(8L)).thenReturn(List.of());
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
         assertTrue(html.contains("需升级或重建外层包"));
         assertFalse(html.contains("整改实施步骤 · 问题组"));
@@ -414,8 +473,10 @@ class RemediationReportServiceTest {
         failed.setErrorMessage("AI返回内容因输出长度限制被截断");
         when(runs.requireById(8L)).thenReturn(run);
         when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(candidate));
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(candidate));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(candidate));
         when(reviews.latestForRun(8L)).thenReturn(List.of(failed));
+        when(reviews.latestPolicyForRun(8L)).thenReturn(List.of(failed));
         String html = new String(service.exportHtml(8L), StandardCharsets.UTF_8);
         assertTrue(html.contains("测试“风险”与 &lt;script&gt;"));
         assertTrue(html.contains("'CodeSentrySong','SimSun'"));
@@ -497,7 +558,8 @@ class RemediationReportServiceTest {
         ScanProject project=new ScanProject(); project.setId(1L); project.setProjectName("联网报告"); project.setTargetJavaVersion(8);
         FindingView f=dependencyFinding(999L,"CVE-2023-1111","Test dependency","lib/test.jar","example:library@2.0.0");
         when(runs.requireById(8L)).thenReturn(run); when(projects.requireById(1L)).thenReturn(project);
-        when(findings.findByRunId(8L)).thenReturn(List.of(f)); when(ai.latestForRun(8L)).thenReturn(List.of());
+        when(findings.findStoredByRunId(8L)).thenReturn(List.of(f));
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(f)); when(ai.latestForRun(8L)).thenReturn(List.of());
         ReportSnapshotStore snapshots=snapshotStore(); when(snapshots.read(8L)).thenReturn(List.of(f));
         RemediationReportService service=new RemediationReportService(runs,projects,findings,ai,snapshots);
         String html=new String(service.exportHtml(8L),StandardCharsets.UTF_8);
@@ -524,7 +586,8 @@ class RemediationReportServiceTest {
         when(runs.requireById(8L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);
         java.util.List<FindingView> raw=new java.util.ArrayList<>(members);
         raw.add(finding(999L,"排除项","FALSE_POSITIVE"));
-        when(findings.findByRunId(8L)).thenReturn(raw);when(ai.latestForRun(8L)).thenReturn(summaries);
+        when(findings.findStoredByRunId(8L)).thenReturn(raw);
+        when(findings.findPolicyByRunId(8L)).thenReturn(raw);when(ai.latestForRun(8L)).thenReturn(summaries);
         RemediationReportService service=new RemediationReportService(runs,projects,findings,ai,snapshotStore());
         try(org.apache.pdfbox.pdmodel.PDDocument pdf=org.apache.pdfbox.pdmodel.PDDocument.load(service.exportPdf(8L))) {
             assertTrue(pdf.getPage(0).getMediaBox().getWidth()>pdf.getPage(0).getMediaBox().getHeight());
@@ -557,7 +620,9 @@ class RemediationReportServiceTest {
         RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
         ScanRun run=reportRun(88L,LocalDateTime.now());ScanProject project=new ScanProject();project.setId(1L);project.setProjectName("前端项目");project.setApplicationType(io.codesentry.project.model.ApplicationType.FRONTEND);project.setTargetNodeVersion("20.19.0");
         FindingView finding=dependencyFinding(303L,"TEST-NODE-VULN","测试依赖问题","package-lock.json","sample-package@1.0.0");finding.setRecommendation("本漏洞修复版本（扫描时漏洞库记录）：1.0.1。测试数据。");
-        when(runs.requireById(88L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);when(findings.findByRunId(88L)).thenReturn(List.of(finding));when(reviews.latestForRun(88L)).thenReturn(List.of());
+        when(runs.requireById(88L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(project);when(findings.findStoredByRunId(88L)).thenReturn(List.of(finding));
+        when(findings.findPolicyByRunId(88L)).thenReturn(List.of(finding));when(reviews.latestForRun(88L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(88L)).thenReturn(List.of());
         String html=new String(service.exportHtml(88L),StandardCharsets.UTF_8);assertTrue(html.contains("业务 Node.js 版本：Node.js 20.19.0"));assertFalse(html.contains("业务 Java 版本："));assertFalse(html.contains("项目 Java 版本：未确认"));assertTrue(html.contains("engines.node"));assertTrue(html.contains("1.0.1"));
     }
 
@@ -567,7 +632,9 @@ class RemediationReportServiceTest {
         RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
         ScanRun run=reportRun(98L,LocalDateTime.now());run.setArtifactPath("/uploads/old/payment-service-1.0.jar");run.setScanRef("old.jar");
         ScanProject asset=new ScanProject();asset.setId(1L);asset.setProjectName("支付服务");asset.setSourceType(io.codesentry.project.model.ProjectSourceType.JAR_UPLOAD);asset.setLocalPath("/uploads/new/payment-service-2.0.jar");
-        when(runs.requireById(98L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(asset);when(findings.findByRunId(98L)).thenReturn(List.of());when(reviews.latestForRun(98L)).thenReturn(List.of());
+        when(runs.requireById(98L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(asset);when(findings.findStoredByRunId(98L)).thenReturn(List.of());
+        when(findings.findPolicyByRunId(98L)).thenReturn(List.of());when(reviews.latestForRun(98L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(98L)).thenReturn(List.of());
         String html=new String(service.exportHtml(98L),StandardCharsets.UTF_8);
         assertTrue(html.contains("资产类型：JAR 包（上传产物）"));assertTrue(html.contains("扫描资产：支付服务"));assertTrue(html.contains("JAR 文件：payment-service-1.0.jar"));assertFalse(html.contains("payment-service-2.0.jar"));assertTrue(html.contains("color:#c83232;font-weight:700"));assertTrue(html.contains("扫描文件：payment-service-1.0.jar"));
         try (org.apache.poi.xwpf.usermodel.XWPFDocument doc=new org.apache.poi.xwpf.usermodel.XWPFDocument(new java.io.ByteArrayInputStream(service.exportDocx(98L)))) {
@@ -580,7 +647,9 @@ class RemediationReportServiceTest {
         FindingPersistenceService findings=mock(FindingPersistenceService.class);AiReviewService reviews=mock(AiReviewService.class);
         RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshotStore());
         ScanRun run=reportRun(99L,LocalDateTime.now());ScanProject asset=new ScanProject();asset.setId(1L);asset.setProjectName("测试<前端>");asset.setSourceType(io.codesentry.project.model.ProjectSourceType.GIT);asset.setRemoteUrl("https://fixture-user:fixture-password@example.invalid/team/web.git");
-        when(runs.requireById(99L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(asset);when(findings.findByRunId(99L)).thenReturn(List.of());when(reviews.latestForRun(99L)).thenReturn(List.of());
+        when(runs.requireById(99L)).thenReturn(run);when(projects.requireById(1L)).thenReturn(asset);when(findings.findStoredByRunId(99L)).thenReturn(List.of());
+        when(findings.findPolicyByRunId(99L)).thenReturn(List.of());when(reviews.latestForRun(99L)).thenReturn(List.of());
+        when(reviews.latestPolicyForRun(99L)).thenReturn(List.of());
         String html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("代码（远程 Git 仓库）"));assertTrue(html.contains("https://example.invalid/team/web.git"));assertFalse(html.contains("fixture-password"));assertTrue(html.contains("测试&lt;前端&gt;"));
         asset.setSourceType(io.codesentry.project.model.ProjectSourceType.LOCAL);asset.setLocalPath("/workspace/frontend");
         html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("代码（本地仓库）"));assertTrue(html.contains("代码项目目录：/workspace/frontend"));

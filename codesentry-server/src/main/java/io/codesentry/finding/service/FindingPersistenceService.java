@@ -55,7 +55,12 @@ public class FindingPersistenceService {
     }
 
     public List<FindingView> findByRunId(Long runId) {
-        return enrichSnippets(excludeSuppressedRules(mapper.findByRunId(runId)));
+        return enrichSnippets(findStoredByRunId(runId));
+    }
+
+    /** 报告先按审核政策筛选，再为采纳项回读源码；未采纳项不访问文件系统。 */
+    public List<FindingView> findStoredByRunId(Long runId) {
+        return excludeSuppressedRules(mapper.findByRunId(runId));
     }
 
     /** 台账仅需报告采纳身份；保持报告的规则过滤和原始顺序，不回读源码快照。 */
@@ -142,23 +147,29 @@ public class FindingPersistenceService {
         }).collect(Collectors.toList());
     }
 
-    private List<FindingView> enrichSnippets(List<FindingView> findings) {
-        findings.forEach(this::enrichSnippet);
+    /** 同一请求只读取一次相同源文件，避免大报告为数千条同文件命中反复读取全文。 */
+    public List<FindingView> enrichSnippets(List<FindingView> findings) {
+        SourceSnippetExtractor.ReadSession session = new SourceSnippetExtractor.ReadSession();
+        findings.forEach(finding -> enrichSnippet(finding,session));
         return findings;
     }
 
     public FindingView enrichSnippet(FindingView finding) {
+        return enrichSnippet(finding,null);
+    }
+
+    private FindingView enrichSnippet(FindingView finding, SourceSnippetExtractor.ReadSession session) {
         if (finding != null) {
             String fallback = finding.getCodeSnippet();
             String snippet = SourceSnippetExtractor.extract(properties.getStorage().rootPath(),
-                    finding.getFilePath(), finding.getStartLine(), finding.getEndLine(), fallback);
+                    finding.getFilePath(), finding.getStartLine(), finding.getEndLine(), fallback,session);
             if (isUnavailable(snippet, fallback) && finding.getScanRunId() != null
                     && finding.getFilePath() != null && !java.nio.file.Path.of(finding.getFilePath()).isAbsolute()) {
                 java.nio.file.Path snapshot = properties.getStorage().rootPath()
                         .resolve(properties.getStorage().getSnapshotsDirectory())
                         .resolve(String.valueOf(finding.getScanRunId())).resolve("current");
                 snippet = SourceSnippetExtractor.extract(snapshot, finding.getFilePath(),
-                        finding.getStartLine(), finding.getEndLine(), fallback);
+                        finding.getStartLine(), finding.getEndLine(), fallback,session);
             }
             finding.setCodeSnippet(snippet);
         }

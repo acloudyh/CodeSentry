@@ -49,6 +49,8 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -148,10 +150,19 @@ public class RemediationReportService {
         for (ScanRun run : runs) {
             if (run.getStatus() != io.codesentry.scan.model.ScanRunStatus.COMPLETED
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
-            ReportData data = load(run.getId(), false);
+            List<FindingView> raw = findingService.findPolicyByRunId(run.getId());
+            List<FindingView> visible = snapshots.readSummary(run.getId());
+            if (visible == null) {
+                Map<Long,AiReviewSummary> reviews = new HashMap<>();
+                aiReviewService.latestPolicyForRun(run.getId()).forEach(review -> reviews.put(review.getFindingId(),review));
+                visible = ReviewedFindingPolicy.select(raw,reviews);
+            }
+            Set<Long> included = visible.stream().map(FindingView::getId).collect(Collectors.toSet());
+            int newCount = (int) visible.stream().filter(f -> "NEW".equals(f.getResultStatus()) || "REOPENED".equals(f.getResultStatus())).count();
+            int excluded = (int) raw.stream().filter(f -> !included.contains(f.getId())).count();
             reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
-                    run.getStatus(), data.findings.size(), data.newFindingCount, run.getCreatedAt(),
-                    data.ledgerFindingCount, groupFindings(data.findings).size(), data.notIncludedFindingCount).withRemediation(data.run));
+                    run.getStatus(), visible.size(), newCount, run.getCreatedAt(),
+                    raw.size(), groupFindings(visible).size(), excluded).withRemediation(run));
         }
         return reports;
     }
@@ -336,13 +347,15 @@ public class RemediationReportService {
         }
         ScanProject project = projectService.requireById(run.getProjectId());
         if (asset != null) project = asset;
-        List<FindingView> raw = findingService.findByRunId(runId);
+        List<FindingView> raw = findingService.findStoredByRunId(runId);
         io.codesentry.finding.service.OnlineRemediationService.attach(run, raw);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
         List<FindingView> visible = snapshots.read(runId);
         if (visible == null) {
             visible = io.codesentry.finding.service.ReviewedFindingPolicy.select(raw, aiReviews);
+            // 仅采纳项需要源码证据；未采纳的数千条问题只进入排除清单。
+            findingService.enrichSnippets(visible);
             if (archive) visible = snapshots.freeze(runId, visible);
         }
         io.codesentry.finding.service.OnlineRemediationService.attach(run, visible);

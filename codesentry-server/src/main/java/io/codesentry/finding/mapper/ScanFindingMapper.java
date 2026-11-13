@@ -36,7 +36,9 @@ public interface ScanFindingMapper {
                        @Param("createdAt") LocalDateTime createdAt);
 
     /** 仅加载报告采纳判断及去重所需字段，不读取大段证据或源码。 */
-    @Select("SELECT f.id,f.project_id,f.scanner,f.rule_id,i.scan_run_id,i.file_path,i.start_line,i.end_line,t.triage_status " +
+    @Select("SELECT f.id,f.project_id,f.scanner,f.rule_id,f.category,i.scan_run_id,i.file_path,i.start_line,i.end_line,i.result_status,t.triage_status, " +
+            "CASE WHEN LOWER(f.scanner)='trivy' AND UPPER(f.category)='VULNERABILITY' " +
+            "THEN SUBSTRING_INDEX(i.code_snippet,CHAR(10),1) ELSE NULL END code_snippet " +
             "FROM scan_finding_instance i JOIN scan_finding f ON f.id=i.finding_id " +
             "LEFT JOIN scan_triage t ON t.finding_id=f.id AND t.project_id=f.project_id " +
             "WHERE i.scan_run_id=#{scanRunId} ORDER BY FIELD(f.severity,'CRITICAL','HIGH','MEDIUM','LOW','INFO'),i.file_path,i.start_line")
