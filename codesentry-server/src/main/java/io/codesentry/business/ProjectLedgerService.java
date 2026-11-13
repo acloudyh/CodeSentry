@@ -18,8 +18,12 @@ public class ProjectLedgerService {
     /** 注入项目范围、原报告采纳、工具复核与扫描证据服务。 */
     public ProjectLedgerService(JdbcTemplate db,BusinessProjectService projects,RemediationReportService reports,io.codesentry.finding.service.FindingPersistenceService evidence) { this.db=db;this.projects=projects;this.reports=reports;this.evidence=evidence; }
     /** 按轮次和资产读取原扫描问题，在数据库计算全范围统计并筛选分页；失败项不借用历史结果。 */
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public Map<String,Object> page(Long projectId,Long roundId,Long assetId,String severity,String triage,String reportState,String keyword,int page,int size) {
+        return page(projectId,roundId,assetId,severity,triage,reportState,keyword,page,size,"ALL");
+    }
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String,Object> page(Long projectId,Long roundId,Long assetId,String severity,String triage,String reportState,String keyword,int page,int size,String issueType) {
+        if(!all(issueType)&&!Set.of("QUALITY","SECURITY","AUDIT").contains(issueType))throw BusinessProjectService.bad("问题分类无效");
         projects.require(projectId);
         if(roundId==null) roundId=projects.latestRoundId(projectId);
         page=Math.max(1,page); size=Math.min(500,Math.max(1,size));
@@ -50,9 +54,12 @@ public class ProjectLedgerService {
                 + "JOIN scan_finding_instance i ON i.scan_run_id=scope.run_id "
                 + "JOIN scan_finding f ON f.id=i.finding_id "
                 + "LEFT JOIN scan_triage t ON t.finding_id=f.id AND t.project_id=f.project_id";
+        String classification=io.codesentry.finding.service.FindingClassification.sql("f");
+        String typeWhere=all(issueType)?"":" WHERE ("+classification+")='"+issueType+"'";
+        Map<String,Object> classCounts=db.queryForMap("SELECT COALESCE(SUM(("+classification+")='QUALITY'),0) quality,COALESCE(SUM(("+classification+")='SECURITY'),0) security,COALESCE(SUM(("+classification+")='AUDIT'),0) audit"+joins,scopeArgs.toArray());
         Map<String,Object> counts = db.queryForMap("SELECT COUNT(*) total, "
                 + "COALESCE(SUM(i.result_status IN ('NEW','REOPENED')),0) newCount, "
-                + "COALESCE(SUM(i.result_status='FIXED'),0) fixedCount" + joins, scopeArgs.toArray());
+                + "COALESCE(SUM(i.result_status='FIXED'),0) fixedCount" + joins + typeWhere, scopeArgs.toArray());
         String included = adopted.isEmpty() ? "FALSE" : "(" + String.join(" OR ", adopted) + ")";
         String state = "CASE WHEN " + included + " THEN 'INCLUDED' "
                 + "WHEN t.triage_status IS NOT NULL OR ar.finding_id IS NOT NULL THEN 'EXCLUDED' ELSE 'PENDING' END";
@@ -60,10 +67,11 @@ public class ProjectLedgerService {
                 + String.join(",", Collections.nCopies(scope.size(), "?"))
                 + ")) ar ON ar.scan_run_id=i.scan_run_id AND ar.finding_id=f.id";
         String base = "SELECT i.id instance_id,f.id,f.severity,f.title,f.rule_id,i.file_path,t.triage_status,"
-                + "scope.asset_id,scope.asset_name," + state + " report_state" + joins + reviews;
+                + "scope.asset_id,scope.asset_name,"+classification+" issue_type," + state + " report_state" + joins + reviews;
         List<Object> args = new ArrayList<>(adoptionArgs); args.addAll(scopeArgs);
         scope.forEach(item -> args.add(item.runId));
         StringBuilder where = new StringBuilder(" WHERE 1=1");
+        if(!all(issueType)){where.append(" AND q.issue_type=?");args.add(issueType);}
         if (!all(severity)) { where.append(" AND q.severity=?"); args.add(severity); }
         if (!all(triage)) {
             if ("PENDING".equals(triage)) where.append(" AND q.triage_status IS NULL");
@@ -95,6 +103,7 @@ public class ProjectLedgerService {
         Map<String,Object> response = new LinkedHashMap<>(Map.of("items",pageRows,"total",number(totals,"total"),
                 "page",page,"pageSize",size,"roundId",roundId,"pendingReviewCount",number(totals,"pending"),
                 "includedCount",number(totals,"included")));
+        response.put("classificationCounts",Map.of("quality",number(classCounts,"quality"),"security",number(classCounts,"security"),"audit",number(classCounts,"audit")));
         response.put("summary",Map.of("total",number(counts,"total"),"newCount",number(counts,"newCount"),"fixedCount",number(counts,"fixedCount")));
         return response;
     }

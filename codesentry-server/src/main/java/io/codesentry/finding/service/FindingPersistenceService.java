@@ -59,6 +59,9 @@ public class FindingPersistenceService {
     }
 
     /** 报告先按审核政策筛选，再为采纳项回读源码；未采纳项不访问文件系统。 */
+    /** 审核规划保留全部原始命中，以便审计已被报告规则排除的线索。 */
+    public List<FindingView> findAuditInputsByRunId(Long runId) { return mapper.findByRunId(runId); }
+
     public List<FindingView> findStoredByRunId(Long runId) {
         return excludeSuppressedRules(mapper.findByRunId(runId));
     }
@@ -70,6 +73,11 @@ public class FindingPersistenceService {
 
     public List<FindingView> findRecent(int limit) {
         return enrichSnippets(excludeSuppressedRules(mapper.findRecent(Math.min(Math.max(limit, 1), 500))));
+    }
+
+    public List<FindingView> findClassifiedRecent(int limit,String type) {
+        if(!java.util.Set.of("QUALITY","SECURITY","AUDIT").contains(type))throw new BusinessException(HttpStatus.BAD_REQUEST,"问题分类无效");
+        return enrichSnippets(excludeSuppressedRules(mapper.findClassifiedRecent(Math.min(500,Math.max(1,limit)),type)));
     }
 
     public List<FindingView> findVisibleByRunId(Long runId) {

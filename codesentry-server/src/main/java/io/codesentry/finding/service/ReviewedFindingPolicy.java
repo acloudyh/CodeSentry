@@ -21,6 +21,8 @@ public final class ReviewedFindingPolicy {
     }
 
     public static boolean isEligible(FindingView finding, AiReviewSummary summary) {
+        // 新安全报告不混入编码规范；旧归档仍按归档清单读取，不改写历史结果。
+        if ("QUALITY".equals(FindingClassification.type(finding))) return false;
         // Human confirmation takes precedence over AI; export never updates source records.
         if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) return false;
         if ("CONFIRMED".equals(finding.getTriageStatus())) return true;
@@ -52,6 +54,7 @@ public final class ReviewedFindingPolicy {
 
     public static String exclusionReason(FindingView finding, AiReviewSummary summary) {
         if (isEligible(finding, summary)) return null;
+        if ("QUALITY".equals(FindingClassification.type(finding))) return "编码规范问题，保留在规范整改清单，不计入安全风险";
         if ("FALSE_POSITIVE".equals(finding.getTriageStatus())) return "人工判定误报";
         if (summary == null) return "尚无工具审核结果，且未人工确认风险";
         if (!Set.of("COMPLETED", "NEEDS_HUMAN").contains(value(summary.getStatus(), "")))

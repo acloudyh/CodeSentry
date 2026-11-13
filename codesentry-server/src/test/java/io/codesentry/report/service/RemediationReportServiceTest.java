@@ -83,6 +83,19 @@ class RemediationReportServiceTest {
         org.mockito.Mockito.verify(findings,org.mockito.Mockito.never()).findByRunId(99L);
     }
 
+    @Test void qualityIsSeparatedFromNewSecurityReportsButArchivedScopeStaysFrozen() {
+        ScanRunService runs=mock(ScanRunService.class);ScanProjectService projects=mock(ScanProjectService.class);FindingPersistenceService findings=mock(FindingPersistenceService.class);AiReviewService reviews=mock(AiReviewService.class);ReportSnapshotStore snapshots=snapshotStore();
+        RemediationReportService service=new RemediationReportService(runs,projects,findings,reviews,snapshots);
+        ScanRun run=reportRun(99L,LocalDateTime.now());when(runs.recentForReports(100,null,null)).thenReturn(List.of(run));when(runs.requireById(99L)).thenReturn(run);
+        ScanProject project=new ScanProject();project.setId(1L);project.setProjectName("分类报告");when(projects.requireById(1L)).thenReturn(project);
+        FindingView quality=finding(1L,"命名规范","CONFIRMED");quality.setRuleId("Alibaba-P3C.LowerCamelCaseVariableNamingRule");
+        FindingView risk=finding(2L,"安全风险","CONFIRMED");risk.setFilePath("risk.java");
+        when(findings.findPolicyByRunId(99L)).thenReturn(List.of(quality,risk));when(findings.findStoredByRunId(99L)).thenReturn(List.of(quality,risk));
+        var summary=service.recent(100).get(0);assertEquals(1,summary.getLedgerFindings());assertEquals(1,summary.getTotalFindings());assertEquals(1,summary.getQualityFindings());
+        String html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("1 条台账问题 = 1 条纳入整改 + 0 条未纳入"));assertTrue(html.contains("1 条规范问题另行维护"));
+        when(snapshots.readSummary(99L)).thenReturn(List.of(quality,risk));summary=service.recent(100).get(0);assertEquals(2,summary.getLedgerFindings());assertEquals(2,summary.getTotalFindings());assertEquals(1,summary.getLegacyQualityInReport());
+    }
+
     private String riskBody(String html) {
         return html.substring(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
     }

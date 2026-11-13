@@ -12,6 +12,12 @@ import java.util.List;
 
 public interface ScanFindingMapper {
 
+    @org.apache.ibatis.annotations.SelectProvider(type=ClassifiedSql.class,method="recent")
+    List<FindingView> findClassifiedRecent(@Param("limit") int limit,@Param("issueType") String issueType);
+    class ClassifiedSql {
+        public String recent(){return "SELECT f.*,i.id instance_id,i.scan_run_id,i.file_path,i.start_line,i.end_line,i.code_snippet,i.result_status,t.triage_status,t.comment triage_comment,t.reviewer,t.expires_at FROM scan_finding_instance i JOIN scan_finding f ON f.id=i.finding_id LEFT JOIN scan_triage t ON t.finding_id=f.id AND t.project_id=f.project_id WHERE i.id=(SELECT i2.id FROM scan_finding_instance i2 WHERE i2.finding_id=i.finding_id ORDER BY i2.created_at DESC,i2.id DESC LIMIT 1) AND ("+io.codesentry.finding.service.FindingClassification.sql("f")+")=#{issueType} ORDER BY i.created_at DESC LIMIT #{limit}";}
+    }
+
     @Insert("INSERT INTO scan_finding(project_id, fingerprint, scanner, rule_id, category, severity, title, " +
             "description, recommendation, cwe, first_seen_at, last_seen_at) VALUES(#{projectId}, #{fingerprint}, " +
             "#{scanner}, #{ruleId}, #{category}, #{severity}, #{title}, #{description}, #{recommendation}, #{cwe}, " +

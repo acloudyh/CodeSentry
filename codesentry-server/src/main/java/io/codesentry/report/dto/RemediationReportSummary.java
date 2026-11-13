@@ -6,6 +6,11 @@ import java.time.LocalDateTime;
 
 /** 单份报告的列表摘要，区分原扫描状态、联网核实状态、台账条数和合并整改组数。 */
 public class RemediationReportSummary {
+    private int qualityFindings,legacyQualityInReport;
+    public int getQualityFindings(){return qualityFindings;}
+    public int getLegacyQualityInReport(){return legacyQualityInReport;}
+    public RemediationReportSummary withClassification(int quality,int legacy){qualityFindings=quality;legacyQualityInReport=legacy;return this;}
+
     private io.codesentry.scan.model.NetworkMode networkMode;
     private String remediationStatus,remediationMessage;
     /** 本次原扫描是否选择联网模式，与当前核实进度分开表达。 */

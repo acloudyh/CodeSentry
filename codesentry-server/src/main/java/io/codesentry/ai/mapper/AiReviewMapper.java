@@ -58,7 +58,7 @@ public interface AiReviewMapper {
     List<AiReviewRecord> findByRunId(@Param("scanRunId") Long scanRunId);
 
     /** 采纳判断无需模型长文本；保留排序和双轮证据身份，复用同一审核政策。 */
-    @Select("SELECT id,project_id,scan_run_id,finding_id,review_job_id,review_round,verdict,confidence,input_hash,prompt_version,status " +
+    @Select("SELECT id,project_id,scan_run_id,finding_id,review_job_id,review_round,provider,model,verdict,confidence,input_hash,prompt_version,status " +
             "FROM scan_ai_review WHERE scan_run_id=#{scanRunId} ORDER BY finding_id,created_at DESC,id DESC")
     List<AiReviewRecord> findPolicyByRunId(@Param("scanRunId") Long scanRunId);
 

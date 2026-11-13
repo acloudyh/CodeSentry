@@ -2,6 +2,9 @@ package io.codesentry.dashboard.dto;
 
 /** 仪表盘全量统计结果；业务项目与扫描资产分别计数，保留旧 projects 资产别名。 */
 public class DashboardSummary {
+    private long securityFindings,qualityFindings;
+    public long getSecurityFindings(){return securityFindings;}
+    public long getQualityFindings(){return qualityFindings;}
     private long businessProjects;
     private long assets;
     private long codeAssets;

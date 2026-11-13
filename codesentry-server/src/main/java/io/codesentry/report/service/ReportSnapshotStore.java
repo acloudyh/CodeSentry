@@ -52,6 +52,7 @@ public class ReportSnapshotStore {
                     String field = parser.currentName(); parser.nextToken();
                     switch (field) {
                         case "id": finding.setId(parser.getValueAsLong()); break;
+                        case "ruleId": finding.setRuleId(parser.getValueAsString()); break;
                         case "scanner": finding.setScanner(parser.getValueAsString()); break;
                         case "category": finding.setCategory(parser.getValueAsString()); break;
                         case "filePath": finding.setFilePath(parser.getValueAsString()); break;

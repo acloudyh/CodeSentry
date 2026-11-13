@@ -47,6 +47,7 @@ public class AiReviewService {
     private final ObjectMapper objectMapper;
     private final TaskExecutor taskExecutor;
     private final TaskExecutor unitExecutor;
+    @org.springframework.beans.factory.annotation.Autowired private AiReviewCostControl costControl;
     private final Map<Long, Set<Future<?>>> children = new ConcurrentHashMap<>();
 
     public AiReviewService(AiReviewMapper mapper, FindingPersistenceService findingService,
@@ -66,6 +67,7 @@ public class AiReviewService {
     }
 
     public AiReviewSummary reviewFinding(Long findingId) {
+        requirePreview();
         ensureEnabled();
         FindingView finding = findingService.requireLatest(findingId);
         ReviewUnit unit = reviewUnits(reviewableFindings(finding.getScanRunId())).stream()
@@ -106,6 +108,7 @@ public class AiReviewService {
     }
 
     private synchronized AiReviewJob startRunReview(Long scanRunId, boolean failedOnly) {
+        requirePreview();
         ensureEnabled();
         ScanRun run = scanRunService.requireById(scanRunId);
         if (run.getStatus() != ScanRunStatus.COMPLETED && run.getStatus() != ScanRunStatus.PARTIAL) {
@@ -149,6 +152,30 @@ public class AiReviewService {
         return job;
     }
 
+    /** 正式模型调用只接受绑定具体范围的预算预览；旧入口不能绕过付费授权。 */
+    private void requirePreview() {
+        if(costControl!=null)throw new BusinessException(HttpStatus.CONFLICT,"请先进行规则预审和预算预览，再明确确认付费审核");
+    }
+    public AiReviewCostControl.Plan preview(Long runId,AiReviewCostControl.Options options) {
+        return costControl.preview(runId,options,latestPolicyForRun(runId));
+    }
+    public synchronized AiReviewJob startApproved(String planId,boolean allowPaid) {
+        AiReviewCostControl.Plan original=costControl.require(planId);
+        if(original.jobId!=null)return requireJob(original.jobId);
+        AiReviewCostControl.Plan plan=costControl.approve(planId,allowPaid,latestPolicyForRun(original.scanRunId));
+        AiReviewJob active=mapper.findLatestJobByRunId(plan.scanRunId);
+        if(active!=null&&Set.of("PENDING","RUNNING").contains(active.getStatus())) throw new BusinessException(HttpStatus.CONFLICT,"该扫描已有运行中的审核，请查看进度");
+        if(plan.modelCandidates>0)ensureEnabled();
+        List<ReviewUnit> units=reviewUnits(costControl.selected(plan));
+        if(units.isEmpty())throw new BusinessException(HttpStatus.BAD_REQUEST,"无需新增模型调用：规范已分流，其余项已审核或待人工确认");
+        AiReviewProvider selected=snapshotProvider();AiReviewJob job=createJob(plan.scanRunId,units.size(),selected);
+        try {costControl.bind(plan,job.getId());}
+        catch(RuntimeException e){mapper.finishJob(job.getId(),"FAILED","预算预览已提交或绑定失败",LocalDateTime.now());throw e;}
+        try {tasks.submit(job.getId(),taskExecutor,()->executeJob(job.getId(),units,selected,job.getConcurrency()));}
+        catch(RuntimeException e){mapper.finishJob(job.getId(),"FAILED","审核队列已满，可重新预览后提交",LocalDateTime.now());throw e;}
+        return job;
+    }
+
     private List<FindingView> reviewableFindings(Long scanRunId) {
         List<FindingView> result = new ArrayList<>();
         for (FindingView finding : findingService.findByRunId(scanRunId)) {
@@ -173,6 +200,8 @@ public class AiReviewService {
             checkJobActive(jobId);
             String status = counts[1] == 0 ? "COMPLETED" : counts[0] == 0 ? "FAILED" : "PARTIAL";
             mapper.finishJob(jobId, status, counts[1] == 0 ? null : counts[1] + " 个问题 AI 审核失败", LocalDateTime.now());
+        } catch (AiReviewCostControl.BudgetExceeded exceeded) {
+            mapper.finishJob(jobId,"BUDGET_EXHAUSTED",exceeded.getMessage(),LocalDateTime.now());
         } catch (CancellationException cancelled) {
             // The cancel endpoint owns the terminal state. Never write fake failures.
         } catch (RuntimeException error) {
@@ -206,7 +235,8 @@ public class AiReviewService {
             try {
                 await(future);
                 counts[0]++;
-            } catch (CancellationException cancelled) { throw cancelled; }
+            } catch (AiReviewCostControl.BudgetExceeded exceeded) { throw exceeded; }
+            catch (CancellationException cancelled) { throw cancelled; }
             catch (RuntimeException error) {
                 checkJobActive(jobId);
                 counts[1]++;
@@ -259,25 +289,35 @@ public class AiReviewService {
         String serialized = evidenceBuilder.serialize(evidence);
         String inputHash = evidenceBuilder.sha256(serialized);
         try {
-            AiReviewDecision primary = selectedProvider.review(evidence, "PRIMARY", null);
+            String cacheKey=costControl==null?null:costControl.jobCacheKey(jobId,unit.primary().getScanRunId(),evidence,selectedProvider);
+            AiReviewCostControl.Cached cached=costControl==null?null:costControl.lookup(cacheKey);
+            if(costControl!=null)AiReviewBudgetContext.open(costControl,jobId);
+            AiReviewDecision primary = cached==null?selectedProvider.review(evidence, "PRIMARY", null):cached.primary;
             checkJobActive(jobId);
-            AiReviewDecision verification = selectedProvider.review(evidence, "VERIFY", primary);
+            AiReviewDecision verification = cached==null?selectedProvider.review(evidence, "VERIFY", primary):cached.verification;
+            if(cached!=null){String source="复用来源扫描 #"+cached.sourceRunId+" / F-"+cached.sourceFindingId+"：";primary.setReason(source+primary.getReason());verification.setReason(source+verification.getReason());}
             checkJobActive(jobId);
-            AiReviewSummary requested = null;
-            for (FindingView member : unit.members) {
-                AiReviewRecord primaryRecord = saveDecision(member, jobId, "PRIMARY", primary, inputHash, selectedProvider);
-                AiReviewRecord verificationRecord = saveDecision(member, jobId, "VERIFY", verification, inputHash, selectedProvider);
-                if (requested == null || Objects.equals(member.getId(), requestedFindingId)) {
-                    requested = summarize(primaryRecord, verificationRecord);
-                }
-            }
+            AiReviewSummary requested=costControl==null?persistUnit(unit,jobId,requestedFindingId,primary,verification,inputHash,selectedProvider,cached)
+                    :costControl.persistResults(()->persistUnit(unit,jobId,requestedFindingId,primary,verification,inputHash,selectedProvider,cached));
+            // 缓存是可选加速层；已成功落库的付费审核不能因缓存写入故障再次调用模型。
+            if(costControl!=null && cached==null){try{costControl.cache(cacheKey,unit.primary(),primary,verification);}
+                catch(RuntimeException error){org.slf4j.LoggerFactory.getLogger(AiReviewService.class).warn("审核结果已保存，结果缓存暂未写入：{}",error.getClass().getSimpleName());}}
             return requested;
         } catch (RuntimeException exception) {
-            if (exception instanceof java.util.concurrent.CancellationException) throw exception;
+            if (exception instanceof java.util.concurrent.CancellationException || exception instanceof AiReviewCostControl.BudgetExceeded) throw exception;
             checkJobActive(jobId);
             for (FindingView member : unit.members) saveFailure(member, jobId, inputHash, exception, selectedProvider);
             throw exception;
-        }
+        } finally { AiReviewBudgetContext.close(); }
+    }
+
+    private AiReviewSummary persistUnit(ReviewUnit unit,Long jobId,Long requestedId,AiReviewDecision primary,AiReviewDecision verification,String inputHash,AiReviewProvider selected,AiReviewCostControl.Cached cached){
+        AiReviewSummary requested=null;
+        for(FindingView member:unit.members){
+            AiReviewRecord a=saveDecision(member,jobId,"PRIMARY",primary,inputHash,selected),b=saveDecision(member,jobId,"VERIFY",verification,inputHash,selected);
+            if(cached!=null)costControl.reused(jobId,member,cached);
+            if(requested==null||Objects.equals(member.getId(),requestedId))requested=summarize(a,b);
+        }return requested;
     }
 
     private List<ReviewUnit> reviewUnits(List<FindingView> findings) {
@@ -291,6 +331,7 @@ public class AiReviewService {
     }
 
     private AiReviewEvidence buildUnitEvidence(ReviewUnit unit) {
+        if(costControl!=null)return costControl.unitEvidence(unit.members);
         AiReviewEvidence evidence = evidenceBuilder.build(unit.primary());
         if (!unit.isGrouped()) return evidence;
         StringBuilder details = new StringBuilder("同一依赖文件与组件版本的多个 CVE，请作为一个整改组统一复核：");

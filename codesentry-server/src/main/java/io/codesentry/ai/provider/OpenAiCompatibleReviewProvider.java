@@ -49,7 +49,7 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", properties.getAi().getModel());
         body.put("temperature", 0);
-        int outputTokens = Math.min(8192, Math.max(1024, properties.getAi().getMaxOutputTokens()));
+        int outputTokens = io.codesentry.ai.service.AiReviewBudgetContext.outputLimit(Math.min(8192, Math.max(1024, properties.getAi().getMaxOutputTokens())));
         body.put("max_tokens", outputTokens);
         body.put("response_format", Map.of("type", "json_object"));
         String configuredThinking = properties.getAi().getThinkingMode();
@@ -70,12 +70,15 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
         try {
             for (int attempt = 0; attempt < 2; attempt++) {
                 io.codesentry.process.CancellableTasks.check();
+                String request=objectMapper.writeValueAsString(body);
+                io.codesentry.ai.service.AiReviewBudgetContext.reserve(request,((Number)body.get("max_tokens")).intValue());
                 String responseBody = httpClient.postJson(endpoint(), properties.getAi().getApiKey(),
-                        objectMapper.writeValueAsString(body), properties.getAi().getReadTimeoutSeconds());
+                        request, properties.getAi().getReadTimeoutSeconds());
                 JsonNode root = objectMapper.readTree(responseBody);
+                io.codesentry.ai.service.AiReviewBudgetContext.usage(root.path("usage"));
                 if ("length".equals(root.path("choices").path(0).path("finish_reason").asText())) {
                     if (attempt == 0) {
-                        body.put("max_tokens", outputTokens * 2);
+                        body.put("max_tokens", io.codesentry.ai.service.AiReviewBudgetContext.outputLimit(outputTokens * 2));
                         continue;
                     }
                     throw new IllegalStateException("AI 扩大输出额度重试后仍被截断，请检查模型输出配置或缩短审核上下文");
@@ -88,6 +91,7 @@ public class OpenAiCompatibleReviewProvider implements AiReviewProvider {
             }
             throw new IllegalStateException("AI 未返回审核结果");
         } catch (Exception exception) {
+            if (exception instanceof io.codesentry.ai.service.AiReviewCostControl.BudgetExceeded) throw (io.codesentry.ai.service.AiReviewCostControl.BudgetExceeded)exception;
             if (exception instanceof IllegalStateException) throw (IllegalStateException) exception;
             throw new IllegalStateException("AI 服务调用失败：" + exception.getClass().getSimpleName(), exception);
         }

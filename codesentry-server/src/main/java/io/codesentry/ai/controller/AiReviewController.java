@@ -22,6 +22,13 @@ import javax.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/ai-reviews")
 public class AiReviewController {
+    @org.springframework.beans.factory.annotation.Autowired private io.codesentry.ai.service.AiReviewCostControl costs;
+    public static class Approval { public boolean allowPaid; }
+    @GetMapping("/budget-policy") public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Policy> budgetPolicy(){return ApiResponse.success(costs.policy());}
+    @PutMapping("/budget-policy") public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Policy> saveBudgetPolicy(@RequestBody io.codesentry.ai.service.AiReviewCostControl.Policy body){return ApiResponse.success(costs.savePolicy(body));}
+    @PostMapping("/scan-runs/{runId}/preview") public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Plan> preview(@PathVariable Long runId,@RequestBody(required=false) io.codesentry.ai.service.AiReviewCostControl.Options body){return ApiResponse.success(service.preview(runId,body));}
+    @PostMapping("/plans/{planId}/start") public ApiResponse<AiReviewJob> start(@PathVariable String planId,@RequestBody Approval body){return ApiResponse.success(service.startApproved(planId,body.allowPaid));}
+    @GetMapping("/jobs/{jobId}/budget") public ApiResponse<java.util.Map<String,Object>> budget(@PathVariable Long jobId){service.requireJob(jobId);return ApiResponse.success(costs.usage(jobId));}
     private final AiReviewService service;
     private final AiReviewConfigurationService configurationService;
 

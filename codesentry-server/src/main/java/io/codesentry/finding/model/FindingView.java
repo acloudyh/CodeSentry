@@ -3,6 +3,12 @@ package io.codesentry.finding.model;
 import java.time.LocalDateTime;
 
 public class FindingView extends ScanFinding {
+    /** 历史记录按当前规则分类展示，不改写原始扫描结果。 */
+    @com.fasterxml.jackson.annotation.JsonProperty(access=com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getIssueType() { return io.codesentry.finding.service.FindingClassification.type(this); }
+    @com.fasterxml.jackson.annotation.JsonProperty(access=com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public java.util.Map<String,String> getPrecheck() { return io.codesentry.finding.service.FindingClassification.precheck(this); }
+
     private OnlineRemediationEvidence onlineRemediation;
     public OnlineRemediationEvidence getOnlineRemediation() { return onlineRemediation; }
     public void setOnlineRemediation(OnlineRemediationEvidence value) { onlineRemediation = value; }

@@ -152,7 +152,9 @@ public class RemediationReportService {
                     && run.getStatus() != io.codesentry.scan.model.ScanRunStatus.PARTIAL) continue;
             List<FindingView> raw = findingService.findPolicyByRunId(run.getId());
             List<FindingView> visible = snapshots.readSummary(run.getId());
+            int qualityCount=(int)raw.stream().filter(f->"QUALITY".equals(f.getIssueType())).count();
             if (visible == null) {
+                raw=raw.stream().filter(f->!"QUALITY".equals(f.getIssueType())).collect(Collectors.toList());
                 Map<Long,AiReviewSummary> reviews = new HashMap<>();
                 aiReviewService.latestPolicyForRun(run.getId()).forEach(review -> reviews.put(review.getFindingId(),review));
                 visible = ReviewedFindingPolicy.select(raw,reviews);
@@ -162,7 +164,8 @@ public class RemediationReportService {
             int excluded = (int) raw.stream().filter(f -> !included.contains(f.getId())).count();
             reports.add(new RemediationReportSummary(run.getId(), run.getProjectId(), run.getScanMode(),
                     run.getStatus(), visible.size(), newCount, run.getCreatedAt(),
-                    raw.size(), groupFindings(visible).size(), excluded).withRemediation(run));
+                    raw.size(), groupFindings(visible).size(), excluded).withRemediation(run)
+                    .withClassification(qualityCount,(int)visible.stream().filter(f->"QUALITY".equals(f.getIssueType())).count()));
         }
         return reports;
     }
@@ -348,10 +351,12 @@ public class RemediationReportService {
         ScanProject project = projectService.requireById(run.getProjectId());
         if (asset != null) project = asset;
         List<FindingView> raw = findingService.findStoredByRunId(runId);
+        int qualityCount=(int)raw.stream().filter(f->"QUALITY".equals(f.getIssueType())).count();
+        List<FindingView> visible = snapshots.read(runId);
+        if(visible==null)raw=raw.stream().filter(f->!"QUALITY".equals(f.getIssueType())).collect(Collectors.toList());
         io.codesentry.finding.service.OnlineRemediationService.attach(run, raw);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
-        List<FindingView> visible = snapshots.read(runId);
         if (visible == null) {
             visible = io.codesentry.finding.service.ReviewedFindingPolicy.select(raw, aiReviews);
             // 仅采纳项需要源码证据；未采纳的数千条问题只进入排除清单。
@@ -359,7 +364,7 @@ public class RemediationReportService {
             if (archive) visible = snapshots.freeze(runId, visible);
         }
         io.codesentry.finding.service.OnlineRemediationService.attach(run, visible);
-        return new ReportData(run, project, visible, aiReviews, raw);
+        return new ReportData(run, project, visible, aiReviews, raw, qualityCount);
     }
 
 
@@ -471,7 +476,7 @@ public class RemediationReportService {
 
     /** 生成台账、采纳、合并及变化数量说明，区分问题条数与整改组数。 */
     private String[][] countExplanationRows(ReportData data, int groups) {
-        return new String[][] {
+        String[][] rows=new String[][] {
                 {"台账对账", data.ledgerFindingCount + " 条台账问题 = " + data.findings.size()
                         + " 条纳入整改 + " + data.notIncludedFindingCount + " 条未纳入", ""},
                 {"合并展示", data.findings.size() + " 条纳入问题，合并为 " + groups + " 组整改项。",
@@ -482,6 +487,8 @@ public class RemediationReportService {
                 {"问题变化", "纳入整改范围内：新增 " + data.newFindingCount + " 条，已修复 "
                         + data.fixedFindingCount + " 条。", ""}
         };
+        if(data.qualityFindingCount==0)return rows;
+        return java.util.stream.Stream.concat(java.util.Arrays.stream(rows),java.util.stream.Stream.of(new String[][]{{"编码规范",data.qualityFindingCount+" 条规范问题另行维护整改清单。","新安全报告不混入规范风险；已归档报告保留原始范围。"}})).toArray(String[][]::new);
     }
 
     /** 将整改建议文本转换为安全的报告段落，不执行内嵌 HTML。 */
@@ -1095,6 +1102,7 @@ public class RemediationReportService {
         private final ScanProject project;
         private final List<FindingView> findings;
         private final List<ReportExclusion> exclusions = new ArrayList<>();
+        private final int qualityFindingCount;
         private final int ledgerFindingCount;
         private final int notIncludedFindingCount;
         private final int newFindingCount;
@@ -1102,7 +1110,8 @@ public class RemediationReportService {
         private final Map<Long, AiReviewSummary> aiReviews;
 
         private ReportData(ScanRun run, ScanProject project, List<FindingView> findings,
-                           Map<Long, AiReviewSummary> aiReviews, List<FindingView> raw) {
+                           Map<Long, AiReviewSummary> aiReviews, List<FindingView> raw, int qualityCount) {
+            this.qualityFindingCount=qualityCount;
             this.ledgerFindingCount = raw.size();
             java.util.Set<Long> includedIds = findings.stream().map(FindingView::getId).collect(Collectors.toSet());
             this.notIncludedFindingCount = (int) raw.stream().filter(f -> !includedIds.contains(f.getId())).count();

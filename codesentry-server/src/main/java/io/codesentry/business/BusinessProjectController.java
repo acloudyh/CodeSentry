@@ -12,6 +12,8 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/v1/business-projects")
 public class BusinessProjectController {
+    @org.springframework.beans.factory.annotation.Autowired private io.codesentry.finding.service.QualityChecklistService quality;
+    @GetMapping("/{id}/quality.csv") public ResponseEntity<byte[]> quality(@PathVariable Long id,@RequestParam(required=false) Long roundId,@RequestParam(required=false) Long assetId){return ResponseEntity.ok().header("Content-Disposition","attachment; filename=quality-checklist.csv").contentType(MediaType.parseMediaType("text/csv;charset=UTF-8")).body(quality.project(id,roundId,assetId));}
     private final BusinessProjectService projects;
     private final ProjectLedgerService ledger;
     private final ProjectReportService reports;
@@ -31,7 +33,7 @@ public class BusinessProjectController {
     @GetMapping("/{id}/rounds/{roundId}") public ApiResponse<ProjectScanRound> round(@PathVariable Long id,@PathVariable Long roundId) { return ApiResponse.success(projects.round(id,roundId)); }
     @PostMapping("/{id}/rounds/{roundId}/retry") public ApiResponse<ProjectScanRound> retry(@PathVariable Long id,@PathVariable Long roundId,@Valid @RequestBody RetryRequest body) { return ApiResponse.success(projects.retry(id,roundId,body.requestKey)); }
     @PostMapping("/{id}/rounds/{roundId}/cancel") public ApiResponse<ProjectScanRound> cancel(@PathVariable Long id,@PathVariable Long roundId) { return ApiResponse.success(projects.cancel(id,roundId)); }
-    @GetMapping("/{id}/findings") public ApiResponse<Map<String,Object>> findings(@PathVariable Long id,@RequestParam(required=false) Long roundId,@RequestParam(required=false) Long assetId,@RequestParam(required=false) String severity,@RequestParam(required=false) String triage,@RequestParam(required=false) String reportState,@RequestParam(required=false) String keyword,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int pageSize) { return ApiResponse.success(ledger.page(id,roundId,assetId,severity,triage,reportState,keyword,page,pageSize)); }
+    @GetMapping("/{id}/findings") public ApiResponse<Map<String,Object>> findings(@PathVariable Long id,@RequestParam(required=false) Long roundId,@RequestParam(required=false) Long assetId,@RequestParam(required=false) String severity,@RequestParam(required=false) String triage,@RequestParam(required=false) String reportState,@RequestParam(required=false) String keyword,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int pageSize,@RequestParam(defaultValue="ALL") String issueType) { return ApiResponse.success(ledger.page(id,roundId,assetId,severity,triage,reportState,keyword,page,pageSize,issueType)); }
     @GetMapping("/{id}/rounds/{roundId}/report/{format}") public ResponseEntity<byte[]> report(@PathVariable Long id,@PathVariable Long roundId,@PathVariable String format) {
         if(!List.of("html","docx","pdf").contains(format)) throw BusinessProjectService.bad("不支持的报告格式");
         if(roundId<0) {
