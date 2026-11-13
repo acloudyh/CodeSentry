@@ -44,7 +44,7 @@ onBeforeUnmount(() => { if(poll) clearInterval(poll) })
 /** 在线打开或下载指定格式的单资产报告，下载名使用资产显示名称。 */
 async function exportReport(runId: number, format: 'html' | 'docx' | 'pdf', projectId: number) {
   if (format === 'html') {
-    window.open(api.reportUrl(runId, format), '_blank', 'noopener,noreferrer')
+    window.open(router.resolve(`/reports/scan-runs/${runId}/view`).href, '_blank', 'noopener,noreferrer')
     return
   }
   const key = `${runId}-${format}`

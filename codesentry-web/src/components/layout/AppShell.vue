@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { navigationError } from '@/router'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { currentTheme, setTheme, themes } from '@/utils/theme'
@@ -69,6 +70,7 @@ const navigation = [
           <strong>{{ previewLabel }}</strong> · 此页面仅包含独立验证数据。
           <a v-if="originalUrl" :href="originalUrl">打开原服务，查看原有项目与历史记录</a>
         </div>
+        <div v-if="navigationError" class="error-banner" role="alert">{{ navigationError }} <a :href="route.fullPath">重新加载页面</a></div>
         <RouterView v-slot="{ Component }">
           <Transition name="page" mode="out-in">
             <component :is="Component" />
