@@ -145,6 +145,27 @@ class BusinessProjectIntegrationTest {
         Map<String,Object> scoped=ledger.page(p.id,round.id,a,null,null,null,"Test1",1,20);
         assertEquals(1,scoped.get("total"));assertEquals(Map.of("total",2,"newCount",1,"fixedCount",1),scoped.get("summary"));
     }
+    @Test void databasePaginationPreservesMetadataLiteralSearchAndAllAdoptionStates() {
+        BusinessProject p=service.save(null,"数据库分页",""); Long a=asset("LOCAL"); service.attach(p.id,a);
+        ProjectScanRound round=service.start(p.id,request(List.of(a),true)); finish(round,"COMPLETED");
+        findings(round.items.get(0),4); Long run=round.items.get(0).runId;
+        List<Long> ids=db.queryForList("SELECT finding_id FROM scan_finding_instance WHERE scan_run_id=? ORDER BY finding_id",Long.class,run);
+        db.update("DELETE FROM scan_triage WHERE finding_id IN (?,?)",ids.get(1),ids.get(2));
+        db.update("UPDATE scan_triage SET triage_status='FALSE_POSITIVE' WHERE finding_id=?",ids.get(3));
+        db.update("UPDATE scan_finding SET title='literal 100%_match' WHERE id=?",ids.get(1));
+        Map<String,Object> included=ledger.page(p.id,round.id,null,null,null,"INCLUDED",null,1,1);
+        assertEquals(1,included.get("total")); assertEquals(1,included.get("includedCount"));
+        ProjectLedgerService.LedgerFinding row=(ProjectLedgerService.LedgerFinding)((List<?>)included.get("items")).get(0);
+        assertEquals(a,row.assetId); assertEquals(assets.findById(a).getDisplayName(),row.assetName); assertEquals("INCLUDED",row.reportState);
+        assertEquals(2,ledger.page(p.id,round.id,null,null,"PENDING",null,null,1,20).get("total"));
+        assertEquals(2,ledger.page(p.id,round.id,null,null,null,"PENDING",null,1,20).get("pendingReviewCount"));
+        assertEquals(1,ledger.page(p.id,round.id,null,null,null,"EXCLUDED",null,1,20).get("total"));
+        assertEquals(1,ledger.page(p.id,round.id,null,null,null,null,"100%_",1,20).get("total"));
+        assertEquals(0,ledger.page(p.id,round.id,null,null,null,null,"100%x",1,20).get("total"));
+        assertTrue(((List<?>)ledger.page(p.id,round.id,null,null,null,null,null,Integer.MAX_VALUE,500).get("items")).isEmpty());
+        assertEquals(0,ledger.page(p.id,round.id,Long.MAX_VALUE,null,null,null,null,1,20).get("total"));
+    }
+
     @Test void ledgerPaginationCrossAssetIdentityAndFrozenReport() throws Exception {
         BusinessProject p=service.save(null,"报告<script>项目","");Long code=asset("LOCAL"),jar=asset("JAR_UPLOAD"),unselected=asset("LOCAL");service.attach(p.id,code);service.attach(p.id,jar);service.attach(p.id,unselected);
         ProjectScanRound r=service.start(p.id,request(List.of(code,jar),false));finish(r,"COMPLETED","COMPLETED");findings(r.items.get(0),205);findings(r.items.get(1),1);
@@ -152,6 +173,7 @@ class BusinessProjectIntegrationTest {
         ProjectReportService.Snapshot frozen=reports.archive(p.id,r.id);assertEquals(206,frozen.includedCount);assertEquals(206,frozen.ledgerCount);assertEquals(206,frozen.severityCounts.get("HIGH"));assertTrue(frozen.html.contains("&lt;script&gt;"));assertTrue(frozen.html.contains("本轮未扫描"));
         db.update("UPDATE scan_triage SET triage_status='FALSE_POSITIVE' WHERE project_id=?",code);service.save(p.id,"修改后的项目","");
         ProjectReportService.Snapshot again=reports.archive(p.id,r.id);assertEquals(frozen.html,again.html);assertEquals(206,again.includedCount);
+        assertEquals(206,ledger.page(p.id,r.id,null,null,null,"INCLUDED",null,1,20).get("total"));
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(reports.docx(again)))) { assertTrue(doc.getTables().size()>1);assertTrue(doc.getParagraphs().stream().anyMatch(v->v.getText().contains("报告<script>项目"))); }
         assertTrue(reports.pdf(again).length>1000);
         ProjectScanRound next=service.start(p.id,request(List.of(code,jar),false));finish(next,"FAILED","FAILED");assertEquals(0,ledger.page(p.id,null,null,null,null,null,null,1,20).get("total"));

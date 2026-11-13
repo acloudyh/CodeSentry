@@ -393,14 +393,23 @@ public class AiReviewService {
         return latestForRun(mapper.findByRunId(scanRunId));
     }
 
+    /** 供列表计算报告采纳，不装载审核长文本，也不逐问题查询未完成任务。 */
+    public List<AiReviewSummary> latestPolicyForRun(Long scanRunId) {
+        return latestForRun(mapper.findPolicyByRunId(scanRunId), true);
+    }
+
     private List<AiReviewSummary> latestForRun(List<AiReviewRecord> allRecords) {
+        return latestForRun(allRecords, false);
+    }
+
+    private List<AiReviewSummary> latestForRun(List<AiReviewRecord> allRecords, boolean policyOnly) {
         Map<Long, List<AiReviewRecord>> grouped = new LinkedHashMap<>();
         for (AiReviewRecord record : allRecords) {
             grouped.computeIfAbsent(record.getFindingId(), ignored -> new ArrayList<>()).add(record);
         }
         List<AiReviewSummary> summaries = new ArrayList<>();
         grouped.values().forEach(records -> {
-            AiReviewSummary summary = latestSummary(records);
+            AiReviewSummary summary = latestSummary(records, policyOnly);
             if (summary != null) summaries.add(summary);
         });
         return summaries;
@@ -435,6 +444,10 @@ public class AiReviewService {
     }
 
     private AiReviewSummary latestSummary(List<AiReviewRecord> records) {
+        return latestSummary(records, false);
+    }
+
+    private AiReviewSummary latestSummary(List<AiReviewRecord> records, boolean policyOnly) {
         if (records == null || records.isEmpty()) return null;
         Long latestJobId = records.get(0).getReviewJobId();
         AiReviewRecord primary = records.stream().filter(item -> Objects.equals(latestJobId, item.getReviewJobId()))
@@ -449,7 +462,8 @@ public class AiReviewService {
             AiReviewSummary failed = new AiReviewSummary();
             failed.setFindingId(records.get(0).getFindingId());
             failed.setScanRunId(records.get(0).getScanRunId());
-            AiReviewJob job = mapper.findJobById(latestJobId);
+            // 未完成与取消均不能自动采纳；轻量列表不需要再读取任务描述。
+            AiReviewJob job = policyOnly ? null : mapper.findJobById(latestJobId);
             if (job != null && "CANCELLED".equals(job.getStatus()) && error == null) {
                 failed.setPrimaryReview(primary);
                 failed.setVerificationReview(verify);

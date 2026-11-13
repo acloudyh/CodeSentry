@@ -35,6 +35,13 @@ public interface ScanFindingMapper {
                        @Param("resultStatus") String resultStatus,
                        @Param("createdAt") LocalDateTime createdAt);
 
+    /** 仅加载报告采纳判断及去重所需字段，不读取大段证据或源码。 */
+    @Select("SELECT f.id,f.project_id,f.scanner,f.rule_id,i.scan_run_id,i.file_path,i.start_line,i.end_line,t.triage_status " +
+            "FROM scan_finding_instance i JOIN scan_finding f ON f.id=i.finding_id " +
+            "LEFT JOIN scan_triage t ON t.finding_id=f.id AND t.project_id=f.project_id " +
+            "WHERE i.scan_run_id=#{scanRunId} ORDER BY FIELD(f.severity,'CRITICAL','HIGH','MEDIUM','LOW','INFO'),i.file_path,i.start_line")
+    List<FindingView> findPolicyByRunId(@Param("scanRunId") Long scanRunId);
+
     @Select("SELECT f.*, i.id AS instance_id, i.scan_run_id, i.file_path, i.start_line, i.end_line, " +
             "i.code_snippet, i.result_status, t.triage_status, t.comment AS triage_comment, t.reviewer, " +
             "t.expires_at FROM scan_finding_instance i JOIN scan_finding f ON f.id = i.finding_id " +

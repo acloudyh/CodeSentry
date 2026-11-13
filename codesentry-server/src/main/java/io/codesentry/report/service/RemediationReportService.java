@@ -87,7 +87,16 @@ public class RemediationReportService {
 
     /** 读取原报告已采纳问题 ID，不合并或重编号原始问题。 */
     public List<Long> includedFindingIds(Long runId) {
-        return load(runId, false).findings.stream().map(FindingView::getId).collect(Collectors.toList());
+        // 保留原接口对不存在扫描/资产的校验，轻量化只改变读取成本。
+        ScanRun run = scanRunService.requireById(runId);
+        projectService.requireById(run.getProjectId());
+        List<Long> archived = snapshots.readIds(runId);
+        if (archived != null) return archived;
+        // 与导出复用同一双轮审核和去重规则，只取政策字段，不生成整份报告。
+        Map<Long, io.codesentry.ai.dto.AiReviewSummary> reviews = new java.util.HashMap<>();
+        aiReviewService.latestPolicyForRun(runId).forEach(review -> reviews.put(review.getFindingId(), review));
+        return ReviewedFindingPolicy.select(findingService.findPolicyByRunId(runId), reviews).stream()
+                .map(FindingView::getId).collect(Collectors.toList());
     }
 
     /** 读取未采纳问题及排除理由，支持与台账逐项对账。 */

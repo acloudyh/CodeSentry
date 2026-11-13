@@ -23,6 +23,32 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class RemediationReportServiceTest {
+    @Test void inclusionIdsReusePolicyWithoutReadingFullReportOrSourceFiles() {
+        ScanRunService runs = mock(ScanRunService.class);
+        ScanProjectService projects = mock(ScanProjectService.class);
+        FindingPersistenceService findings = mock(FindingPersistenceService.class);
+        AiReviewService ai = mock(AiReviewService.class);
+        ReportSnapshotStore snapshots = mock(ReportSnapshotStore.class);
+        RemediationReportService service = new RemediationReportService(runs, projects, findings, ai, snapshots);
+        ScanRun run = new ScanRun(); run.setId(8L); run.setProjectId(1L);
+        when(runs.requireById(8L)).thenReturn(run);
+        when(snapshots.readIds(8L)).thenReturn(null);
+        FindingView confirmed = finding(101L, "confirmed", "CONFIRMED");
+        FindingView pending = finding(102L, "pending", null);
+        when(findings.findPolicyByRunId(8L)).thenReturn(List.of(confirmed, pending));
+        when(ai.latestPolicyForRun(8L)).thenReturn(List.of());
+        assertEquals(List.of(101L), service.includedFindingIds(8L));
+        org.mockito.Mockito.verify(findings, org.mockito.Mockito.never()).findByRunId(8L);
+        org.mockito.Mockito.verify(runs).requireById(8L);
+        org.mockito.Mockito.verify(projects).requireById(1L);
+        org.mockito.Mockito.clearInvocations(findings, ai);
+        when(snapshots.readIds(8L)).thenReturn(List.of(102L));
+        assertEquals(List.of(102L), service.includedFindingIds(8L));
+        when(snapshots.readIds(8L)).thenReturn(List.of());
+        assertEquals(List.of(), service.includedFindingIds(8L));
+        org.mockito.Mockito.verifyNoInteractions(findings, ai);
+    }
+
     private String riskBody(String html) {
         return html.substring(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
     }

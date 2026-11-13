@@ -16,6 +16,27 @@ public class ReportSnapshotStore {
         try { return json.readValue(value, new TypeReference<List<FindingView>>() {}); }
         catch (Exception e) { throw new IllegalStateException("报告归档读取失败", e); }
     }
+    /** 归档清单只提取顶层问题 ID，跳过大段源码和审核文本；null 区别于已归档空清单。 */
+    public List<Long> readIds(Long runId) {
+        String value = mapper.find(runId);
+        if (value == null) return null;
+        List<Long> ids = new java.util.ArrayList<>();
+        try (com.fasterxml.jackson.core.JsonParser parser = json.getFactory().createParser(value)) {
+            if (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.START_ARRAY) throw new IllegalStateException("归档格式错误");
+            while (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.END_ARRAY) {
+                if (parser.currentToken() == null) throw new IllegalStateException("归档内容不完整");
+                if (parser.currentToken() != com.fasterxml.jackson.core.JsonToken.START_OBJECT) throw new IllegalStateException("归档格式错误");
+                while (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.END_OBJECT) {
+                    if (parser.currentToken() == null) throw new IllegalStateException("归档内容不完整");
+                    String field = parser.currentName(); parser.nextToken();
+                    if ("id".equals(field) && parser.currentToken().isNumeric()) ids.add(parser.getLongValue());
+                    else parser.skipChildren();
+                }
+            }
+            return ids;
+        } catch (Exception e) { throw new IllegalStateException("报告归档读取失败", e); }
+    }
+
     public List<FindingView> freeze(Long runId, List<FindingView> findings) {
         try { mapper.insert(runId, json.writeValueAsString(findings)); }
         catch (Exception e) { throw new IllegalStateException("报告归档保存失败", e); }

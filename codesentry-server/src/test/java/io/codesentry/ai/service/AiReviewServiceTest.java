@@ -35,6 +35,28 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.times;
 
 class AiReviewServiceTest {
+    @Test void policySummariesMatchCompleteReviewAndSkipPerFindingJobLookups() {
+        AiReviewMapper mapper = mock(AiReviewMapper.class);
+        CodeSentryProperties properties = new CodeSentryProperties();
+        ObjectMapper json = new ObjectMapper();
+        AiReviewService service = new AiReviewService(mapper, mock(FindingPersistenceService.class), mock(ScanRunService.class),
+                new AiReviewEvidenceBuilder(properties, json), mock(AiReviewProvider.class), properties, json,
+                new SyncTaskExecutor(), new SyncTaskExecutor());
+        AiReviewRecord primary = new AiReviewRecord(), verification = new AiReviewRecord(), pending = new AiReviewRecord();
+        for (AiReviewRecord record : List.of(primary, verification, pending)) {
+            record.setFindingId(1L); record.setScanRunId(8L); record.setReviewJobId(9L);
+            record.setConfidence(new java.math.BigDecimal("0.8")); record.setVerdict("CONFIRMED"); record.setStatus("COMPLETED");
+        }
+        primary.setId(1L); primary.setReviewRound("PRIMARY"); verification.setId(2L); verification.setReviewRound("VERIFY");
+        pending.setId(3L); pending.setFindingId(2L); pending.setReviewRound("PRIMARY");
+        when(mapper.findPolicyByRunId(8L)).thenReturn(List.of(verification, primary, pending));
+        when(mapper.findByRunId(8L)).thenReturn(List.of(verification, primary));
+        List<AiReviewSummary> policy = service.latestPolicyForRun(8L);
+        assertEquals(service.latestForRun(8L).get(0).getConsolidatedVerdict(), policy.get(0).getConsolidatedVerdict());
+        assertEquals("COMPLETED", policy.get(0).getStatus()); assertEquals("FAILED", policy.get(1).getStatus());
+        verify(mapper, never()).findJobById(any());
+    }
+
     @Test
     void jobRecordsReturnsOnlyTheRequestedExecutionTrace() {
         AiReviewMapper mapper = mock(AiReviewMapper.class);

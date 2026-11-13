@@ -58,6 +58,11 @@ public class FindingPersistenceService {
         return enrichSnippets(excludeSuppressedRules(mapper.findByRunId(runId)));
     }
 
+    /** 台账仅需报告采纳身份；保持报告的规则过滤和原始顺序，不回读源码快照。 */
+    public List<FindingView> findPolicyByRunId(Long runId) {
+        return excludeSuppressedRules(mapper.findPolicyByRunId(runId));
+    }
+
     public List<FindingView> findRecent(int limit) {
         return enrichSnippets(excludeSuppressedRules(mapper.findRecent(Math.min(Math.max(limit, 1), 500))));
     }
