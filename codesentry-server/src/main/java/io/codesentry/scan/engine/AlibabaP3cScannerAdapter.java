@@ -25,13 +25,12 @@ import java.util.stream.Stream;
 public class AlibabaP3cScannerAdapter implements ScannerAdapter {
 
     private static final String MAIN_CLASS = "net.sourceforge.pmd.PMD";
+    // 命名风格、Javadoc/作者等注释检查不属于本产品的安全扫描范围，直接不加载规则集。
     private static final String RULESETS = String.join(",",
-            "rulesets/java/ali-comment.xml",
             "rulesets/java/ali-concurrent.xml",
             "rulesets/java/ali-constant.xml",
             "rulesets/java/ali-exception.xml",
             "rulesets/java/ali-flowcontrol.xml",
-            "rulesets/java/ali-naming.xml",
             "rulesets/java/ali-oop.xml",
             "rulesets/java/ali-orm.xml",
             "rulesets/java/ali-other.xml",
