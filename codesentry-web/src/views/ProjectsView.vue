@@ -329,7 +329,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
     <section class="panel">
       <div v-if="visibleProjects.length" class="table-scroll">
         <table class="data-table projects-table" :class="{ 'repository-table': listType !== 'jar' }">
-          <colgroup><col style="width:185px" /><col style="width:100px" /><col v-if="listType !== 'jar'" style="width:130px" /><col style="width:280px" /><col v-if="listType !== 'jar'" style="width:90px" /><col style="width:105px" /><col v-if="listType !== 'jar'" style="width:135px" /><col style="width:260px" /></colgroup>
+          <colgroup><col style="width:185px" /><col style="width:100px" /><col v-if="listType !== 'jar'" style="width:130px" /><col style="width:280px" /><col v-if="listType !== 'jar'" style="width:90px" /><col style="width:105px" /><col v-if="listType !== 'jar'" style="width:135px" /><col style="width:340px" /></colgroup>
           <thead><tr><th>编号 / 项目</th><th>来源</th><th v-if="listType !== 'jar'">应用 / 运行环境</th><th>{{ listType === 'jar' ? '当前 JAR 文件' : '仓库位置' }}</th><th v-if="listType !== 'jar'">默认分支</th><th>登记时间</th><th v-if="listType !== 'jar'">代码同步</th><th class="actions-heading">操作</th></tr></thead>
           <tbody>
             <tr v-for="project in visibleProjects" :key="project.id">
@@ -340,7 +340,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
               <td v-if="listType !== 'jar'" class="mono">{{ project.defaultBranch ?? '-' }}</td>
               <td class="mono">{{ formatChinaDate(project.createdAt) }}</td>
               <td v-if="listType !== 'jar'"><template v-if="project.sourceType === 'GIT'"><span :class="{ 'danger-text': project.lastSyncStatus === 'FAILED' }" :title="project.lastSyncMessage">{{ repositorySyncLabel(project) }}</span><small class="cache-location">{{ formatChinaTime(project.lastSyncedAt) }}</small></template><span v-else class="muted">本地目录</span></td>
-              <td><div class="row-actions">
+              <td class="actions-cell"><div class="row-actions">
                 <button v-if="project.sourceType === 'GIT'" type="button" class="row-action-link" :disabled="saving || syncingId !== null || repositorySyncBusy(project)" @click="syncCode(project)">{{ repositorySyncBusy(project) ? repositorySyncLabel(project) : project.lastSyncStatus === 'FAILED' ? '重试拉取' : '同步代码' }}</button>
                 <button type="button" class="button primary compact" :disabled="saving || syncingId !== null || !repositoryReady(project)" @click="startProjectScan(project)">发起扫描</button>
                 <button type="button" class="row-action-link" :disabled="saving || syncingId !== null" @click="project.sourceType === 'JAR_UPLOAD' ? editJar(project) : edit(project)">编辑</button>
@@ -357,7 +357,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
 
 <style scoped>
 .projects-table { min-width: 1040px; table-layout:fixed; }
-.repository-table { min-width:1300px; }
+.repository-table { min-width:1380px; }
 .repository-location,.cache-location{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cache-location{margin-top:6px;color:var(--muted)}
 .git-url-row{display:flex;gap:10px;align-items:center}.git-url-row .input{flex:1;min-width:0}.git-url-row .button{flex-shrink:0}.git-check-result{display:grid;gap:6px}@media(max-width:640px){.git-url-row{align-items:stretch;flex-direction:column}}

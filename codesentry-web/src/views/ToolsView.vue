@@ -91,7 +91,7 @@ onMounted(load)
   <div class="page-stack tools-page">
     <section class="section-heading tools-heading">
       <div><span class="eyebrow">模型接入中心</span><h2>工具管理</h2><p>统一维护工具复核所使用的模型服务。配置写入本地数据库，API Key 加密保存，服务或容器重启后自动恢复。</p></div>
-      <button class="button primary" @click="openCreate">＋ 新增工具</button>
+      <button class="button primary" @click="openCreate">+ 新增工具</button>
     </section>
 
     <div v-if="error" class="error-banner">{{ error }}</div>
@@ -108,7 +108,7 @@ onMounted(load)
       <div v-if="loading" class="empty-state compact-empty"><h3>正在读取工具配置</h3></div>
       <div v-else-if="tools.length" class="table-scroll">
         <table class="data-table tool-table">
-          <thead><tr><th>工具名称</th><th>服务商 / 模型</th><th>服务地址</th><th>密钥</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+          <thead><tr><th>工具名称</th><th>服务商 / 模型</th><th>服务地址</th><th>密钥</th><th>状态</th><th>更新时间</th><th class="actions-heading">操作</th></tr></thead>
           <tbody><tr v-for="tool in tools" :key="tool.id">
             <td><div class="tool-name"><span class="provider-mark">{{ tool.provider === 'DEEPSEEK' ? 'DS' : 'AI' }}</span><div><strong>{{ tool.name }}</strong><small v-if="tool.defaultTool">当前默认工具</small></div></div></td>
             <td><strong>{{ providers.find(item => item.id === tool.provider)?.label || tool.provider }}</strong><div class="mono subtle">{{ tool.model }}</div></td>
@@ -116,7 +116,7 @@ onMounted(load)
             <td><span :class="['key-state', { ready: tool.apiKeyConfigured }]">{{ tool.apiKeyConfigured ? '● 已配置' : '○ 未配置' }}</span></td>
             <td><span :class="['config-state', { enabled: tool.enabled }]">{{ tool.enabled ? '已启用' : '已停用' }}</span></td>
             <td class="mono subtle">{{ formatChinaTime(tool.updatedAt) }}</td>
-            <td><div class="row-actions"><button v-if="!tool.defaultTool" class="text-button" @click="makeDefault(tool)">设为当前</button><button class="text-button" @click="openEdit(tool)">编辑</button><button class="text-button danger-text" @click="removeTool(tool)">删除</button></div></td>
+            <td class="actions-cell"><div class="row-actions"><button v-if="!tool.defaultTool" class="text-button" @click="makeDefault(tool)">设为当前</button><button class="text-button" @click="openEdit(tool)">编辑</button><button class="text-button danger-text" @click="removeTool(tool)">删除</button></div></td>
           </tr></tbody>
         </table>
       </div>

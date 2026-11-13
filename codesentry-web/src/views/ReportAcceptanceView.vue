@@ -73,17 +73,17 @@ onBeforeUnmount(() => { generation++; if (timer) clearTimeout(timer) })
     </section>
     <section v-if="data" class="panel">
       <div class="acceptance-filters"><button class="button secondary compact" :class="{active: filter === 'ALL'}" @click="filter = 'ALL'">全部 {{ data.items.length }}</button><button v-for="(count, state) in data.counts" :key="state" class="button secondary compact" :class="{active: filter === state}" @click="filter = String(state)">{{ labels[state] ?? state }} {{ count }}</button></div>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>原报告问题</th><th>位置</th><th>验收状态</th><th>整改说明 / 提交记录</th><th>操作</th></tr></thead><tbody>
-        <tr v-for="row in rows" :key="row.finding.instanceId ?? row.finding.id"><td><StatusBadge :value="row.finding.severity" /><div>{{ row.finding.title }}</div><small class="mono">F-{{ row.finding.id }}</small><small class="muted">{{ row.finding.scanner }} / {{ row.finding.ruleId }}</small></td><td class="mono">{{ row.finding.filePath }}<span v-if="row.finding.startLine">:{{ row.finding.startLine }}</span></td><td><strong :class="row.status === 'NOT_DETECTED' ? 'acceptance-clear' : row.status === 'STILL_PRESENT' ? 'danger-text' : ''">{{ labels[row.status] ?? row.status }}</strong></td><td class="acceptance-note">{{ row.comment || '尚未填写' }}<small v-if="row.reviewer" class="muted"> · {{ row.reviewer }}</small></td><td><button class="button secondary compact" @click="edit(row)">记录整改</button></td></tr>
+      <div class="table-scroll"><table class="data-table acceptance-table"><thead><tr><th>原报告问题</th><th>位置</th><th>验收状态</th><th>整改说明 / 提交记录</th><th class="actions-heading">操作</th></tr></thead><tbody>
+        <tr v-for="row in rows" :key="row.finding.instanceId ?? row.finding.id"><td><StatusBadge :value="row.finding.severity" /><div>{{ row.finding.title }}</div><small class="mono">F-{{ row.finding.id }}</small><small class="muted">{{ row.finding.scanner }} / {{ row.finding.ruleId }}</small></td><td class="mono">{{ row.finding.filePath }}<span v-if="row.finding.startLine">:{{ row.finding.startLine }}</span></td><td><strong :class="row.status === 'NOT_DETECTED' ? 'acceptance-clear' : row.status === 'STILL_PRESENT' ? 'danger-text' : ''">{{ labels[row.status] ?? row.status }}</strong></td><td class="acceptance-note">{{ row.comment || '尚未填写' }}<small v-if="row.reviewer" class="muted"> · {{ row.reviewer }}</small></td><td class="actions-cell"><button class="button secondary compact" @click="edit(row)">记录整改</button></td></tr>
         <tr v-if="!rows.length"><td colspan="5" class="muted">当前没有符合条件的问题。</td></tr>
       </tbody></table></div>
     </section>
-    <form v-if="editing" class="panel panel-pad" @submit.prevent="save">
+    <form v-if="editing" class="panel panel-pad page-stack" @submit.prevent="save">
       <h3>记录整改 · {{ editing.finding.title }}</h3>
       <div class="field"><label for="remediation-note">整改说明 / 提交编号</label><textarea id="remediation-note" v-model="note" class="textarea" rows="4" required placeholder="说明修改内容、提交编号及验证要点"></textarea></div>
       <div class="field"><label for="remediation-reviewer">记录人</label><input id="remediation-reviewer" v-model="reviewer" class="input" required maxlength="128" /></div>
       <p class="muted">保存后标记为“已整改待验证”；已有复扫结果仍以选定验证批次为准，后续修改需要再次复扫。</p>
-      <div class="report-actions"><button type="button" class="button secondary" :disabled="saving" @click="editing = null">取消</button><button class="button primary" :disabled="saving">{{ saving ? '保存中…' : '保存整改记录' }}</button></div>
+      <div class="form-actions"><button type="button" class="button secondary" :disabled="saving" @click="editing = null">取消</button><button class="button primary" :disabled="saving">{{ saving ? '保存中…' : '保存整改记录' }}</button></div>
     </form>
   </div>
 </template>
@@ -96,4 +96,10 @@ onBeforeUnmount(() => { generation++; if (timer) clearTimeout(timer) })
 .acceptance-clear { color:var(--cyan) }
 h3 { margin:8px 0 16px }
 .field { margin:18px 0 }
+</style>
+
+<style scoped>
+.acceptance-table { min-width: 1080px; }
+.acceptance-table th:last-child { width: 145px; }
+.acceptance-table th:nth-child(3) { width: 145px; }
 </style>

@@ -387,7 +387,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
       <div v-if="loading" class="empty-state compact-empty"><h3>正在加载扫描批次</h3><p>正在读取 {{ selectedRunId ? batchNumber(selectedRunId) : '' }} 的问题明细。</p></div>
       <div v-else-if="filtered.length" class="table-scroll findings-table">
         <table class="data-table">
-          <thead><tr><th class="selection-column"><input type="checkbox" aria-label="选择当前页全部问题" :checked="allPageSelected" @change="togglePageSelection" /></th><th>扫描批次</th><th>等级</th><th>问题</th><th>位置</th><th>扫描器 / 规则</th><th>变化</th><th>工具建议</th><th>人工结论</th><th>报告状态</th><th>操作</th></tr></thead>
+          <thead><tr><th class="selection-column"><input type="checkbox" aria-label="选择当前页全部问题" :checked="allPageSelected" @change="togglePageSelection" /></th><th>扫描批次</th><th>等级</th><th>问题</th><th>位置</th><th>扫描器 / 规则</th><th>变化</th><th>工具建议</th><th>人工结论</th><th>报告状态</th><th class="actions-heading">操作</th></tr></thead>
           <tbody>
             <tr v-for="item in pagedFindings" :key="`${item.scanRunId}-${item.id}`" :class="{ 'is-selected': selectedFindingIds.includes(item.id) }">
               <td class="selection-column"><input type="checkbox" :aria-label="`选择问题 ${findingTitle(item)}`" :checked="selectedFindingIds.includes(item.id)" @change="toggleFindingSelection(item.id)" /></td>
@@ -400,7 +400,7 @@ onBeforeUnmount(() => { if (aiPollTimer) window.clearTimeout(aiPollTimer) })
               <td><div v-if="aiReviews[item.id]" class="ai-review-cell"><strong>{{ aiVerdictLabel(aiReviews[item.id].consolidatedVerdict) }}</strong><span v-if="aiReviews[item.id].confidenceAvailable">可信度 {{ aiConfidence(aiReviews[item.id].confidence) }}</span><small v-if="aiReviews[item.id].errorMessage">{{ aiReviews[item.id].errorMessage }}</small><small v-if="aiReviews[item.id].disagreement">工具结果存在分歧，必须人工处理</small><button v-if="aiReviews[item.id].status !== 'FAILED'" type="button" class="snippet-trigger" @click="applyAiSuggestion(item)">带入人工复核</button><button v-else type="button" class="snippet-trigger" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '重试中…' : '重新审核' }}</button></div><button v-else-if="aiConfig.enabled" class="button secondary compact" :disabled="aiReviewingId === item.id" @click="reviewWithAi(item)">{{ aiReviewingId === item.id ? '审核中…' : '工具初审' }}</button><span v-else class="muted">未启用</span></td>
               <td><StatusBadge v-if="item.triageStatus" :value="item.triageStatus" /><span v-else class="muted">等待复核</span><div v-if="item.reviewer" class="mono finding-reviewer">复核人：{{ item.reviewer }}</div></td>
               <td><strong>{{ reportStatus(item) }}</strong><small v-if="exclusionReasons[item.id]" class="exclusion-reason">{{ exclusionReasons[item.id] }}</small></td>
-              <td><button class="button secondary compact" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button></td>
+              <td class="actions-cell"><button class="button secondary compact" @click="openReview(item)">{{ item.triageStatus ? '更新复核' : '人工复核' }}</button></td>
             </tr>
           </tbody>
         </table>

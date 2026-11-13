@@ -108,9 +108,9 @@ onMounted(async () => {
       <div v-if="loading" class="notice">正在查询报告…</div>
       <div v-else-if="runs.length" class="table-scroll">
         <table class="data-table reports-table">
-          <colgroup><col style="width:130px" /><col /><col style="width:130px" /><col style="width:190px" /><col style="width:240px" /><col style="width:100px" /><col style="width:125px" /><col style="width:360px" /></colgroup>
+          <colgroup><col style="width:130px" /><col /><col style="width:130px" /><col style="width:190px" /><col style="width:240px" /><col style="width:100px" /><col style="width:125px" /><col style="width:400px" /></colgroup>
           <thead><tr><th>报告编号</th><th>扫描资产</th><th>扫描类型</th><th>扫描时间</th><th>统计</th><th>扫描状态</th><th>联网核实状态</th><th class="actions-heading">查看 / 导出</th></tr></thead>
-          <tbody><tr v-for="run in runs" :key="run.id"><td class="mono">CSR-{{ String(run.id).padStart(6,'0') }}</td><td><strong>{{ projectName(run.projectId) }}</strong><div class="report-count-detail">{{ businessName(run.projectId) }}</div></td><td>{{ run.scanMode === 'FULL' ? '全量整改报告' : '增量整改报告' }}</td><td class="mono scan-timestamp">{{ formatChinaTime(run.createdAt) }}</td><td><b>{{ run.ledgerFindings }} 条台账问题</b><div class="report-count-detail">{{ run.totalFindings }} 条纳入整改 / {{ run.notIncludedFindings }} 条未纳入</div><div class="report-count-detail">合并整改 {{ run.detailGroups }} 组 · 纳入新增 {{ run.newFindings }} 条</div></td><td><StatusBadge :value="run.status" /></td><td><VerificationStatusBadge :network-mode="run.networkMode" :status="run.remediationStatus" :message="run.remediationMessage" /></td><td><div class="row-actions">
+          <tbody><tr v-for="run in runs" :key="run.id"><td class="mono">CSR-{{ String(run.id).padStart(6,'0') }}</td><td><strong>{{ projectName(run.projectId) }}</strong><div class="report-count-detail">{{ businessName(run.projectId) }}</div></td><td>{{ run.scanMode === 'FULL' ? '全量整改报告' : '增量整改报告' }}</td><td class="mono scan-timestamp">{{ formatChinaTime(run.createdAt) }}</td><td><b>{{ run.ledgerFindings }} 条台账问题</b><div class="report-count-detail">{{ run.totalFindings }} 条纳入整改 / {{ run.notIncludedFindings }} 条未纳入</div><div class="report-count-detail">合并整改 {{ run.detailGroups }} 组 · 纳入新增 {{ run.newFindings }} 条</div></td><td><StatusBadge :value="run.status" /></td><td><VerificationStatusBadge :network-mode="run.networkMode" :status="run.remediationStatus" :message="run.remediationMessage" /></td><td class="actions-cell"><div class="row-actions">
                 <button type="button" class="button primary compact" :disabled="Boolean(exporting) || onlineBusy(run)" @click="exportReport(run.id, 'html', run.projectId)">在线查看</button>
                 <ActionDropdown :label="exporting.startsWith(`${run.id}-`) ? '生成中…' : '导出'" :disabled="Boolean(exporting) || onlineBusy(run)" :items="[{ label: 'Word 文档', value: 'docx' }, { label: 'PDF 文档', value: 'pdf' }]" @select="exportReport(run.id, $event as 'docx' | 'pdf', run.projectId)" />
                 <button v-if="run.networkMode === 'ONLINE'" type="button" class="row-action-link" :disabled="onlineBusy(run) || verifying !== null" :title="run.remediationMessage" @click="verifyOnline(run)">{{ onlineBusy(run) ? '正在补查…' : '补充联网核实' }}</button>
@@ -133,7 +133,7 @@ onMounted(async () => {
 
 <style scoped>
 .report-filters{display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto;gap:16px;padding:20px;align-items:end}.filter-note{grid-column:1/-1}.report-filters .report-actions{flex-wrap:wrap}@media(max-width:850px){.report-filters{grid-template-columns:1fr}.filter-note{grid-column:auto}}
-.reports-table { min-width: 1500px; }
+.reports-table { min-width: 1540px; }
 .report-page-number { width: 75px; }
 .actions-heading { text-align: right; }
 .report-count-detail { margin-top: 0.35rem; color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
