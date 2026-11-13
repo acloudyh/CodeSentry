@@ -60,7 +60,7 @@ const navigation = [
         </div>
         <div class="command-actions">
           <label class="theme-switch"><span>页面主题</span><select :value="currentTheme" aria-label="页面主题" @change="setTheme(($event.target as HTMLSelectElement).value)"><option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.name }}</option></select></label>
-          <div class="time-chip"><span>东八区时间</span><b>{{ formatChinaDate() }}</b></div>
+          <div class="time-chip"><span>东八区时间</span><b><time class="datetime-text">{{ formatChinaDate() }}</time></b></div>
         </div>
       </header>
 

@@ -71,7 +71,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
               <td><b class="danger-text">+{{ run.newFindings }}</b><span class="muted"> 新增</span> · <b class="signal-text">-{{ run.fixedFindings }}</b><span class="muted"> 修复</span><div class="mono" style="margin-top:4px">合计 {{ run.totalFindings }}</div></td>
               <td><StatusBadge :value="run.status" /><div v-if="run.errorMessage" class="danger-text clamp-error" style="font-size:10px;margin-top:6px" :title="run.errorMessage">{{ run.errorMessage }}</div></td>
               <td><VerificationStatusBadge :network-mode="run.networkMode" :status="run.remediationStatus" :message="run.remediationMessage" /></td>
-              <td class="mono scan-timestamp">{{ formatTime(run.createdAt) }}</td>
+              <td class="mono scan-timestamp"><time class="datetime-text">{{ formatTime(run.createdAt) }}</time></td>
               <td class="actions-cell"><div class="scan-row-actions"><RouterLink :to="`/scans/${run.id}`" class="table-action"><span aria-hidden="true">⌕</span>详情</RouterLink><RouterLink :to="{ path: '/findings', query: { projectId: run.projectId, runId: run.id } }" class="table-action"><span aria-hidden="true">☷</span>问题台账</RouterLink><button v-if="['PENDING','PREPARING','RUNNING'].includes(run.status)" class="table-action danger" :disabled="stopping === run.id" @click="stopScan(run.id)"><span aria-hidden="true">■</span>{{ stopping === run.id ? '停止中…' : '停止扫描' }}</button></div></td>
             </tr>
           </tbody>

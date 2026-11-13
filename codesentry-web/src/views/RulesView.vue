@@ -44,7 +44,7 @@ onUnmounted(() => { disposed = true; clearTimeout(timer) })
       <div class="library-info">
         <h3>本地社区规则库 <span class="rule-source" :class="{ offline: library?.available }">{{ library?.available ? '本地可用' : '尚未同步' }}</span></h3>
         <p>更新时联网下载并校验，扫描时使用本地快照；更新失败会保留原版本。</p>
-        <p v-if="library?.available" class="library-meta">版本 <code>{{ library.version }}</code> · {{ library.ruleCount }} 条规则 · 最近更新 {{ library.updatedAt?.replace('T', ' ').slice(0, 19) }}（东八区）</p>
+        <p v-if="library?.available" class="library-meta">版本 <code>{{ library.version }}</code> · {{ library.ruleCount }} 条规则 · 最近更新 <time class="datetime-text">{{ library.updatedAt?.replace('T', ' ').slice(0, 19) }}</time>（东八区）</p>
         <p v-if="library" class="library-message" :class="{ failed: library.state === 'FAILED' }" role="status">{{ library.message }}</p>
       </div>
       <button class="button secondary" :disabled="updating" @click="update">{{ updating ? '正在更新规则库…' : '手动更新规则库' }}</button>

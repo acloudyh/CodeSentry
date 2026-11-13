@@ -58,7 +58,7 @@ onMounted(async () => {
                 <td><span class="mono">{{ shortCommit(run.scanCommit) }}</span></td>
                 <td><b :class="run.newFindings ? 'danger-text' : 'signal-text'">+{{ run.newFindings }}</b> / {{ run.totalFindings }}</td>
                 <td><StatusBadge :value="run.status" /></td>
-                <td class="mono scan-timestamp">{{ formatTime(run.createdAt) }}</td>
+                <td class="mono scan-timestamp"><time class="datetime-text">{{ formatTime(run.createdAt) }}</time></td>
               </tr>
             </tbody>
           </table>

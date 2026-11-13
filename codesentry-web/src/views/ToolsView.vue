@@ -115,7 +115,7 @@ onMounted(load)
             <td><span class="endpoint-text" :title="tool.baseUrl">{{ tool.baseUrl }}</span></td>
             <td><span :class="['key-state', { ready: tool.apiKeyConfigured }]">{{ tool.apiKeyConfigured ? '● 已配置' : '○ 未配置' }}</span></td>
             <td><span :class="['config-state', { enabled: tool.enabled }]">{{ tool.enabled ? '已启用' : '已停用' }}</span></td>
-            <td class="mono subtle">{{ formatChinaTime(tool.updatedAt) }}</td>
+            <td class="mono subtle datetime-cell"><time class="datetime-text">{{ formatChinaTime(tool.updatedAt) }}</time></td>
             <td class="actions-cell"><div class="row-actions"><button v-if="!tool.defaultTool" class="text-button" @click="makeDefault(tool)">设为当前</button><button class="text-button" @click="openEdit(tool)">编辑</button><button class="text-button danger-text" @click="removeTool(tool)">删除</button></div></td>
           </tr></tbody>
         </table>

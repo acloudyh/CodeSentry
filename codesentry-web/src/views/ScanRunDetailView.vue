@@ -109,8 +109,8 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
             <span>扫描规则集</span><b :title="run.ruleProfile">{{ ruleProfileLabel(run.ruleProfile) }}</b>
             <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '文件 SHA-256' : '扫描提交' }}</span><b class="mono">{{ shortCommit(run.scanCommit) }}</b>
             <span>共同祖先提交</span><b class="mono">{{ shortCommit(run.mergeBaseCommit) }}</b>
-            <span>开始时间</span><b>{{ formatTime(run.startedAt) }}</b>
-            <span>结束时间</span><b>{{ formatTime(run.finishedAt) }}</b>
+            <span>开始时间</span><b><time class="datetime-text">{{ formatTime(run.startedAt) }}</time></b>
+            <span>结束时间</span><b><time class="datetime-text">{{ formatTime(run.finishedAt) }}</time></b>
           </div>
         </div>
       </section>
@@ -129,7 +129,7 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
             <div class="tool-run-head">
               <div>
                 <strong>{{ scannerLabel(item.toolName) }}</strong>
-                <small>{{ phaseLabel(item.phase) }} · {{ formatTime(item.startedAt) }} → {{ formatTime(item.finishedAt) }}</small>
+                <small>{{ phaseLabel(item.phase) }} · <time class="datetime-text">{{ formatTime(item.startedAt) }}</time> → <time class="datetime-text">{{ formatTime(item.finishedAt) }}</time></small>
               </div>
               <StatusBadge :value="item.status" />
             </div>
