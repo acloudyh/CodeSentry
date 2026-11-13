@@ -75,7 +75,7 @@ export const api = {
   startProjectRound: (id: number, payload: ProjectScanPayload) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds`, { method: 'POST', body: JSON.stringify(payload) }),
   retryProjectRound: (id: number, roundId: number, requestKey: string) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}/retry`, { method: 'POST', body: JSON.stringify({ requestKey }) }),
   cancelProjectRound: (id: number, roundId: number) => request<ProjectScanRound>(`/api/v1/business-projects/${id}/rounds/${roundId}/cancel`, { method: 'POST' }),
-  projectFindings: (id: number, params: URLSearchParams) => request<PageResult<LedgerFinding> & { pendingReviewCount?: number; includedCount?: number; summary?: { total: number; newCount: number; fixedCount: number } }>(`/api/v1/business-projects/${id}/findings?${params}`),
+  projectFindings: (id: number, params: URLSearchParams, signal?: AbortSignal) => request<PageResult<LedgerFinding> & { pendingReviewCount?: number; includedCount?: number; summary?: { total: number; newCount: number; fixedCount: number } }>(`/api/v1/business-projects/${id}/findings?${params}`, { signal }),
   projectReportUrl: (id: number, roundId: number, format: 'html' | 'docx' | 'pdf') => `/api/v1/business-projects/${id}/rounds/${roundId}/report/${format}`,
 
   dashboard: () => request<DashboardSummary>('/api/v1/dashboard/summary'),

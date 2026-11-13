@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { api } from '@/api/codesentry'
 import type { LedgerFinding, ProjectScanRound, TriageStatus, AiReviewJob } from '@/types'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
@@ -59,37 +59,50 @@ async function retryTool(job: AiReviewJob) {
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => { timer = setInterval(async () => {
   const active = toolJobs.value.filter(j => ['PENDING','RUNNING'].includes(j.status))
-  if (!active.length) return
+  if (!active.length || busy.value) return
   try { for (const job of active) { const next = await api.aiReviewJob(job.id); toolJobs.value = toolJobs.value.map(j => j.id === next.id ? next : j) }; await load(); emit('changed') } catch { /* next poll retries */ }
 }, 5000) })
-onBeforeUnmount(() => { if(timer) clearInterval(timer) })
+onBeforeUnmount(() => { disposed = true; generation++; initialization++; controller?.abort(); if(timer) clearInterval(timer) })
 watch([roundId, assetId, severity, triage, reportState, keyword, page, pageSize], () => { checked.value = [] })
 watch(() => props.businessProjectId, () => { checked.value = []; toolJobs.value = []; toolsOpen.value = false; batchOpen.value = false })
-let generation = 0
+let generation = 0, initialization = 0
+let initializing = false, disposed = false
+let controller: AbortController | undefined
 async function load() {
+  if (disposed || initializing) return
+  // 快速切换筛选时取消过期请求，避免旧结果覆盖新范围，也减少浏览器等待队列。
+  controller?.abort(); controller = new AbortController()
   const token = ++generation; busy.value = true; error.value = ''
   const params = new URLSearchParams({ page: String(page.value), pageSize: String(pageSize.value), severity: severity.value, triage: triage.value, reportState: reportState.value, keyword: keyword.value })
   if(roundId.value) params.set('roundId', String(roundId.value))
   if(assetId.value) params.set('assetId', assetId.value)
-  try { const data = await api.projectFindings(props.businessProjectId, params); if(token === generation) { rows.value = data.items; total.value = data.total; summary.value = data.summary ?? { total: 0, newCount: 0, fixedCount: 0 } } } catch(e) { if(token === generation) error.value = (e as Error).message } finally { if(token === generation) busy.value = false }
+  try { const data = await api.projectFindings(props.businessProjectId, params, controller.signal); if(token === generation) { rows.value = data.items; total.value = data.total; summary.value = data.summary ?? { total: 0, newCount: 0, fixedCount: 0 } } } catch(e) { if(token === generation) error.value = (e as Error).message } finally { if(token === generation) busy.value = false }
 }
-async function initialize() {
+// 初始化和轮次翻页统一由此加载，等待响应式变更合并后只请求一次问题列表。
+async function initialize(keepRequestedRound = true) {
+  const token = ++initialization, project = props.businessProjectId, requestedRound = keepRequestedRound ? props.roundId : undefined
+  initializing = true; generation++; controller?.abort(); busy.value = true; error.value = ''
   try {
-    const data = await api.projectRounds(props.businessProjectId, roundPage.value)
-    roundTotal.value = data.total
-    rounds.value = data.items
-    roundId.value = props.roundId ?? data.items[0]?.id
-    if(props.roundId && !rounds.value.some(r => r.id === props.roundId)) rounds.value.unshift(await api.projectRound(props.businessProjectId, props.roundId))
-    page.value = 1; assetId.value = ''; await load()
-  } catch(e) { error.value = (e as Error).message }
+    const data = await api.projectRounds(project, roundPage.value)
+    if (token !== initialization || disposed) return
+    let choices = data.items
+    const chosen = requestedRound ?? choices[0]?.id
+    if(requestedRound && !choices.some(r => r.id === requestedRound)) choices = [await api.projectRound(project, requestedRound), ...choices]
+    if (token !== initialization || disposed) return
+    roundTotal.value = data.total; rounds.value = choices; roundId.value = chosen
+    page.value = 1; assetId.value = ''; await nextTick()
+    if (token !== initialization || disposed) return
+    initializing = false; await load()
+  } catch(e) { if (token === initialization && !disposed) error.value = (e as Error).message }
+  finally { if (token === initialization && initializing) { initializing = false; busy.value = false } }
 }
 async function changeRoundPage(delta: number) {
   roundPage.value += delta
-  try {
-    const data = await api.projectRounds(props.businessProjectId, roundPage.value)
-    rounds.value = data.items; roundTotal.value = data.total; roundId.value = data.items[0]?.id; assetId.value = ''; page.value = 1
-    await load()
-  } catch(e) { error.value = (e as Error).message }
+  await initialize(false)
+}
+function submitQuery() {
+  if (page.value !== 1) page.value = 1
+  else void load()
 }
 function open(item: LedgerFinding) { selected.value = item; reviewStatus.value = (item.triageStatus as TriageStatus) ?? 'CONFIRMED'; comment.value = item.triageComment ?? '' }
 async function save() {
@@ -97,15 +110,21 @@ async function save() {
   try { await api.triageFinding(selected.value.id, { triageStatus: reviewStatus.value, comment: comment.value, reviewer: localStorage.getItem('codesentry-reviewer') ?? '本地复核人' }); selected.value = null; await load(); emit('changed') } catch(e) { error.value = (e as Error).message } finally { saving.value = false }
 }
 watch(() => [props.businessProjectId, props.roundId], () => { roundPage.value = 1; void initialize() }, { immediate: true })
-watch(roundId, () => { assetId.value = '' })
-watch([roundId, assetId, severity, triage, reportState, pageSize], () => { page.value = 1; void load() })
-watch(page, load)
+watch(roundId, () => { assetId.value = '' }, { flush: 'sync' })
+watch([roundId, assetId, severity, triage, reportState, pageSize, page], (values, previous) => {
+  if (initializing || disposed) return
+  if (values.slice(0, 6).some((value, index) => value !== previous[index]) && page.value !== 1) {
+    page.value = 1
+    return
+  }
+  void load()
+})
 </script>
 <template>
   <div class="page-stack">
     <div class="notice" v-if="current">{{ projectRoundLabel(current) }} · {{ projectRoundScope(current) }} · 覆盖 {{ current.items.length }}/{{ current.assetCount }} 个资产；仅显示本轮已完成或部分完成的扫描结果，失败项不使用旧结果补齐。</div>
     <div class="row-actions" v-if="roundTotal > 20"><span>扫描历史 · 第 {{ roundPage }} 页 / 共 {{ roundTotal }} 轮</span><button class="button secondary compact" :disabled="roundPage <= 1 || busy" @click="changeRoundPage(-1)">更近轮次</button><button class="button secondary compact" :disabled="roundPage*20 >= roundTotal || busy" @click="changeRoundPage(1)">更早轮次</button></div>
-    <form class="panel ledger-filters" @submit.prevent="page = 1; load()">
+    <form class="panel ledger-filters" @submit.prevent="submitQuery">
       <div class="field"><label>扫描记录 / 轮次</label><select v-model="roundId" class="select"><option v-for="r in rounds" :key="r.id" :value="r.id">{{ projectRoundLabel(r) }} · {{ projectRoundScope(r) }} · {{ r.createdAt.replace('T',' ') }}</option></select></div>
       <div class="field"><label>扫描资产</label><select class="select" v-model="assetId"><option value="">全部资产</option><option v-for="a in current?.items ?? []" :key="a.assetId" :value="String(a.assetId)">{{ a.assetName }}</option></select></div>
       <div class="field"><label>严重等级</label><select v-model="severity" class="select"><option value="ALL">全部等级</option><option value="CRITICAL">严重</option><option value="HIGH">高危</option><option value="MEDIUM">中危</option><option value="LOW">低危</option><option value="INFO">提示</option></select></div>
