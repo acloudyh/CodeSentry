@@ -153,8 +153,9 @@ public class RemediationReportService {
             List<FindingView> raw = findingService.findPolicyByRunId(run.getId());
             List<FindingView> visible = snapshots.readSummary(run.getId());
             int qualityCount=(int)raw.stream().filter(f->"QUALITY".equals(f.getIssueType())).count();
-            if (visible == null) {
+            if (visible == null || visible.stream().noneMatch(f->"QUALITY".equals(f.getIssueType())))
                 raw=raw.stream().filter(f->!"QUALITY".equals(f.getIssueType())).collect(Collectors.toList());
+            if (visible == null) {
                 Map<Long,AiReviewSummary> reviews = new HashMap<>();
                 aiReviewService.latestPolicyForRun(run.getId()).forEach(review -> reviews.put(review.getFindingId(),review));
                 visible = ReviewedFindingPolicy.select(raw,reviews);
@@ -249,7 +250,7 @@ public class RemediationReportService {
                 addText(document, "当前没有符合报告筛选条件的问题，不代表原始扫描未发现风险。", 10, "66796E", false);
             }
             int index = 1;
-            for (ReportFindingGroup group : groupForProject(data.findings, data.project)) {
+            for (ReportFindingGroup group : groupForProject(data.findings, data.project, data.aiReviews)) {
                 FindingView finding = group.primary();
                 XWPFParagraph heading = document.createParagraph();
                 heading.setSpacingBefore(220);
@@ -306,7 +307,7 @@ public class RemediationReportService {
                 }
             }
 
-            List<ReportFindingGroup> sourceGroups = groupForProject(data.findings, data.project).stream()
+            List<ReportFindingGroup> sourceGroups = groupForProject(data.findings, data.project, data.aiReviews).stream()
                     .filter(group -> !group.sources().isEmpty()).collect(Collectors.toList());
             if (!sourceGroups.isEmpty()) {
                 addHeading(document, "附录：整改版本依据", 1);
@@ -353,7 +354,8 @@ public class RemediationReportService {
         List<FindingView> raw = findingService.findStoredByRunId(runId);
         int qualityCount=(int)raw.stream().filter(f->"QUALITY".equals(f.getIssueType())).count();
         List<FindingView> visible = snapshots.read(runId);
-        if(visible==null)raw=raw.stream().filter(f->!"QUALITY".equals(f.getIssueType())).collect(Collectors.toList());
+        // 安全归档仍按安全范围列附录；旧归档实际纳入规范时，保留其原始采纳范围。
+        if(visible==null || visible.stream().noneMatch(f->"QUALITY".equals(f.getIssueType())))raw=raw.stream().filter(f->!"QUALITY".equals(f.getIssueType())).collect(Collectors.toList());
         io.codesentry.finding.service.OnlineRemediationService.attach(run, raw);
         Map<Long, AiReviewSummary> aiReviews = new LinkedHashMap<>();
         aiReviewService.latestForRun(runId).forEach(summary -> aiReviews.put(summary.getFindingId(), summary));
@@ -394,7 +396,7 @@ public class RemediationReportService {
     private String buildHtml(ReportData data) {
         StringBuilder rows = new StringBuilder();
         int index = 1;
-        List<ReportFindingGroup> groups = groupForProject(data.findings, data.project);
+        List<ReportFindingGroup> groups = groupForProject(data.findings, data.project, data.aiReviews);
         for (ReportFindingGroup group : groups) {
             FindingView finding = group.primary();
             rows.append("<tr><td>").append(index++).append("</td><td><span class=\"severity ")
@@ -814,10 +816,11 @@ public class RemediationReportService {
     }
 
     /** 根据资产应用类型及运行版本选择依赖整改建议。 */
-    private List<ReportFindingGroup> groupForProject(List<FindingView> findings, ScanProject project) {
+    private List<ReportFindingGroup> groupForProject(List<FindingView> findings, ScanProject project, Map<Long,AiReviewSummary> reviews) {
         List<ReportFindingGroup> groups = groupFindings(findings, project.getTargetJavaVersion());
         for (ReportFindingGroup group : groups) {
             FindingView first = group.primary();
+            group.review = reviews.get(first.getId());
             String path = value(first.getFilePath(), "").toLowerCase(Locale.ROOT);
             boolean nodePath = path.contains("package-lock.json") || path.contains("package.json") || path.contains("yarn.lock") || path.contains("pnpm-lock") || path.contains("node_modules");
             if (project.getApplicationType() == io.codesentry.project.model.ApplicationType.FRONTEND
@@ -1046,6 +1049,7 @@ public class RemediationReportService {
     private final class ReportFindingGroup {
         private final List<FindingView> members = new ArrayList<>();
         private String nodeRuntime;
+        private AiReviewSummary review;
         private final Integer javaVersion;
         private ReportFindingGroup(Integer javaVersion) { this.javaVersion = javaVersion; }
 
@@ -1063,7 +1067,14 @@ public class RemediationReportService {
 
         private String recommendation() {
             if (nodeRuntime != null && isDependencyVulnerability(primary())) return nodeDependencyAdvice(members, nodeRuntime);
-            return io.codesentry.finding.service.DependencyRemediationAdvice.compact(members, javaVersion);
+            String advice = io.codesentry.finding.service.DependencyRemediationAdvice.compact(members, javaVersion);
+            // 版本约束仍由依赖整改模块负责；代码问题补上已经完成的工具复核建议，不再次调用模型。
+            if (!isDependencyVulnerability(primary()) && review != null && !"FAILED".equals(review.getStatus())) {
+                AiReviewRecord verified = review.getVerificationReview();
+                if (verified != null && "COMPLETED".equals(verified.getStatus()) && hasText(verified.getRecommendation()))
+                    advice += "\n工具复核补充建议（需人工确认）：" + publicReviewText(verified.getRecommendation());
+            }
+            return advice;
         }
 
         private Map<String, List<String>> sources() {

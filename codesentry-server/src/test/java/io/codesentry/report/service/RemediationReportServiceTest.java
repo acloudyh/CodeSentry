@@ -93,6 +93,14 @@ class RemediationReportServiceTest {
         when(findings.findPolicyByRunId(99L)).thenReturn(List.of(quality,risk));when(findings.findStoredByRunId(99L)).thenReturn(List.of(quality,risk));
         var summary=service.recent(100).get(0);assertEquals(1,summary.getLedgerFindings());assertEquals(1,summary.getTotalFindings());assertEquals(1,summary.getQualityFindings());
         String html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("1 条台账问题 = 1 条纳入整改 + 0 条未纳入"));assertTrue(html.contains("1 条规范问题另行维护"));
+        // 安全报告归档后再次打开，仍不能把数千条旧规范塞回未纳入附录或列表总数。
+        when(snapshots.read(99L)).thenReturn(List.of(risk));when(snapshots.readSummary(99L)).thenReturn(List.of(risk));
+        html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("1 条台账问题 = 1 条纳入整改 + 0 条未纳入"));
+        assertFalse(html.contains("LowerCamelCaseVariableNamingRule"));assertEquals(1,service.recent(100).get(0).getLedgerFindings());
+        AiReviewSummary completed=new AiReviewSummary();completed.setFindingId(2L);completed.setStatus("COMPLETED");
+        AiReviewRecord verification=new AiReviewRecord();verification.setStatus("COMPLETED");verification.setRecommendation("针对本文件改用参数绑定，并增加输入验证。");completed.setVerificationReview(verification);
+        when(reviews.latestForRun(99L)).thenReturn(List.of(completed));
+        html=new String(service.exportHtml(99L),StandardCharsets.UTF_8);assertTrue(html.contains("工具复核补充建议（需人工确认）"));assertTrue(html.contains(verification.getRecommendation()));
         when(snapshots.readSummary(99L)).thenReturn(List.of(quality,risk));summary=service.recent(100).get(0);assertEquals(2,summary.getLedgerFindings());assertEquals(2,summary.getTotalFindings());assertEquals(1,summary.getLegacyQualityInReport());
     }
 

@@ -13,7 +13,7 @@ public final class DependencyRemediationAdvice {
     public static String forFinding(FindingView finding) {
         String original = value(finding.getRecommendation());
         if (!"Trivy".equalsIgnoreCase(finding.getScanner()) || !"VULNERABILITY".equals(finding.getCategory()))
-            return original.isBlank() ? "请结合代码上下文复核并按安全编码规范整改。" : original;
+            return CodeRemediationAdvice.forFinding(finding);
         // Keep explicit scanner/manual advice; enrich the historical placeholder at render time.
         if (!original.isBlank() && !original.startsWith(LEGACY_PREFIX)
                 && !"升级到修复版本。".equals(original)) return original;
