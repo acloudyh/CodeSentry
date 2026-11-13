@@ -36,6 +36,7 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
                 "ALTER TABLE scan_project ADD COLUMN target_java_version INT NULL");
         ensureColumn("scan_project", "application_type", "ALTER TABLE scan_project ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
         ensureColumn("scan_project", "target_node_version", "ALTER TABLE scan_project ADD COLUMN target_node_version VARCHAR(32) NULL");
+        ensureColumn("scan_project", "git_credential_id", "ALTER TABLE scan_project ADD COLUMN git_credential_id BIGINT NULL, ADD INDEX idx_project_git_credential (git_credential_id)");
         ensureColumn("scan_project", "git_username", "ALTER TABLE scan_project ADD COLUMN git_username VARCHAR(256) NULL");
         ensureColumn("scan_project", "git_password_ciphertext", "ALTER TABLE scan_project ADD COLUMN git_password_ciphertext TEXT NULL");
         ensureColumn("scan_project", "repository_revision", "ALTER TABLE scan_project ADD COLUMN repository_revision BIGINT NOT NULL DEFAULT 0");

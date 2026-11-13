@@ -5,6 +5,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import javax.validation.constraints.*;
 
 public class GitValidationRequest {
+    private Long gitCredentialId;
+    /** 集中维护的 Git 账号 ID；为空时兼容仓库原有独立凭据。 */
+    public Long getGitCredentialId() { return gitCredentialId; }
+    public void setGitCredentialId(Long value) { gitCredentialId=value; }
     @NotBlank(message="请填写 Git 仓库地址") @Size(max=2048)
     private String remoteUrl;
     @Size(max=256) @Pattern(regexp="[^\\r\\n\\x00]*",message="Git 账号不能包含换行或空字符")

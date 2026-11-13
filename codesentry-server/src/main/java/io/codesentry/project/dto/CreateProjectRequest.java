@@ -7,6 +7,10 @@ import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
 public class CreateProjectRequest {
+    private Long gitCredentialId;
+    /** 集中维护的 Git 账号 ID；为空时兼容仓库原有独立凭据。 */
+    public Long getGitCredentialId() { return gitCredentialId; }
+    public void setGitCredentialId(Long value) { gitCredentialId=value; }
     private io.codesentry.project.model.ApplicationType applicationType;
     @Size(max=32, message="Node.js 版本最多32个字符")
     @javax.validation.constraints.Pattern(regexp="v?[0-9]{1,3}(\\.[0-9]{1,3}){0,2}([-+][0-9A-Za-z.-]+)?", message="请填写有效的 Node.js 版本，例如 18、20.19.0")

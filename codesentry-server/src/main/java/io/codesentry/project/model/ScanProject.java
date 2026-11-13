@@ -3,6 +3,10 @@ package io.codesentry.project.model;
 import java.time.LocalDateTime;
 
 public class ScanProject {
+    private Long gitCredentialId;
+    /** 集中维护的 Git 账号 ID；为空时兼容仓库原有独立凭据。 */
+    public Long getGitCredentialId() { return gitCredentialId; }
+    public void setGitCredentialId(Long value) { gitCredentialId=value; }
     private io.codesentry.project.model.ApplicationType applicationType = io.codesentry.project.model.ApplicationType.BACKEND;
     public io.codesentry.project.model.ApplicationType getApplicationType() { return applicationType; }
     public void setApplicationType(io.codesentry.project.model.ApplicationType value) { applicationType = value; }
@@ -26,7 +30,7 @@ public class ScanProject {
     private String lastSyncMessage;
     public String getLastSyncMessage() { return lastSyncMessage; }
     public void setLastSyncMessage(String value) { lastSyncMessage = value; }
-    public boolean isGitCredentialConfigured() { return gitPasswordCiphertext != null && !gitPasswordCiphertext.isEmpty(); }
+    public boolean isGitCredentialConfigured() { return gitCredentialId != null || (gitPasswordCiphertext != null && !gitPasswordCiphertext.isEmpty()); }
 
 
     private long repositoryRevision;

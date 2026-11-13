@@ -21,8 +21,8 @@ public interface ScanProjectMapper {
     ScanProject findByIdForUpdate(@Param("id") Long id);
 
     @Insert("INSERT INTO scan_project(project_name, source_type, local_path, remote_url, managed_path, " +
-            "default_branch, target_java_version, application_type, target_node_version, git_username, git_password_ciphertext, last_synced_at, last_sync_status, last_sync_message, repository_revision, enabled, created_at, updated_at) VALUES(#{projectName}, #{sourceType}, " +
-            "#{localPath}, #{remoteUrl}, #{managedPath}, #{defaultBranch}, #{targetJavaVersion}, #{applicationType}, #{targetNodeVersion}, #{gitUsername}, #{gitPasswordCiphertext}, #{lastSyncedAt}, #{lastSyncStatus}, #{lastSyncMessage}, #{repositoryRevision}, #{enabled}, #{createdAt}, #{updatedAt})")
+            "default_branch, target_java_version, application_type, target_node_version, git_credential_id, git_username, git_password_ciphertext, last_synced_at, last_sync_status, last_sync_message, repository_revision, enabled, created_at, updated_at) VALUES(#{projectName}, #{sourceType}, " +
+            "#{localPath}, #{remoteUrl}, #{managedPath}, #{defaultBranch}, #{targetJavaVersion}, #{applicationType}, #{targetNodeVersion}, #{gitCredentialId}, #{gitUsername}, #{gitPasswordCiphertext}, #{lastSyncedAt}, #{lastSyncStatus}, #{lastSyncMessage}, #{repositoryRevision}, #{enabled}, #{createdAt}, #{updatedAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScanProject project);
 
@@ -31,7 +31,7 @@ public interface ScanProjectMapper {
     int updateRepositoryState(ScanProject project);
 
     @Update("UPDATE scan_project SET project_name = #{projectName}, local_path = #{localPath}, " +
-            "remote_url = #{remoteUrl}, managed_path = #{managedPath}, default_branch = #{defaultBranch}, target_java_version = #{targetJavaVersion}, application_type = #{applicationType}, target_node_version = #{targetNodeVersion}, git_username = #{gitUsername}, git_password_ciphertext = #{gitPasswordCiphertext}, last_synced_at = #{lastSyncedAt}, last_sync_status = #{lastSyncStatus}, last_sync_message = #{lastSyncMessage}, repository_revision = #{repositoryRevision}, " +
+            "remote_url = #{remoteUrl}, managed_path = #{managedPath}, default_branch = #{defaultBranch}, target_java_version = #{targetJavaVersion}, application_type = #{applicationType}, target_node_version = #{targetNodeVersion}, git_credential_id = #{gitCredentialId}, git_username = #{gitUsername}, git_password_ciphertext = #{gitPasswordCiphertext}, last_synced_at = #{lastSyncedAt}, last_sync_status = #{lastSyncStatus}, last_sync_message = #{lastSyncMessage}, repository_revision = #{repositoryRevision}, " +
             "updated_at = #{updatedAt} WHERE id = #{id} AND enabled = 1")
     int update(ScanProject project);
 

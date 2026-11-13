@@ -1,4 +1,4 @@
-import type { ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
+import type { GitCredentialProfile, ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
 import { request } from './http'
 import type { ReportAcceptance } from '@/types'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, AiToolConfiguration, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, RuleLibraryStatus, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
@@ -6,6 +6,7 @@ import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummar
 export interface CreateProjectPayload {
   applicationType?: ApplicationType
   targetNodeVersion?: string | null
+  gitCredentialId?: number
   gitUsername?: string
   gitPassword?: string
   clearGitCredentials?: boolean
@@ -94,7 +95,10 @@ export const api = {
   updateProject: (id: number, payload: CreateProjectPayload) => request<ScanProject>(`/api/v1/projects/${id}`, {
     method: 'PUT', body: JSON.stringify(payload),
   }).then(displayProject),
-  validateGit: (payload: { remoteUrl: string; gitUsername?: string; gitPassword?: string; projectId?: number; useStoredCredentials?: boolean }) => request<GitValidationResult>('/api/v1/projects/git/validate', { method: 'POST', body: JSON.stringify(payload) }),
+  gitCredentials: () => request<GitCredentialProfile[]>('/api/v1/settings/git-credentials'),
+  saveGitCredential: (id: number | null, payload: { name: string; serverUrl: string; username: string; password?: string }) => request<GitCredentialProfile>(`/api/v1/settings/git-credentials${id === null ? '' : `/${id}`}`, { method: id === null ? 'POST' : 'PUT', body: JSON.stringify(payload) }),
+  deleteGitCredential: (id: number) => request<void>(`/api/v1/settings/git-credentials/${id}`, { method: 'DELETE' }),
+  validateGit: (payload: { remoteUrl: string; gitCredentialId?: number; gitUsername?: string; gitPassword?: string; projectId?: number; useStoredCredentials?: boolean }) => request<GitValidationResult>('/api/v1/projects/git/validate', { method: 'POST', body: JSON.stringify(payload) }),
   syncProject: (id: number) => request<ScanProject>(`/api/v1/projects/${id}/sync`, { method: 'POST' }).then(displayProject),
   branches: (id: number, refresh = false) => request<BranchView[]>(`/api/v1/projects/${id}/branches?refresh=${refresh}`),
   scanRuns: (limit = 100) => request<ScanRun[]>(`/api/v1/scan-runs?limit=${limit}`),

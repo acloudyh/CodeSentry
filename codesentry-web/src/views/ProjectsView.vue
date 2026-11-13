@@ -10,7 +10,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AssetScanDialog from '@/components/AssetScanDialog.vue'
 import JarUploadForm from '@/components/ui/JarUploadForm.vue'
-import type { ApplicationType, GitValidationResult, ScanProject, ScanRun, SourceType } from '@/types'
+import type { ApplicationType, GitCredentialProfile, GitValidationResult, ScanProject, ScanRun, SourceType } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -38,6 +38,7 @@ const jarName = ref('')
 const jarJavaVersion = ref<number | null>(null)
 const scanAfterSave = ref(false)
 const projects = ref<ScanProject[]>([])
+const gitCredentials = ref<GitCredentialProfile[]>([])
 const listType = ref<'repository' | 'jar'>(useRoute().query.type === 'jar' ? 'jar' : 'repository')
 const scopedProjects = computed(() => projects.value.filter(p => businessProjectId.value ? p.businessProjectId === businessProjectId.value : unassignedOnly.value ? !p.businessProjectId : true))
 const repositories = computed(() => scopedProjects.value.filter((project) => project.sourceType !== 'JAR_UPLOAD'))
@@ -58,12 +59,18 @@ const error = ref('')
 const syncingId = ref<number | null>(null)
 const nodeVersions = ['14', '16', '18', '20', '22', '24']
 const nodeVersionChoice = ref('')
-const form = reactive({ projectName: '', applicationType: 'BACKEND' as ApplicationType, targetNodeVersion: '', gitAuthMode: 'DEFAULT' as 'DEFAULT' | 'PASSWORD', gitUsername: '', gitPassword: '', sourceType: 'LOCAL' as SourceType, localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+const form = reactive({ projectName: '', applicationType: 'BACKEND' as ApplicationType, targetNodeVersion: '', gitCredentialId: null as number | null, gitAuthMode: 'DEFAULT' as 'DEFAULT' | 'PASSWORD' | 'SAVED', gitUsername: '', gitPassword: '', sourceType: 'LOCAL' as SourceType, localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+
+/** 切换认证方式时清理隐藏的密码输入，提交中只允许一种凭据来源。 */
+watch(() => form.gitAuthMode, mode => {
+  if (mode !== 'PASSWORD') { form.gitPassword = ''; form.gitUsername = '' }
+  if (mode !== 'SAVED') form.gitCredentialId = null
+})
 
 watch(nodeVersionChoice, value => { if (value !== 'CUSTOM') form.targetNodeVersion = value }, { flush: 'sync' })
 
 async function load() {
-  try { projects.value = await api.projects() } catch (reason) { error.value = reason instanceof Error ? reason.message : '加载失败' }
+  try { [projects.value, gitCredentials.value] = await Promise.all([api.projects(), api.gitCredentials()]) } catch (reason) { error.value = reason instanceof Error ? reason.message : '加载失败' }
 }
 
 function editJar(project: ScanProject) {
@@ -115,20 +122,22 @@ function register() {
   jarEditing.value = null
   listType.value = 'repository'
   editingId.value = null
-  Object.assign(form, { projectName: '', applicationType: 'BACKEND', targetNodeVersion: '', gitAuthMode: 'DEFAULT', gitUsername: '', gitPassword: '', sourceType: 'LOCAL', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+  Object.assign(form, { projectName: '', applicationType: 'BACKEND', targetNodeVersion: '', gitCredentialId: null, gitAuthMode: 'DEFAULT', gitUsername: '', gitPassword: '', sourceType: 'LOCAL', localPath: '', remoteUrl: '', defaultBranch: 'main', targetJavaVersion: null as number | null })
+  if (gitCredentials.value.length) form.gitAuthMode = 'SAVED'
   showForm.value = true; error.value = ''
 }
 
 function edit(project: ScanProject) {
   jarEditing.value = null
   editingId.value = project.id
-  Object.assign(form, { projectName: project.projectName, applicationType: project.applicationType ?? 'BACKEND', targetNodeVersion: project.targetNodeVersion ?? '', gitAuthMode: project.gitCredentialConfigured ? 'PASSWORD' : 'DEFAULT', gitUsername: project.gitUsername ?? '', gitPassword: '', sourceType: project.sourceType,
+  Object.assign(form, { projectName: project.projectName, applicationType: project.applicationType ?? 'BACKEND', targetNodeVersion: project.targetNodeVersion ?? '', gitCredentialId: project.gitCredentialId ?? null, gitAuthMode: project.gitCredentialId ? 'SAVED' : project.gitCredentialConfigured ? 'PASSWORD' : 'DEFAULT', gitUsername: project.gitUsername ?? '', gitPassword: '', sourceType: project.sourceType,
     localPath: project.localPath ?? '', remoteUrl: project.remoteUrl ?? '', defaultBranch: project.defaultBranch ?? '', targetJavaVersion: project.targetJavaVersion ?? null })
   nodeVersionChoice.value = project.targetNodeVersion ? nodeVersions.includes(project.targetNodeVersion) ? project.targetNodeVersion : 'CUSTOM' : ''
   showForm.value = true; error.value = ''
 }
 
 async function save() {
+  if (form.sourceType === 'GIT' && form.gitAuthMode === 'SAVED' && !form.gitCredentialId) { error.value = '请选择已维护的 Git 账号'; return }
   saving.value = true; error.value = ''
   try {
     const payload = {
@@ -140,6 +149,7 @@ async function save() {
       applicationType: form.applicationType,
       targetJavaVersion: form.applicationType === 'FRONTEND' ? null : form.targetJavaVersion,
       targetNodeVersion: form.applicationType === 'BACKEND' ? null : form.targetNodeVersion.trim() || null,
+      gitCredentialId: form.sourceType === 'GIT' && form.gitAuthMode === 'SAVED' ? form.gitCredentialId ?? undefined : undefined,
       gitUsername: form.sourceType === 'GIT' && form.gitAuthMode === 'PASSWORD' ? form.gitUsername.trim() : undefined,
       gitPassword: form.sourceType === 'GIT' && form.gitAuthMode === 'PASSWORD' && form.gitPassword ? form.gitPassword : undefined,
       clearGitCredentials: form.sourceType === 'GIT' && form.gitAuthMode === 'DEFAULT',
@@ -165,6 +175,7 @@ async function validateGit() {
   gitValidation.value = null; gitValidationError.value = ''; error.value = ''
   if (!form.remoteUrl.trim()) { gitValidationError.value = '请先填写 Git 仓库地址'; return }
   const usePassword = form.gitAuthMode === 'PASSWORD'
+  if (form.gitAuthMode === 'SAVED' && !form.gitCredentialId) { gitValidationError.value = '请选择已维护的 Git 账号'; return }
   if (usePassword && !form.gitUsername.trim()) { gitValidationError.value = '请先填写 Git 账号'; return }
   if (usePassword && !form.gitPassword && !canKeepCredentials.value) { gitValidationError.value = '请先填写 Git 密码或访问令牌'; return }
   validatingGit.value = true
@@ -172,6 +183,7 @@ async function validateGit() {
   try {
     const result = await api.validateGit({
       remoteUrl: form.remoteUrl.trim(),
+      gitCredentialId: form.gitAuthMode === 'SAVED' ? form.gitCredentialId ?? undefined : undefined,
       gitUsername: usePassword ? form.gitUsername.trim() : undefined,
       gitPassword: usePassword && form.gitPassword ? form.gitPassword : undefined,
       projectId: usePassword && !form.gitPassword && canKeepCredentials.value ? editingId.value ?? undefined : undefined,
@@ -181,7 +193,7 @@ async function validateGit() {
   } catch (reason) { if (requestId === gitValidationRequest) gitValidationError.value = reason instanceof Error ? reason.message : 'Git 校验失败' }
   finally { validatingGit.value = false }
 }
-watch(() => [form.sourceType, form.remoteUrl, form.gitUsername, form.gitPassword, form.gitAuthMode, editingId.value], () => { gitValidationRequest++; gitValidation.value = null; gitValidationError.value = '' })
+watch(() => [form.sourceType, form.remoteUrl, form.gitUsername, form.gitPassword, form.gitAuthMode, form.gitCredentialId, editingId.value], () => { gitValidationRequest++; gitValidation.value = null; gitValidationError.value = '' })
 
 async function syncCode(project: ScanProject) {
   if (syncingId.value !== null || saving.value) return
@@ -302,7 +314,8 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
           <small>支持 HTTP/HTTPS 或 SSH 地址；请勿把账号密码拼在仓库地址中。</small>
         </div>
         <template v-if="form.sourceType === 'GIT'">
-          <div class="field span-2"><label for="git-auth-mode">Git 认证方式</label><select id="git-auth-mode" v-model="form.gitAuthMode" class="select" :disabled="saving || validatingGit"><option value="DEFAULT">无需账号密码 / 使用本机凭据或 SSH</option><option value="PASSWORD">账号密码 / 访问令牌（HTTP/HTTPS）</option></select></div>
+          <div class="field span-2"><label for="git-auth-mode">Git 认证方式</label><select id="git-auth-mode" v-model="form.gitAuthMode" class="select" :disabled="saving || validatingGit"><option value="SAVED">选择系统设置中维护的账号</option><option value="DEFAULT">无需账号密码 / 使用本机凭据或 SSH</option><option value="PASSWORD">账号密码 / 访问令牌（HTTP/HTTPS）</option></select></div>
+          <div v-if="form.gitAuthMode === 'SAVED'" class="field span-2"><label for="git-saved-credential">已维护的 Git 账号</label><select id="git-saved-credential" v-model="form.gitCredentialId" class="select" required :disabled="saving || validatingGit"><option :value="null" disabled>请选择账号</option><option v-for="credential in gitCredentials" :key="credential.id" :value="credential.id">{{ credential.name }} · {{ credential.username }} · {{ credential.serverUrl }}</option></select><small>在<RouterLink to="/settings">系统设置</RouterLink>中统一维护账号和密码；校验、后台拉取及后续同步均使用所选配置。</small></div>
           <template v-if="form.gitAuthMode === 'PASSWORD'">
             <div class="field"><label for="git-username">Git 账号</label><input id="git-username" v-model="form.gitUsername" class="input" autocomplete="username" maxlength="256" required :disabled="saving || validatingGit" /></div>
             <div class="field"><label for="git-password">Git 密码 / 访问令牌</label><input id="git-password" v-model="form.gitPassword" type="password" class="input" autocomplete="new-password" maxlength="4000" :required="!canKeepCredentials" :placeholder="canKeepCredentials ? '已配置，留空保留原密码或令牌' : '填写密码或访问令牌'" :disabled="saving || validatingGit" /><small>凭据加密保存，用于首次拉取及后续代码同步；修改账号或仓库地址后需重新填写。</small></div>
@@ -313,7 +326,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
             <strong>{{ gitValidation.message }}</strong>
             <span v-if="gitValidation.defaultBranch">默认分支：{{ gitValidation.defaultBranch }} <button v-if="gitValidation.defaultBranch !== form.defaultBranch" type="button" class="row-action-link" :disabled="saving" @click="form.defaultBranch = gitValidation!.defaultBranch!">使用此分支</button></span>
           </div>
-          <div v-if="editingProject?.managedPath" class="field span-2"><label>本地代码缓存</label><span class="mono">{{ editingProject.managedPath }}</span><small>最近成功同步：{{ formatChinaTime(editingProject.lastSyncedAt) }}。扫描默认复用本地缓存，需要时点击列表中的“同步代码”。</small></div>
+          <div v-if="editingProject?.managedPath" class="field span-2"><label>本地代码缓存</label><span class="mono">{{ editingProject.managedPath }}</span><small>最近成功同步：<time class="datetime-text">{{ formatChinaTime(editingProject.lastSyncedAt) }}</time>。扫描默认复用本地缓存，需要时点击列表中的“同步代码”。</small></div>
         </template>
         <div class="field span-2"><div class="notice">{{ editingId !== null ? '编辑不切换仓库来源、不改写历史扫描记录。有扫描或工具审核执行时暂不能保存；修改远程地址会创建新的镜像。' : '远程仓库登记后在后台拉取并持久化到本地，保存无需等待；后续扫描默认使用缓存。需要更新代码时可手动同步，或选择扫描前同步，无需每次重新克隆。' }}</div></div>
         <div class="form-actions field span-2"><button type="button" class="button secondary" :disabled="saving || validatingGit" @click="showForm = false">取消</button><button class="button primary" :disabled="saving || validatingGit">{{ saving ? '正在保存…' : editingId !== null ? '保存修改' : '确认登记' }}</button></div>
@@ -329,7 +342,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
     <section class="panel">
       <div v-if="visibleProjects.length" class="table-scroll">
         <table class="data-table projects-table" :class="{ 'repository-table': listType !== 'jar' }">
-          <colgroup><col style="width:185px" /><col style="width:100px" /><col v-if="listType !== 'jar'" style="width:130px" /><col style="width:280px" /><col v-if="listType !== 'jar'" style="width:90px" /><col style="width:105px" /><col v-if="listType !== 'jar'" style="width:135px" /><col style="width:340px" /></colgroup>
+          <colgroup><col style="width:185px" /><col style="width:100px" /><col v-if="listType !== 'jar'" style="width:130px" /><col style="width:280px" /><col v-if="listType !== 'jar'" style="width:90px" /><col style="width:130px" /><col v-if="listType !== 'jar'" style="width:190px" /><col style="width:340px" /></colgroup>
           <thead><tr><th>编号 / 项目</th><th>来源</th><th v-if="listType !== 'jar'">应用 / 运行环境</th><th>{{ listType === 'jar' ? '当前 JAR 文件' : '仓库位置' }}</th><th v-if="listType !== 'jar'">默认分支</th><th>登记时间</th><th v-if="listType !== 'jar'">代码同步</th><th class="actions-heading">操作</th></tr></thead>
           <tbody>
             <tr v-for="project in visibleProjects" :key="project.id">
@@ -338,8 +351,8 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
               <td v-if="listType !== 'jar'"><strong>{{ applicationTypeLabel(project.applicationType) }}</strong><div class="mono">{{ runtimeVersionLabel(project) }}</div></td>
               <td class="mono"><span class="repository-location" :title="project.sourceType === 'JAR_UPLOAD' ? project.localPath?.split('/').pop() : project.localPath ?? project.remoteUrl">{{ project.sourceType === 'JAR_UPLOAD' ? project.localPath?.split('/').pop() : project.localPath ?? project.remoteUrl }}</span><small v-if="project.sourceType === 'GIT'" class="cache-location" :title="project.managedPath">缓存：{{ project.managedPath }}</small></td>
               <td v-if="listType !== 'jar'" class="mono">{{ project.defaultBranch ?? '-' }}</td>
-              <td class="mono">{{ formatChinaDate(project.createdAt) }}</td>
-              <td v-if="listType !== 'jar'"><template v-if="project.sourceType === 'GIT'"><span :class="{ 'danger-text': project.lastSyncStatus === 'FAILED' }" :title="project.lastSyncMessage">{{ repositorySyncLabel(project) }}</span><small class="cache-location">{{ formatChinaTime(project.lastSyncedAt) }}</small></template><span v-else class="muted">本地目录</span></td>
+              <td class="mono datetime-cell"><time class="datetime-text">{{ formatChinaDate(project.createdAt) }}</time></td>
+              <td v-if="listType !== 'jar'"><template v-if="project.sourceType === 'GIT'"><span :class="{ 'danger-text': project.lastSyncStatus === 'FAILED' }" :title="project.lastSyncMessage">{{ repositorySyncLabel(project) }}</span><small class="sync-time"><time class="datetime-text">{{ formatChinaTime(project.lastSyncedAt) }}</time></small></template><span v-else class="muted">本地目录</span></td>
               <td class="actions-cell"><div class="row-actions">
                 <button v-if="project.sourceType === 'GIT'" type="button" class="row-action-link" :disabled="saving || syncingId !== null || repositorySyncBusy(project)" @click="syncCode(project)">{{ repositorySyncBusy(project) ? repositorySyncLabel(project) : project.lastSyncStatus === 'FAILED' ? '重试拉取' : '同步代码' }}</button>
                 <button type="button" class="button primary compact" :disabled="saving || syncingId !== null || !repositoryReady(project)" @click="startProjectScan(project)">发起扫描</button>
@@ -357,7 +370,7 @@ onMounted(async () => { await load(); if (route.query.register === '1') register
 
 <style scoped>
 .projects-table { min-width: 1040px; table-layout:fixed; }
-.repository-table { min-width:1380px; }
+.repository-table { min-width:1450px; }
 .repository-location,.cache-location{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cache-location{margin-top:6px;color:var(--muted)}
 .git-url-row{display:flex;gap:10px;align-items:center}.git-url-row .input{flex:1;min-width:0}.git-url-row .button{flex-shrink:0}.git-check-result{display:grid;gap:6px}@media(max-width:640px){.git-url-row{align-items:stretch;flex-direction:column}}

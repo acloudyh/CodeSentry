@@ -31,6 +31,8 @@ public class ScanProjectService {
 
     @org.springframework.beans.factory.annotation.Autowired
     private RepositorySyncService repositorySync;
+    @org.springframework.beans.factory.annotation.Autowired
+    private io.codesentry.git.credential.GitCredentialService sharedCredentials;
 
     public List<ScanProject> findAll() {
         return mapper.findAll();
@@ -77,6 +79,11 @@ public class ScanProjectService {
     /** Probe only: does not register, clone, update metadata or persist submitted credentials. */
     public io.codesentry.project.dto.GitValidationResult validateGit(io.codesentry.project.dto.GitValidationRequest request) {
         String remote=request.getRemoteUrl().trim(); repositoryService.validateRemoteUrl(remote);
+        if(request.getGitCredentialId()!=null) {
+            if(StringUtils.hasText(request.getGitUsername()) || StringUtils.hasText(request.getGitPassword()) || request.isUseStoredCredentials()) throw bad("共享账号与独立账密不能同时提交");
+            ScanProject selected=sharedCredentials.resolve(request.getGitCredentialId(),remote);
+            return repositoryService.validateConnection(remote,null,null,selected);
+        }
         String username=StringUtils.hasText(request.getGitUsername())?request.getGitUsername().trim():null;
         String password=request.getGitPassword(); ScanProject stored=null;
         if(StringUtils.hasText(password) && username==null) throw bad("请填写 Git 账号");
@@ -128,9 +135,10 @@ public class ScanProjectService {
             project.setRemoteUrl(remote);
             repositoryService.validateRemoteUrl(remote);
             String previousCredential = project.getGitPasswordCiphertext();
+            Long previousCredentialId = project.getGitCredentialId();
             applyCredentials(project, request, changed);
             if (changed) { project.setManagedPath(null); project.setLastSyncedAt(null); }
-            if (changed || !java.util.Objects.equals(previousCredential, project.getGitPasswordCiphertext())) queueSync(project);
+            if (changed || !java.util.Objects.equals(previousCredentialId,project.getGitCredentialId()) || !java.util.Objects.equals(previousCredential, project.getGitPasswordCiphertext())) queueSync(project);
         }
         project.setProjectName(request.getProjectName().trim());
         applyRuntime(project, request);
@@ -157,7 +165,19 @@ public class ScanProjectService {
             project.setTargetNodeVersion(StringUtils.hasText(request.getTargetNodeVersion()) ? request.getTargetNodeVersion().trim() : null);
     }
 
+    /** 保存共享账号引用，或兼容原仓库的独立账密；切换方式时清理另一种认证。 */
     private void applyCredentials(ScanProject project, CreateProjectRequest request, boolean remoteChanged) {
+        if(request.getGitCredentialId()!=null) {
+            if(request.getClearGitCredentials() || StringUtils.hasText(request.getGitUsername()) || StringUtils.hasText(request.getGitPassword())) throw bad("共享账号与独立账密不能同时提交");
+            sharedCredentials.checkSelection(request.getGitCredentialId(),project.getRemoteUrl());
+            project.setGitCredentialId(request.getGitCredentialId());project.setGitUsername(null);project.setGitPasswordCiphertext(null);return;
+        }
+        if(project.getGitCredentialId()!=null && !request.getClearGitCredentials() && !StringUtils.hasText(request.getGitUsername()) && !StringUtils.hasText(request.getGitPassword())) {
+            sharedCredentials.checkSelection(project.getGitCredentialId(),project.getRemoteUrl());return;
+        }
+        if(project.getGitCredentialId()!=null) {
+            project.setGitCredentialId(null);project.setGitUsername(null);project.setGitPasswordCiphertext(null);
+        }
         if (request.getClearGitCredentials()) {
             project.setGitUsername(null); project.setGitPasswordCiphertext(null); return;
         }

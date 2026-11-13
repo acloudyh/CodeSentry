@@ -19,11 +19,14 @@ import java.util.function.UnaryOperator;
 /** Credentials are encrypted at rest and passed through askpass environment, never through URLs or argv. */
 @Component
 public class GitCredentialAccess {
+    @org.springframework.beans.factory.annotation.Autowired
+    private io.codesentry.git.credential.GitCredentialService sharedCredentials;
     private final AiToolSecretCipher cipher;
     public GitCredentialAccess(AiToolSecretCipher cipher) { this.cipher=cipher; }
     public String encrypt(String value) { return cipher.encrypt(value); }
 
     public CommandResult execute(CommandExecutor executor, Path directory, List<String> original, Duration timeout, ScanProject project) {
+        if(project!=null && project.getGitCredentialId()!=null) project=sharedCredentials.resolve(project.getGitCredentialId(),project.getRemoteUrl());
         if(project==null || !project.isGitCredentialConfigured())
             return executeWithCredentials(executor,directory,original,timeout,null,null);
         if (!StringUtils.hasText(project.getGitUsername())) throw new BusinessException(HttpStatus.BAD_REQUEST,"Git 认证缺少账号，请编辑仓库重新填写");

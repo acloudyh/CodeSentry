@@ -14,6 +14,7 @@ export interface ApiResponse<T> {
 export interface ScanProject {
   applicationType?: ApplicationType
   targetNodeVersion?: string | null
+  gitCredentialId?: number
   gitUsername?: string
   gitCredentialConfigured?: boolean
   lastSyncedAt?: string
@@ -274,3 +275,5 @@ export interface GitValidationResult {
   defaultBranch?: string
   branches: string[]
 }
+
+export interface GitCredentialProfile { id: number; name: string; serverUrl: string; username: string; usageCount: number; updatedAt: string }

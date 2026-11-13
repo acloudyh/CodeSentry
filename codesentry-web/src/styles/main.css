@@ -528,3 +528,8 @@ textarea.input { min-height: 96px; padding: 12px 13px; resize: vertical; }
 .field small, .project-modal-content p { overflow-wrap: anywhere; }
 
 .table-pager .select { height: 36px; min-height: 36px; }
+
+/* 日期与时间使用不可拆分的内联盒子；在表格中保留完整内容，不用省略号截断。 */
+.datetime-text { display: inline-block; white-space: nowrap; overflow-wrap: normal; word-break: normal; font-variant-numeric: tabular-nums; vertical-align: baseline; }
+.data-table td.datetime-cell { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.sync-time { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }

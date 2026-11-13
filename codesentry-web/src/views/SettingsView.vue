@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GitCredentialSettings from '@/components/GitCredentialSettings.vue'
 import { currentTheme, setTheme, themes } from '@/utils/theme'
 const tools = [
   { name: 'Semgrep CE', runtime: 'Python / 命令行', purpose: '静态代码分析与自定义规则', env: 'CODESENTRY_SEMGREP_EXECUTABLE' },
@@ -10,6 +11,7 @@ const tools = [
 
 <template>
   <div class="page-stack">
+    <GitCredentialSettings />
     <section class="panel panel-pad theme-settings">
       <div class="section-heading"><div><h2>页面主题</h2><p>选择喜欢的配色，立即应用到全部页面。默认经典蓝，主题仅保存在当前浏览器。</p></div><span class="section-code">{{ themes.length }} 套配色方案</span></div>
       <div class="theme-options">
