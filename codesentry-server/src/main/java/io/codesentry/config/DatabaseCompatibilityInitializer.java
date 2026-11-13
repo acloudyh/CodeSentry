@@ -12,6 +12,7 @@ import java.sql.Statement;
 
 @org.springframework.core.annotation.Order(0)
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="codesentry.runtime.worker-enabled", havingValue="true", matchIfMissing=true)
 public class DatabaseCompatibilityInitializer implements ApplicationRunner {
 
     private final DataSource dataSource;

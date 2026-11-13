@@ -21,6 +21,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The persisted project state is a durable, coalescing queue: one outstanding pull per asset. */
 @Service
 public class RepositorySyncService {
+    /** 报告专用实例不认领或恢复原执行实例的后台任务。 */
+    @org.springframework.beans.factory.annotation.Value("${codesentry.runtime.worker-enabled:true}")
+    private boolean workerEnabled = true;
     private final ScanProjectMapper mapper;
     private final GitRepositoryService git;
     private final TaskExecutor executor;
@@ -36,7 +39,7 @@ public class RepositorySyncService {
 
     /** 启动后恢复被中断的拉取状态，再开放后台调度。 */
     @EventListener(ApplicationReadyEvent.class)
-    public void ready() { mapper.recoverRepositorySync(); ready=true; }
+    public void ready() { if (!workerEnabled) return; mapper.recoverRepositorySync(); ready=true; }
 
     /** 查询当前实例是否正在处理指定资产的代码拉取。 */
     public boolean isRunning(Long id) { return running.contains(id); }

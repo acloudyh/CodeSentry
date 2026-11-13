@@ -16,6 +16,9 @@ import java.util.Set;
 /** Reuses an original completed scan; does not start scanners or change findings/reviews. */
 @Service
 public class RemediationRefreshService {
+    /** 报告专用实例不认领或恢复原执行实例的后台任务。 */
+    @org.springframework.beans.factory.annotation.Value("${codesentry.runtime.worker-enabled:true}")
+    private boolean workerEnabled = true;
     private final ScanRunMapper runs;
     private final OnlineRemediationService online;
     private final TaskExecutor executor;
@@ -23,7 +26,7 @@ public class RemediationRefreshService {
     /** 注入原扫描、联网核实及独立执行器，并为排队失败准备独立提交事务。 */
     public RemediationRefreshService(ScanRunMapper runs,OnlineRemediationService online,@Qualifier("remediationTaskExecutor") TaskExecutor executor,org.springframework.transaction.PlatformTransactionManager manager) { this.runs=runs;this.online=online;this.executor=executor;this.failureTransaction=new TransactionTemplate(manager);this.failureTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW); }
     /** 服务启动时将未结束的历史补查标为可重试的失败状态。 */
-    @EventListener(ApplicationReadyEvent.class) public void recover() { runs.recoverRemediationRefresh(); }
+    @EventListener(ApplicationReadyEvent.class) public void recover() { if (workerEnabled) runs.recoverRemediationRefresh(); }
     /** 校验原扫描模式和结束状态，原子认领补查；提交事务后才将任务投入后台。 */
     @Transactional public ScanRun start(Long id) {
         ScanRun run=runs.findById(id);
