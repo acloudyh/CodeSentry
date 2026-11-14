@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "CodeSentry HTTP 错误兼容契约",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "本次先整改 v1 通用错误与追踪协议；旧成功响应不变。本文仅覆盖已评审的通用协议样例，不代表全部业务接口已经满足规范。全量接口清单与剩余差距见 docs/standards/audit.md。"
   },
   "servers": [
@@ -120,6 +120,174 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v1/business-projects": {
+      "post": {
+        "operationId": "createBusinessProjects",
+        "summary": "创建业务项目并返回资源位置（兼容既有成功体）",
+        "responses": {
+          "201": {
+            "description": "创建成功，data 保持既有 v1 结构",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "创建的资源地址"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v1/business-projects/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "deleteBusinessProjects",
+        "summary": "删除业务项目",
+        "responses": {
+          "204": {
+            "description": "删除完成，不返回响应体"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v1/settings/git-credentials": {
+      "post": {
+        "operationId": "createGitCredentials",
+        "summary": "创建Git 凭据并返回资源位置（兼容既有成功体）",
+        "responses": {
+          "201": {
+            "description": "创建成功，data 保持既有 v1 结构",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "创建的资源地址"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v1/settings/git-credentials/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "deleteGitCredentials",
+        "summary": "删除Git 凭据",
+        "responses": {
+          "204": {
+            "description": "删除完成，不返回响应体"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v1/ai-tools": {
+      "post": {
+        "operationId": "createAiTools",
+        "summary": "创建模型工具并返回资源位置（兼容既有成功体）",
+        "responses": {
+          "201": {
+            "description": "创建成功，data 保持既有 v1 结构",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "创建的资源地址"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v1/ai-tools/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "deleteAiTools",
+        "summary": "删除模型工具",
+        "responses": {
+          "204": {
+            "description": "删除完成，不返回响应体"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
