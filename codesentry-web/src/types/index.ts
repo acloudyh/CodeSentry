@@ -265,6 +265,7 @@ export interface ProjectScanItem {
 }
 export interface ProjectScanRound {
   assetHistory?: boolean
+  unselectedAssets?: Array<{assetId:number;assetName:string}>
   id: number; businessProjectId: number; projectName: string; fullScope: boolean; assetCount: number;
   networkMode: 'LOCAL' | 'ONLINE'; ruleProfile: string; retryOf?: number; createdAt: string; status: ScanStatus;
   completedCount: number; failedCount: number; items: ProjectScanItem[]
@@ -293,4 +294,9 @@ export interface ReviewPlan {
  id: string; scanRunId: number; jobId?: number; model: string; provider: string; budget: ReviewBudgetPolicy
  total: number; quality: number; security: number; audit: number; localPrecheck: number; alreadyReviewed: number; reusable: number; modelCandidates: number
  estimatedRequests: number; estimatedInputTokens: number; estimatedOutputTokens: number; estimatedCost: number; expiresAt: string
+}
+
+export type ReportPackageFormat = 'PDF' | 'WORD' | 'BOTH'
+export interface ReportPackageJob {
+ id:string;businessProjectId:number;roundId:number;format:ReportPackageFormat;status:'PENDING'|'RUNNING'|'COMPLETED'|'FAILED';fileName:string;totalFiles:number;completedFiles:number;fileBytes:number;errorMessage?:string;createdAt:string;finishedAt?:string
 }

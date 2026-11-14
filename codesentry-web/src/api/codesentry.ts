@@ -1,4 +1,4 @@
-import type { ReviewBudgetPolicy, ReviewPlan, GitCredentialProfile, ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
+import type { ReportPackageJob, ReportPackageFormat, ReviewBudgetPolicy, ReviewPlan, GitCredentialProfile, ApplicationType, GitValidationResult, BusinessProject, ProjectScanRound, ProjectScanPayload, PageResult, LedgerFinding } from '@/types'
 import { request } from './http'
 import type { ReportAcceptance } from '@/types'
 import type { AiReviewConfiguration, AiReviewJob, AiReviewRecord, AiReviewSummary, AiToolConfiguration, BatchTriageResult, BranchView, DashboardSummary, FindingView, RemediationReportSummary, RuleProfile, RuleLibraryStatus, ScanProject, ScanRun, ScanRunDetail, ScanMode, SourceType, TriageStatus, WorkspaceMode } from '@/types'
@@ -63,6 +63,10 @@ function displayProject(project: ScanProject): ScanProject {
 }
 
 export const api = {
+  startReportPackage: (projectId:number,roundId:number,format:ReportPackageFormat,requestKey:string) => request<ReportPackageJob>(`/api/v1/business-projects/${projectId}/rounds/${roundId}/report-packages`, {method:'POST',body:JSON.stringify({format,requestKey})}),
+  latestReportPackage: (projectId:number,roundId:number,format:ReportPackageFormat) => request<ReportPackageJob|null>(`/api/v1/business-projects/${projectId}/rounds/${roundId}/report-packages/latest?format=${format}`),
+  reportPackage: (projectId:number,jobId:string) => request<ReportPackageJob>(`/api/v1/business-projects/${projectId}/report-packages/${jobId}`),
+  reportPackageDownloadUrl: (projectId:number,jobId:string) => `/api/v1/business-projects/${projectId}/report-packages/${jobId}/download`,
   businessProjects: () => request<BusinessProject[]>('/api/v1/business-projects'),
   businessProject: (id: number) => request<BusinessProject>(`/api/v1/business-projects/${id}`),
   saveBusinessProject: (id: number | null, payload: { name: string; description: string }) => request<BusinessProject>(`/api/v1/business-projects${id === null ? '' : `/${id}`}`, { method: id === null ? 'POST' : 'PUT', body: JSON.stringify(payload) }),
