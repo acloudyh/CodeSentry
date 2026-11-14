@@ -20,8 +20,8 @@ jobs:
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
           MYSQL_DATABASE: codesentry_business_test_ci
-        ports: ['3306:3306']
         options: >-
+          --publish 127.0.0.1:3306:3306
           --health-cmd="mysqladmin ping -h 127.0.0.1"
           --health-interval=10s --health-timeout=5s --health-retries=15
     env:
