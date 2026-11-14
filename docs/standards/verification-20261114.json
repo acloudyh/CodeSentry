@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-14",
+  "version": "0.2.0-SNAPSHOT",
+  "backend": {
+    "tests": 273,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "incrementalCoverage": "新增 Java/TS 可执行行覆盖率: 291/322 = 90.37%（Vue 交互另走浏览器验收）",
+  "sast": {
+    "findings": 4,
+    "errors": 0,
+    "highConfidenceBlocking": 0,
+    "note": "保留两处进程调用的社区与平台重复审计结果，未屏蔽或自动改判误报"
+  },
+  "trivyDatabaseUpdatedAt": "2026-11-14T01:05:40.480840314Z",
+  "javaDependencies": {
+    "high": 0,
+    "critical": 0,
+    "note": "已用独立最新库扫描 Java 21 / Boot 4.0.9 的组件清单；非完整镜像扫描"
+  },
+  "nativeHttpsChecks": [
+    "HTTPS and Origin",
+    "201 and Location",
+    "unknown fields 400",
+    "field validation errors",
+    "cross-site 403",
+    "GET does not archive",
+    "24h idempotency replay and conflict",
+    "Word/PDF export"
+  ],
+  "frontend": {
+    "tests": {
+      "passed": 14,
+      "failed": 0
+    },
+    "pc": "9 个主菜单路径及登记弹窗，axe 无 critical/serious",
+    "npmAudit": "升级后上一次有效审计为高危 0、中危 8；最终联网复核受本机 DNS 故障阻断，远端 CI 需重查",
+    "dependencyScan": {
+      "database": "2026-11-14",
+      "high": 0,
+      "critical": 0,
+      "medium": 1,
+      "includeDevDependencies": true
+    }
+  },
+  "manualPending": [
+    "CI 修改需两名评审人",
+    "远端分支保护配置尚未应用",
+    "共享数据库旧凭据仍需负责人轮换",
+    "历史 v1 完整 schema / 分页 / 幂等 / DTO 迁移未完成",
+    "按用户要求不增加身份登录，不宣称满足鉴权条款"
+  ],
+  "productionDeployed": false
+}

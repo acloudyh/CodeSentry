@@ -1,0 +1,421 @@
+{
+  "schemaVersion": 1,
+  "description": "全量实现清单；不是全部接口已经满足 OpenAPI/分页/DTO 规范的声明。",
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/budget-policy",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai-reviews/budget-policy",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/config",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai-reviews/config",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/findings/{findingId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-reviews/findings/{findingId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/jobs/{jobId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/jobs/{jobId}/budget",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-reviews/jobs/{jobId}/cancel",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/jobs/{jobId}/findings",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/jobs/{jobId}/records",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-reviews/plans/{planId}/start",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-reviews/scan-runs/{runId}/preview",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/scan-runs/{scanRunId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-reviews/scan-runs/{scanRunId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-reviews/scan-runs/{scanRunId}/jobs/latest",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-reviews/scan-runs/{scanRunId}/retry-failed",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiReviewController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-tools",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiToolConfigurationController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai-tools",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiToolConfigurationController.java"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai-tools/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiToolConfigurationController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai-tools/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiToolConfigurationController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai-tools/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/ai/controller/AiToolConfigurationController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/business-projects",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/business-projects/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/business-projects/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}/assets",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/business-projects/{id}/assets/{assetId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/business-projects/{id}/assets/{assetId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}/findings",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}/quality.csv",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}/rounds",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/business-projects/{id}/rounds",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}/rounds/{roundId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/business-projects/{id}/rounds/{roundId}/cancel",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{id}/rounds/{roundId}/report/{format}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/business-projects/{id}/rounds/{roundId}/retry",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/BusinessProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{projectId}/report-packages/{jobId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/ProjectReportPackageController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{projectId}/report-packages/{jobId}/download",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/ProjectReportPackageController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/business-projects/{projectId}/rounds/{roundId}/report-packages",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/ProjectReportPackageController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/business-projects/{projectId}/rounds/{roundId}/report-packages/latest",
+      "controller": "codesentry-server/src/main/java/io/codesentry/business/ProjectReportPackageController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dashboard/summary",
+      "controller": "codesentry-server/src/main/java/io/codesentry/dashboard/controller/DashboardController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/findings",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/findings/{findingId}/triage",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/findings/rule-classifications",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/findings/rule-classifications",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/findings/scan-runs/{runId}/quality.csv",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/findings/scan-runs/{scanRunId}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/findings/scan-runs/{scanRunId}/triage/batch",
+      "controller": "codesentry-server/src/main/java/io/codesentry/finding/controller/FindingController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/projects/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/projects/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{id}/branches",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/projects/{id}/jar",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/JarProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{id}/sync",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/git/validate",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/ScanProjectController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/jar",
+      "controller": "codesentry-server/src/main/java/io/codesentry/project/controller/JarProjectController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/page",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/scan-runs/{runId}/acceptance",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportAcceptanceController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/scan-runs/{runId}/docx",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/scan-runs/{runId}/excluded-findings",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/scan-runs/{runId}/html",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/scan-runs/{runId}/included-finding-ids",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reports/scan-runs/{runId}/pdf",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/reports/scan-runs/{runId}/verify-online",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rule-profiles",
+      "controller": "codesentry-server/src/main/java/io/codesentry/rule/controller/RuleProfileController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rule-profiles/library",
+      "controller": "codesentry-server/src/main/java/io/codesentry/rule/controller/RuleProfileController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rule-profiles/library/update",
+      "controller": "codesentry-server/src/main/java/io/codesentry/rule/controller/RuleProfileController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scan-runs",
+      "controller": "codesentry-server/src/main/java/io/codesentry/scan/controller/ScanRunController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scan-runs",
+      "controller": "codesentry-server/src/main/java/io/codesentry/scan/controller/ScanRunController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scan-runs/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/scan/controller/ScanRunController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scan-runs/{id}/cancel",
+      "controller": "codesentry-server/src/main/java/io/codesentry/scan/controller/ScanRunController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scan-runs/{id}/detail",
+      "controller": "codesentry-server/src/main/java/io/codesentry/scan/controller/ScanRunController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scan-runs/jar",
+      "controller": "codesentry-server/src/main/java/io/codesentry/scan/controller/JarUploadController.java"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/git-credentials",
+      "controller": "codesentry-server/src/main/java/io/codesentry/git/credential/GitCredentialController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/settings/git-credentials",
+      "controller": "codesentry-server/src/main/java/io/codesentry/git/credential/GitCredentialController.java"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/settings/git-credentials/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/git/credential/GitCredentialController.java"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/settings/git-credentials/{id}",
+      "controller": "codesentry-server/src/main/java/io/codesentry/git/credential/GitCredentialController.java"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/report-archives",
+      "controller": "codesentry-server/src/main/java/io/codesentry/report/controller/ReportArchiveController.java"
+    }
+  ]
+}

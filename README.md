@@ -31,14 +31,14 @@ P3C 扫描不再执行命名风格、Javadoc/作者等注释规则，其余规�
 | 前端 | Vue 3、TypeScript、Vite 8 | 页面开发与构建 |
 | 路由、状态 | Vue Router 5、Pinia 4 | 页面路由；Pinia 已接入，当前页面主要使用 Vue 响应式状态 |
 | 页面样式 | 自定义 CSS 和 Vue 组件 | 应用布局、主题、表格及通用组件 |
-| 后端 | JDK 11、Spring Boot 2.7.18 | 业务接口、扫描调度及报告生成 |
+| 后端 | JDK 21、Spring Boot 4.0.9 | 业务接口、扫描调度及报告生成 |
 | 数据访问 | MyBatis Spring Boot Starter 2.3.2、MySQL | 项目、扫描结果、审核记录等持久化 |
 | 后台任务 | Spring ThreadPoolTaskExecutor | 扫描任务与模型审核各使用独立线程池 |
 | 模型接入 | OpenAI 兼容接口 | 工具初审与复审，模型服务可配置 |
 | 报告导出 | Apache POI、OpenHTMLToPDF | Word、HTML、PDF |
 | 部署 | Docker、Nginx | 后端运行环境及前端静态页面服务 |
 
-**CodeSentry 自身使用 Java 11。项目设置中的“业务系统 Java 版本”指被扫描系统的运行版本，用于选择整改候选；例如当前业务项目使用 Java 8。两者分别配置。**
+**CodeSentry 自身使用 Java 21。项目设置中的“业务系统 Java 版本”指被扫描系统的运行版本，用于选择整改候选；例如当前业务项目使用 Java 8。两者分别配置。**
 
 数据库启动初始化使用 Spring SQL 初始化脚本及 `DatabaseCompatibilityInitializer` 的字段兼容检查，当前未接入 Flyway。
 
@@ -164,7 +164,7 @@ flowchart LR
 
 ## 本地开发启动
 
-从项目根目录开始。开发环境需要 JDK 11、Maven、Node.js 22.12.0 或更高版本、npm、Git 和可访问的 MySQL；本地直接运行后端时，还需按下文准备扫描工具。Docker 镜像会安装扫描工具。
+从项目根目录开始。开发环境需要 JDK 21、Maven、Node.js 22.12.0 或更高版本、npm、Git 和可访问的 MySQL；本地直接运行后端时，还需按下文准备扫描工具。Docker 镜像会安装扫描工具。
 
 
 ### 1. 初始化数据库
@@ -198,7 +198,7 @@ export CODESENTRY_DB_PASSWORD='change_me'
 (cd codesentry-web && npm ci && npm run dev)
 ```
 
-前端默认监听 `http://127.0.0.1:5173`。开发时 Vite 将 `/api`、`/actuator` 代理到后端 `18080`；两个服务分别在各自终端运行。上述括号命令不会改变当前终端所在目录。
+前端默认监听 `https://127.0.0.1:5173`。开发时 Vite 将 `/api`、`/actuator` 代理到后端 `18080`；两个服务分别在各自终端运行。上述括号命令不会改变当前终端所在目录。
 
 ## Docker 部署与日常运维
 
@@ -206,7 +206,7 @@ export CODESENTRY_DB_PASSWORD='change_me'
 
 ```mermaid
 flowchart LR
-    A[浏览器 localhost:5173] --> B[前端容器 Nginx:80]
+    A[浏览器 localhost:5173] --> B[前端容器 Nginx:443]
     B -->|/api 与 /actuator| C[后端容器 Spring Boot:18080]
     C --> D[宿主机 MySQL:3306]
     C --> E[容器内扫描工具]
@@ -214,7 +214,7 @@ flowchart LR
     C --> G[配置的模型服务]
 ```
 
-前端镜像先用 Node 构建，再用 Nginx 发布静态文件；运行阶段不依赖 Vite 开发服务。后端镜像先用 Maven 和 JDK 11 打包，再通过 Java 11 JRE 运行，并包含扫描工具和中文字体。
+前端镜像先用 Node 构建，再用 Nginx 发布静态文件；运行阶段不依赖 Vite 开发服务。后端镜像先用 Maven 和 JDK 21 打包，再通过 Java 21 JRE 运行，并包含扫描工具和中文字体。
 
 ### 当前本机运行配置
 
@@ -251,7 +251,7 @@ docker logs --tail 100 codesentry-web
 curl http://127.0.0.1:18080/actuator/health
 ```
 
-浏览器入口：`http://127.0.0.1:5173`。
+浏览器入口：`https://127.0.0.1:5173`。
 
 ### 修改代码后的发布
 
@@ -451,7 +451,7 @@ CODESENTRY_INTEGRATION_DB_URL='jdbc:mysql://127.0.0.1:3306/codesentry_business_t
 
 集成测试模拟扫描器编排，验证真实数据库上的归属、幂等竞争、取消重试、分页、归档和 Word/PDF 生成；实际扫描器仍由已有扫描器测试覆盖。常规 `mvn test` 无此变量时跳过该集成测试，包含批量扫描事务提交后派发及队列拒绝测试。
 
-浏览器回归测试：在使用独立数据库的前后端服务启动后，于 `codesentry-web` 执行 `npm run test:business-projects`。该测试会创建演示项目、仓库及 JAR，验证全项目/勾选扫描、项目台账与报告下载；默认访问 `http://127.0.0.1:5173`，可通过 `CODESENTRY_WEB_URL` 覆盖。测试仅用于独立测试库，会保留其创建的数据。
+浏览器回归测试：在使用独立数据库的前后端服务启动后，于 `codesentry-web` 执行 `npm run test:business-projects`。该测试会创建演示项目、仓库及 JAR，验证全项目/勾选扫描、项目台账与报告下载；默认访问 `https://127.0.0.1:5173`，可通过 `CODESENTRY_WEB_URL` 覆盖。测试仅用于独立测试库，会保留其创建的数据。
 
 ### 仓库应用类型、账号认证与本地代码缓存
 
@@ -514,3 +514,33 @@ HTTPS 校验保持开启。私有 CA/自签证书可在持久化目录 `CODESENT
 密码沿用本机持久化主密钥进行 AES-GCM 加密，不向浏览器回显，不写入仓库 URL。共享配置只用于相同协议、主机和端口；密码编辑留空保持原值，被有效仓库引用时不能删除或更换服务地址。
 
 登记日期、代码同步、扫描、工具更新时间和详情中的时间值共用单行布局，列宽随内容调整，避免拆开日期或用省略号隐藏时间。
+
+
+## 团队规范与平台自检
+
+规范原文见 [团队开发规范](docs/engineering-standards.md)，本批整改范围、已验证证据与未满足项见 [整改记录](docs/standards/audit.md)。
+
+- 本机无需登录，按用户要求不增加用户、角色管理。该模式不能描述为满足身份鉴权条款；Docker 发布端口仅绑定回环地址，并校验 API Host / Origin。
+- 首次开发或部署先运行 `bash scripts/init-local-tls.sh`。脚本只在忽略的 `.codesentry/tls` 创建证书，不覆盖既有私钥，也不自动写入系统信任；请按本机流程信任证书，再使用 HTTPS 5173。
+- 数据库密码必须由 `CODESENTRY_DB_PASSWORD` 提供，源码不再有密码默认值。Git / 模型凭据仍加密保存，密钥文件和运行数据不可提交。
+- 报告查看和下载为只读 GET；页面先通过 `POST /api/v2/report-archives` 显式归档并固定既有采纳清单，项目汇总继续保存完整快照，重复提交使用持久化的 24 小时幂等身份。原导出格式、文件名和 ZIP 功能保留。
+- 平台 Java 21 与被扫描业务系统的 Java 8 / 11 等版本选择独立；本批使用 Spring 官方 Jackson 2 兼容模块保留历史 JSON 档案格式。
+
+```bash
+npm ci
+npm --prefix codesentry-web ci
+npm run generate:types
+npm run lint
+npm run format:check
+npm run check:standards
+node scripts/check-contract.mjs
+npm run test:web
+# 真实数据库集成测试仅允许 codesentry_business_test_* 测试库，不能指向生产库。
+mvn -f codesentry-server/pom.xml verify
+python3 scripts/check-coverage.py origin/main
+bash scripts/verify-tracked-secrets.sh
+```
+
+格式工具：Java 使用 Spotless/google-java-format，Vue/TypeScript 使用 ESLint flat config + Prettier（规范 FE-06 允许的方案）。pre-commit 校验暂存文件；提交说明使用 `fix(api): 中文描述` 等 Conventional Commits。
+
+本次包含 CI 调整，按 COL-04 需要两名评审人。自动自检通过不等于人工签核或已部署生产。V10 只新增幂等记录表，回滚旧镜像可保留该表，不需要删除业务数据或历史报告。
