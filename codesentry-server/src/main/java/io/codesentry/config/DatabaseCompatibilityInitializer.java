@@ -1,112 +1,188 @@
 package io.codesentry.config;
 
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
-import org.springframework.stereotype.Component;
-
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import javax.sql.DataSource;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.stereotype.Component;
 
+/** 对既有数据库执行受控兼容迁移并恢复中断任务；DDL 与标识符只能来自代码中的静态白名单。 */
 @org.springframework.core.annotation.Order(0)
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="codesentry.runtime.worker-enabled", havingValue="true", matchIfMissing=true)
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+    name = "codesentry.runtime.worker-enabled",
+    havingValue = "true",
+    matchIfMissing = true)
 public class DatabaseCompatibilityInitializer implements ApplicationRunner {
 
-    private final DataSource dataSource;
+  private final DataSource dataSource;
 
-    public DatabaseCompatibilityInitializer(DataSource dataSource) {
-        this.dataSource = dataSource;
+  public DatabaseCompatibilityInitializer(DataSource dataSource) {
+    this.dataSource = dataSource;
+  }
+
+  @Override
+  public void run(ApplicationArguments args) throws Exception {
+    ensureColumn(
+        "scan_tool_run",
+        "phase",
+        "ALTER TABLE scan_tool_run ADD COLUMN phase VARCHAR(32) NOT NULL DEFAULT 'current' AFTER tool_name");
+    ensureColumn(
+        "scan_tool_run",
+        "command_line",
+        "ALTER TABLE scan_tool_run ADD COLUMN command_line VARCHAR(2048) NULL AFTER exit_code");
+    ensureColumn(
+        "scan_tool_run",
+        "working_directory",
+        "ALTER TABLE scan_tool_run ADD COLUMN working_directory VARCHAR(1024) NULL AFTER command_line");
+    ensureColumn(
+        "scan_tool_run",
+        "output_log",
+        "ALTER TABLE scan_tool_run ADD COLUMN output_log LONGTEXT NULL AFTER raw_report_path");
+    ensureColumn(
+        "scan_run",
+        "rule_profile",
+        "ALTER TABLE scan_run ADD COLUMN rule_profile VARCHAR(64) NOT NULL DEFAULT 'COMMUNITY_GENERAL' AFTER baseline_ref");
+    ensureColumn(
+        "scan_project",
+        "target_java_version",
+        "ALTER TABLE scan_project ADD COLUMN target_java_version INT NULL");
+    ensureColumn(
+        "scan_project",
+        "application_type",
+        "ALTER TABLE scan_project ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
+    ensureColumn(
+        "scan_project",
+        "target_node_version",
+        "ALTER TABLE scan_project ADD COLUMN target_node_version VARCHAR(32) NULL");
+    ensureColumn(
+        "scan_project",
+        "git_credential_id",
+        "ALTER TABLE scan_project ADD COLUMN git_credential_id BIGINT NULL, ADD INDEX idx_project_git_credential (git_credential_id)");
+    ensureColumn(
+        "scan_project",
+        "git_username",
+        "ALTER TABLE scan_project ADD COLUMN git_username VARCHAR(256) NULL");
+    ensureColumn(
+        "scan_project",
+        "git_password_ciphertext",
+        "ALTER TABLE scan_project ADD COLUMN git_password_ciphertext TEXT NULL");
+    ensureColumn(
+        "scan_project",
+        "repository_revision",
+        "ALTER TABLE scan_project ADD COLUMN repository_revision BIGINT NOT NULL DEFAULT 0");
+    ensureColumn(
+        "scan_project",
+        "last_synced_at",
+        "ALTER TABLE scan_project ADD COLUMN last_synced_at DATETIME(3) NULL");
+    ensureColumn(
+        "scan_project",
+        "last_sync_status",
+        "ALTER TABLE scan_project ADD COLUMN last_sync_status VARCHAR(24) NULL");
+    ensureColumn(
+        "scan_project",
+        "last_sync_message",
+        "ALTER TABLE scan_project ADD COLUMN last_sync_message VARCHAR(1000) NULL");
+    ensureColumn(
+        "project_scan_item",
+        "application_type",
+        "ALTER TABLE project_scan_item ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
+    ensureColumn(
+        "project_scan_item",
+        "target_node_version",
+        "ALTER TABLE project_scan_item ADD COLUMN target_node_version VARCHAR(32) NULL");
+    ensureColumn(
+        "project_scan_round",
+        "refresh_remote",
+        "ALTER TABLE project_scan_round ADD COLUMN refresh_remote TINYINT(1) NOT NULL DEFAULT 0");
+    ensureColumn(
+        "scan_run",
+        "source_report_run_id",
+        "ALTER TABLE scan_run ADD COLUMN source_report_run_id BIGINT NULL");
+    ensureColumn(
+        "scan_run",
+        "artifact_path",
+        "ALTER TABLE scan_run ADD COLUMN artifact_path VARCHAR(1024) NULL");
+    ensureColumn(
+        "scan_run",
+        "network_mode",
+        "ALTER TABLE scan_run ADD COLUMN network_mode VARCHAR(16) NOT NULL DEFAULT 'LOCAL'");
+    ensureColumn(
+        "scan_run",
+        "remediation_status",
+        "ALTER TABLE scan_run ADD COLUMN remediation_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUESTED'");
+    ensureColumn(
+        "scan_run",
+        "remediation_message",
+        "ALTER TABLE scan_run ADD COLUMN remediation_message VARCHAR(1000) NULL");
+    ensureColumn(
+        "scan_run",
+        "remediation_evidence",
+        "ALTER TABLE scan_run ADD COLUMN remediation_evidence LONGTEXT NULL");
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      // 迁移 SQL 为静态常量，不允许将外部表名、路径或请求字段拼入语句。
+      String migrateArtifactPaths =
+          "UPDATE scan_run r JOIN scan_project p ON p.id = r.project_id SET r.artifact_path = p.local_path WHERE r.workspace_mode = 'JAR_UPLOAD' AND r.artifact_path IS NULL";
+      statement.executeUpdate(migrateArtifactPaths);
     }
+    alterColumn("ALTER TABLE scan_finding MODIFY COLUMN cwe VARCHAR(512) NULL");
+    alterColumn("ALTER TABLE scan_ai_review MODIFY COLUMN prompt_version VARCHAR(128) NOT NULL");
+    ensureColumn(
+        "scan_ai_review_job",
+        "concurrency",
+        "ALTER TABLE scan_ai_review_job ADD COLUMN concurrency INT NOT NULL DEFAULT 1");
+    failInterruptedRuns();
+    failInterruptedAiReviewJobs();
+  }
 
-    @Override
-    public void run(ApplicationArguments args) throws Exception {
-        ensureColumn("scan_tool_run", "phase",
-                "ALTER TABLE scan_tool_run ADD COLUMN phase VARCHAR(32) NOT NULL DEFAULT 'current' AFTER tool_name");
-        ensureColumn("scan_tool_run", "command_line",
-                "ALTER TABLE scan_tool_run ADD COLUMN command_line VARCHAR(2048) NULL AFTER exit_code");
-        ensureColumn("scan_tool_run", "working_directory",
-                "ALTER TABLE scan_tool_run ADD COLUMN working_directory VARCHAR(1024) NULL AFTER command_line");
-        ensureColumn("scan_tool_run", "output_log",
-                "ALTER TABLE scan_tool_run ADD COLUMN output_log LONGTEXT NULL AFTER raw_report_path");
-        ensureColumn("scan_run", "rule_profile",
-                "ALTER TABLE scan_run ADD COLUMN rule_profile VARCHAR(64) NOT NULL DEFAULT 'COMMUNITY_GENERAL' AFTER baseline_ref");
-        ensureColumn("scan_project", "target_java_version",
-                "ALTER TABLE scan_project ADD COLUMN target_java_version INT NULL");
-        ensureColumn("scan_project", "application_type", "ALTER TABLE scan_project ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
-        ensureColumn("scan_project", "target_node_version", "ALTER TABLE scan_project ADD COLUMN target_node_version VARCHAR(32) NULL");
-        ensureColumn("scan_project", "git_credential_id", "ALTER TABLE scan_project ADD COLUMN git_credential_id BIGINT NULL, ADD INDEX idx_project_git_credential (git_credential_id)");
-        ensureColumn("scan_project", "git_username", "ALTER TABLE scan_project ADD COLUMN git_username VARCHAR(256) NULL");
-        ensureColumn("scan_project", "git_password_ciphertext", "ALTER TABLE scan_project ADD COLUMN git_password_ciphertext TEXT NULL");
-        ensureColumn("scan_project", "repository_revision", "ALTER TABLE scan_project ADD COLUMN repository_revision BIGINT NOT NULL DEFAULT 0");
-        ensureColumn("scan_project", "last_synced_at", "ALTER TABLE scan_project ADD COLUMN last_synced_at DATETIME(3) NULL");
-        ensureColumn("scan_project", "last_sync_status", "ALTER TABLE scan_project ADD COLUMN last_sync_status VARCHAR(24) NULL");
-        ensureColumn("scan_project", "last_sync_message", "ALTER TABLE scan_project ADD COLUMN last_sync_message VARCHAR(1000) NULL");
-        ensureColumn("project_scan_item", "application_type", "ALTER TABLE project_scan_item ADD COLUMN application_type VARCHAR(24) NOT NULL DEFAULT 'BACKEND'");
-        ensureColumn("project_scan_item", "target_node_version", "ALTER TABLE project_scan_item ADD COLUMN target_node_version VARCHAR(32) NULL");
-        ensureColumn("project_scan_round", "refresh_remote", "ALTER TABLE project_scan_round ADD COLUMN refresh_remote TINYINT(1) NOT NULL DEFAULT 0");
-        ensureColumn("scan_run", "source_report_run_id",
-                "ALTER TABLE scan_run ADD COLUMN source_report_run_id BIGINT NULL");
-        ensureColumn("scan_run", "artifact_path",
-                "ALTER TABLE scan_run ADD COLUMN artifact_path VARCHAR(1024) NULL");
-        ensureColumn("scan_run", "network_mode", "ALTER TABLE scan_run ADD COLUMN network_mode VARCHAR(16) NOT NULL DEFAULT 'LOCAL'");
-        ensureColumn("scan_run", "remediation_status", "ALTER TABLE scan_run ADD COLUMN remediation_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUESTED'");
-        ensureColumn("scan_run", "remediation_message", "ALTER TABLE scan_run ADD COLUMN remediation_message VARCHAR(1000) NULL");
-        ensureColumn("scan_run", "remediation_evidence", "ALTER TABLE scan_run ADD COLUMN remediation_evidence LONGTEXT NULL");
-        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("UPDATE scan_run r JOIN scan_project p ON p.id = r.project_id "
-                    + "SET r.artifact_path = p.local_path WHERE r.workspace_mode = 'JAR_UPLOAD' AND r.artifact_path IS NULL");
+  private void ensureColumn(String tableName, String columnName, String ddl) throws Exception {
+    try (Connection connection = dataSource.getConnection()) {
+      DatabaseMetaData metaData = connection.getMetaData();
+      try (ResultSet columns =
+          metaData.getColumns(connection.getCatalog(), null, tableName, columnName)) {
+        if (columns.next()) {
+          return;
         }
-        alterColumn("ALTER TABLE scan_finding MODIFY COLUMN cwe VARCHAR(512) NULL");
-        alterColumn("ALTER TABLE scan_ai_review MODIFY COLUMN prompt_version VARCHAR(128) NOT NULL");
-        ensureColumn("scan_ai_review_job", "concurrency", "ALTER TABLE scan_ai_review_job ADD COLUMN concurrency INT NOT NULL DEFAULT 1");
-        failInterruptedRuns();
-        failInterruptedAiReviewJobs();
+      }
+      try (Statement statement = connection.createStatement()) {
+        statement.execute(ddl);
+      }
     }
+  }
 
-    private void ensureColumn(String tableName, String columnName, String ddl) throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            DatabaseMetaData metaData = connection.getMetaData();
-            try (ResultSet columns = metaData.getColumns(connection.getCatalog(), null, tableName, columnName)) {
-                if (columns.next()) {
-                    return;
-                }
-            }
-            try (Statement statement = connection.createStatement()) {
-                statement.execute(ddl);
-            }
-        }
+  private void alterColumn(String ddl) throws Exception {
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      statement.execute(ddl);
     }
+  }
 
-    private void alterColumn(String ddl) throws Exception {
-        try (Connection connection = dataSource.getConnection();
-             Statement statement = connection.createStatement()) {
-            statement.execute(ddl);
-        }
+  private void failInterruptedRuns() throws Exception {
+    String sql =
+        "UPDATE scan_run SET remediation_message = CASE WHEN network_mode = 'ONLINE' "
+            + "AND remediation_status IN ('PENDING','RUNNING') THEN '服务重启，联网核实未完成' ELSE remediation_message END, "
+            + "remediation_status = CASE WHEN network_mode = 'ONLINE' AND remediation_status IN ('PENDING','RUNNING') "
+            + "THEN 'FAILED' ELSE remediation_status END, status = 'FAILED', "
+            + "error_message = '服务重启或本地进程中断，扫描未正常完成', "
+            + "finished_at = NOW(3) WHERE status IN ('PENDING', 'PREPARING', 'RUNNING')";
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(sql);
     }
+  }
 
-    private void failInterruptedRuns() throws Exception {
-        String sql = "UPDATE scan_run SET remediation_message = CASE WHEN network_mode = 'ONLINE' " +
-                "AND remediation_status IN ('PENDING','RUNNING') THEN '服务重启，联网核实未完成' ELSE remediation_message END, " +
-                "remediation_status = CASE WHEN network_mode = 'ONLINE' AND remediation_status IN ('PENDING','RUNNING') " +
-                "THEN 'FAILED' ELSE remediation_status END, status = 'FAILED', " +
-                "error_message = '服务重启或本地进程中断，扫描未正常完成', " +
-                "finished_at = NOW(3) WHERE status IN ('PENDING', 'PREPARING', 'RUNNING')";
-        try (Connection connection = dataSource.getConnection();
-             Statement statement = connection.createStatement()) {
-            statement.executeUpdate(sql);
-        }
+  private void failInterruptedAiReviewJobs() throws Exception {
+    String sql =
+        "UPDATE scan_ai_review_job SET status = 'FAILED', "
+            + "error_message = '服务重启或本地进程中断，AI 审核未正常完成', "
+            + "finished_at = NOW(3) WHERE status IN ('PENDING', 'RUNNING')";
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(sql);
     }
-
-    private void failInterruptedAiReviewJobs() throws Exception {
-        String sql = "UPDATE scan_ai_review_job SET status = 'FAILED', " +
-                "error_message = '服务重启或本地进程中断，AI 审核未正常完成', " +
-                "finished_at = NOW(3) WHERE status IN ('PENDING', 'RUNNING')";
-        try (Connection connection = dataSource.getConnection();
-             Statement statement = connection.createStatement()) {
-            statement.executeUpdate(sql);
-        }
-    }
+  }
 }

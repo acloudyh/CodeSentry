@@ -1,4 +1,5 @@
 server:
+  forward-headers-strategy: framework
   address: ${CODESENTRY_SERVER_ADDRESS:127.0.0.1}
   port: ${CODESENTRY_SERVER_PORT:18080}
 
@@ -13,7 +14,7 @@ spring:
   datasource:
     url: ${CODESENTRY_DB_URL:jdbc:mysql://127.0.0.1:3306/codesentry?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true}
     username: ${CODESENTRY_DB_USERNAME:root}
-    password: ${CODESENTRY_DB_PASSWORD:6yhn^YHN}
+    password: ${CODESENTRY_DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 8
@@ -22,8 +23,13 @@ spring:
   sql:
     init:
       mode: always
-      schema-locations: classpath:db/migration/V1__init_schema.sql,classpath:db/migration/V2__add_ai_review.sql,classpath:db/migration/V3__add_ai_runtime_configuration.sql,classpath:db/migration/V4__add_ai_tool_configuration.sql,classpath:db/migration/V5__report_acceptance.sql,classpath:db/migration/V6__business_projects.sql,classpath:db/migration/V7__git_credentials.sql,classpath:db/migration/V8__review_cost_control.sql,classpath:db/migration/V9__project_report_packages.sql
-  jackson:
+      schema-locations: classpath:db/migration/V1__init_schema.sql,classpath:db/migration/V2__add_ai_review.sql,classpath:db/migration/V3__add_ai_runtime_configuration.sql,classpath:db/migration/V4__add_ai_tool_configuration.sql,classpath:db/migration/V5__report_acceptance.sql,classpath:db/migration/V6__business_projects.sql,classpath:db/migration/V7__git_credentials.sql,classpath:db/migration/V8__review_cost_control.sql,classpath:db/migration/V9__project_report_packages.sql,classpath:db/migration/V10__http_idempotency.sql
+  http:
+    converters:
+      preferred-json-mapper: jackson2
+  jackson2:
+    deserialization:
+      fail-on-unknown-properties: true
     default-property-inclusion: non_null
     time-zone: Asia/Shanghai
 
