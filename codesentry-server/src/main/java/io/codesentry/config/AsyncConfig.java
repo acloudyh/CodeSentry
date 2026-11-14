@@ -8,6 +8,16 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @Configuration
 public class AsyncConfig {
 
+    /** 报告打包独立串行执行，限制字体嵌入及 PDF 渲染的同时内存占用。 */
+    @Bean("reportPackageTaskExecutor")
+    public TaskExecutor reportPackageTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1); executor.setMaxPoolSize(1); executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("codesentry-report-zip-");
+        executor.setWaitForTasksToCompleteOnShutdown(false); executor.setAwaitTerminationSeconds(5);
+        executor.initialize(); return executor;
+    }
+
     @Bean("remediationTaskExecutor")
     public TaskExecutor remediationTaskExecutor() {
         ThreadPoolTaskExecutor executor=new ThreadPoolTaskExecutor();executor.setCorePoolSize(2);executor.setMaxPoolSize(2);executor.setQueueCapacity(20);

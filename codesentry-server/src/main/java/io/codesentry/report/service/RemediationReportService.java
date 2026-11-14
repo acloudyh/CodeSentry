@@ -200,6 +200,22 @@ public class RemediationReportService {
     /** 生成独立或项目章节使用的 Word 内容，沿用原采纳清单与资产版本身份。 */
     public byte[] exportProjectDocx(Long runId, ScanProject asset) {
         ReportData data = load(runId, true, asset);
+        return buildDocx(data, asset == null);
+    }
+
+    /** 同一资产的两种格式共享一次采纳与审核数据读取，防止生成过程中两份内容口径不同。 */
+    public AssetDocuments exportAssetDocuments(Long runId, ScanProject asset, boolean word, boolean pdf) {
+        ReportData data = load(runId, true, asset);
+        AssetDocuments result = new AssetDocuments();
+        if (word) result.word = buildDocx(data, true);
+        if (pdf) result.pdf = renderPdfHtml(buildPdfHtml(data));
+        return result;
+    }
+
+    public static class AssetDocuments { public byte[] word; public byte[] pdf; }
+
+    /** 将已经固定读取的单资产报告数据生成 Word，不重复查询扫描或模型。 */
+    private byte[] buildDocx(ReportData data, boolean embedFonts) {
         try (XWPFDocument document = new XWPFDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             configureA4(document);
@@ -324,7 +340,7 @@ public class RemediationReportService {
                     + "报告保留人工已确认的风险，以及工具复核完成、通过可信度门槛且未判为误报的问题；人工判为误报的不纳入报告，可信度不代表漏洞可利用性。"
                     + "本报告由 CodeSentry 本地节点生成。",
                     8, "7B8B82", false);
-            if (asset == null) embedWordFonts(document);
+            if (embedFonts) embedWordFonts(document);
             document.write(output);
             return output.toByteArray();
         } catch (Exception exception) {
