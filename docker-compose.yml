@@ -31,7 +31,7 @@ services:
       - /Users/neo/code:/Users/neo/code:ro
       - /Users/neo/harmonycloud/code:/Users/neo/harmonycloud/code:ro
     ports:
-      - "18080:18080"
+      - "127.0.0.1:18080:18080"
 
   web:
     build:
@@ -41,7 +41,9 @@ services:
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
+    volumes:
+      - ./.codesentry/tls:/etc/codesentry/tls:ro
     depends_on:
       - server
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:443"
