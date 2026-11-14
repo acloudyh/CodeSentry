@@ -4,19 +4,20 @@ import java.util.List;
 
 public interface ScannerAdapter {
 
-    String name();
+  String name();
 
-    boolean enabled();
+  boolean enabled();
 
-    boolean available();
+  boolean available();
 
-    /** 最近一次可用性检测失败的安全说明，供任务详情展示。 */
-    default String unavailabilityReason() { return "扫描器不可用或版本检测失败"; }
+  /** 最近一次可用性检测失败的安全说明，供任务详情展示。 */
+  default String unavailabilityReason() {
+    return "扫描器不可用或版本检测失败";
+  }
 
-    List<NormalizedFinding> scan(ScanContext context);
+  List<NormalizedFinding> scan(ScanContext context);
 
-    default String reportExtension() {
-        return "json";
-    }
+  default String reportExtension() {
+    return "json";
+  }
 }
-

@@ -1,56 +1,63 @@
 package io.codesentry.ai.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.codesentry.ai.dto.AiReviewEvidence;
 import io.codesentry.config.CodeSentryProperties;
 import io.codesentry.finding.model.FindingView;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 class AiReviewEvidenceBuilderTest {
-    private final AiReviewEvidenceBuilder builder = new AiReviewEvidenceBuilder(
-            new CodeSentryProperties(), new ObjectMapper());
+  private final AiReviewEvidenceBuilder builder =
+      new AiReviewEvidenceBuilder(new CodeSentryProperties(), new ObjectMapper());
 
-    @Test
-    void secretFindingRedactsSourceBeforeExternalReviewAndUsesRepositoryRelativePath() {
-        FindingView finding = finding("Gitleaks", "generic-api-key",
-                "/Users/test/.codesentry/snapshots/7/current/project/src/config.properties",
-                "api_key=very-secret-value");
+  @Test
+  void secretFindingRedactsSourceBeforeExternalReviewAndUsesRepositoryRelativePath() {
+    FindingView finding =
+        finding(
+            "Gitleaks",
+            "generic-api-key",
+            "/Users/test/.codesentry/snapshots/7/current/project/src/config.properties",
+            "api_key=very-secret-value");
 
-        AiReviewEvidence evidence = builder.build(finding);
+    AiReviewEvidence evidence = builder.build(finding);
 
-        assertEquals("api_key=<REDACTED>", evidence.getCodeSnippet());
-        assertEquals("project/src/config.properties", evidence.getFilePath());
-        assertFalse(builder.serialize(evidence).contains("very-secret-value"));
-    }
+    assertEquals("api_key=<REDACTED>", evidence.getCodeSnippet());
+    assertEquals("project/src/config.properties", evidence.getFilePath());
+    assertFalse(builder.serialize(evidence).contains("very-secret-value"));
+  }
 
-    @Test
-    void codeFindingRedactsCredentialPatternsButKeepsSurroundingSource() {
-        FindingView finding = finding("Semgrep", "command-execution", "src/App.java",
-                "Authorization: Bearer abc.def\npassword=hunter2\nhttps://x.test?a=1&token=sensitive");
+  @Test
+  void codeFindingRedactsCredentialPatternsButKeepsSurroundingSource() {
+    FindingView finding =
+        finding(
+            "Semgrep",
+            "command-execution",
+            "src/App.java",
+            "Authorization: Bearer abc.def\npassword=hunter2\nhttps://x.test?a=1&token=sensitive");
 
-        String snippet = builder.build(finding).getCodeSnippet();
+    String snippet = builder.build(finding).getCodeSnippet();
 
-        assertTrue(snippet.contains("Authorization: Bearer <REDACTED>"));
-        assertTrue(snippet.contains("password=<REDACTED>"));
-        assertTrue(snippet.contains("token=<REDACTED>"));
-        assertFalse(snippet.contains("hunter2"));
-    }
+    assertTrue(snippet.contains("Authorization: Bearer <REDACTED>"));
+    assertTrue(snippet.contains("password=<REDACTED>"));
+    assertTrue(snippet.contains("token=<REDACTED>"));
+    assertFalse(snippet.contains("hunter2"));
+  }
 
-    private FindingView finding(String scanner, String ruleId, String path, String snippet) {
-        FindingView finding = new FindingView();
-        finding.setId(1L);
-        finding.setScanRunId(7L);
-        finding.setScanner(scanner);
-        finding.setRuleId(ruleId);
-        finding.setSeverity("HIGH");
-        finding.setTitle("test");
-        finding.setFilePath(path);
-        finding.setStartLine(10);
-        finding.setCodeSnippet(snippet);
-        return finding;
-    }
+  private FindingView finding(String scanner, String ruleId, String path, String snippet) {
+    FindingView finding = new FindingView();
+    finding.setId(1L);
+    finding.setScanRunId(7L);
+    finding.setScanner(scanner);
+    finding.setRuleId(ruleId);
+    finding.setSeverity("HIGH");
+    finding.setTitle("test");
+    finding.setFilePath(path);
+    finding.setStartLine(10);
+    finding.setCodeSnippet(snippet);
+    return finding;
+  }
 }

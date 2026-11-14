@@ -10,18 +10,18 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @org.springframework.scheduling.annotation.EnableScheduling
 @EnableAsync
 @MapperScan({
-        "io.codesentry.dashboard.mapper",
-        "io.codesentry.project.mapper",
-        "io.codesentry.scan.mapper",
-        "io.codesentry.finding.mapper",
-        "io.codesentry.ai.mapper",
-        "io.codesentry.report.mapper"
+  "io.codesentry.dashboard.mapper",
+  "io.codesentry.project.mapper",
+  "io.codesentry.scan.mapper",
+  "io.codesentry.finding.mapper",
+  "io.codesentry.ai.mapper",
+  "io.codesentry.report.mapper"
 })
 @EnableConfigurationProperties(CodeSentryProperties.class)
 @SpringBootApplication
 public class CodeSentryApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(CodeSentryApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(CodeSentryApplication.class, args);
+  }
 }

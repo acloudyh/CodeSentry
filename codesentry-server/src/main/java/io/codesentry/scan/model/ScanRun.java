@@ -4,193 +4,235 @@ import java.time.LocalDateTime;
 
 public class ScanRun {
 
-    private String remediationStatus;
-    private String remediationMessage;
-    private String remediationEvidence;
-    public String getRemediationStatus() { return remediationStatus; }
-    public void setRemediationStatus(String value) { remediationStatus = value; }
-    public String getRemediationMessage() { return remediationMessage; }
-    public void setRemediationMessage(String value) { remediationMessage = value; }
-    @com.fasterxml.jackson.annotation.JsonIgnore
-    public String getRemediationEvidence() { return remediationEvidence; }
-    public void setRemediationEvidence(String value) { remediationEvidence = value; }
+  private String remediationStatus;
+  private String remediationMessage;
+  private String remediationEvidence;
 
-    private io.codesentry.scan.model.NetworkMode networkMode = io.codesentry.scan.model.NetworkMode.LOCAL;
-    public io.codesentry.scan.model.NetworkMode getNetworkMode() { return networkMode; }
-    public void setNetworkMode(io.codesentry.scan.model.NetworkMode value) { networkMode = value; }
+  public String getRemediationStatus() {
+    return remediationStatus;
+  }
 
-    private Long id;
-    private Long projectId;
-    private Long sourceReportRunId;
-    public Long getSourceReportRunId() { return sourceReportRunId; }
-    public void setSourceReportRunId(Long value) { sourceReportRunId = value; }
+  public void setRemediationStatus(String value) {
+    remediationStatus = value;
+  }
 
-    private ScanMode scanMode;
-    private WorkspaceMode workspaceMode;
-    private String artifactPath;
-    public String getArtifactPath() { return artifactPath; }
-    public void setArtifactPath(String value) { artifactPath = value; }
-    private String scanRef;
-    private String baselineRef;
-    private String ruleProfile;
-    private String scanCommit;
-    private String baselineHeadCommit;
-    private String mergeBaseCommit;
-    private Boolean repositoryDirty;
-    private ScanRunStatus status;
-    private Integer totalFindings;
-    private Integer newFindings;
-    private Integer fixedFindings;
-    private String errorMessage;
-    private LocalDateTime createdAt;
-    private LocalDateTime startedAt;
-    private LocalDateTime finishedAt;
+  public String getRemediationMessage() {
+    return remediationMessage;
+  }
 
-    public Long getId() {
-        return id;
-    }
+  public void setRemediationMessage(String value) {
+    remediationMessage = value;
+  }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public String getRemediationEvidence() {
+    return remediationEvidence;
+  }
 
-    public Long getProjectId() {
-        return projectId;
-    }
+  public void setRemediationEvidence(String value) {
+    remediationEvidence = value;
+  }
 
-    public void setProjectId(Long projectId) {
-        this.projectId = projectId;
-    }
+  private io.codesentry.scan.model.NetworkMode networkMode =
+      io.codesentry.scan.model.NetworkMode.LOCAL;
 
-    public ScanMode getScanMode() {
-        return scanMode;
-    }
+  public io.codesentry.scan.model.NetworkMode getNetworkMode() {
+    return networkMode;
+  }
 
-    public void setScanMode(ScanMode scanMode) {
-        this.scanMode = scanMode;
-    }
+  public void setNetworkMode(io.codesentry.scan.model.NetworkMode value) {
+    networkMode = value;
+  }
 
-    public WorkspaceMode getWorkspaceMode() {
-        return workspaceMode;
-    }
+  private Long id;
+  private Long projectId;
+  private Long sourceReportRunId;
 
-    public void setWorkspaceMode(WorkspaceMode workspaceMode) {
-        this.workspaceMode = workspaceMode;
-    }
+  public Long getSourceReportRunId() {
+    return sourceReportRunId;
+  }
 
-    public String getScanRef() {
-        return scanRef;
-    }
+  public void setSourceReportRunId(Long value) {
+    sourceReportRunId = value;
+  }
 
-    public void setScanRef(String scanRef) {
-        this.scanRef = scanRef;
-    }
+  private ScanMode scanMode;
+  private WorkspaceMode workspaceMode;
+  private String artifactPath;
 
-    public String getBaselineRef() {
-        return baselineRef;
-    }
+  public String getArtifactPath() {
+    return artifactPath;
+  }
 
-    public void setBaselineRef(String baselineRef) {
-        this.baselineRef = baselineRef;
-    }
+  public void setArtifactPath(String value) {
+    artifactPath = value;
+  }
 
-    public String getRuleProfile() { return ruleProfile; }
+  private String scanRef;
+  private String baselineRef;
+  private String ruleProfile;
+  private String scanCommit;
+  private String baselineHeadCommit;
+  private String mergeBaseCommit;
+  private Boolean repositoryDirty;
+  private ScanRunStatus status;
+  private Integer totalFindings;
+  private Integer newFindings;
+  private Integer fixedFindings;
+  private String errorMessage;
+  private LocalDateTime createdAt;
+  private LocalDateTime startedAt;
+  private LocalDateTime finishedAt;
 
-    public void setRuleProfile(String ruleProfile) { this.ruleProfile = ruleProfile; }
+  public Long getId() {
+    return id;
+  }
 
-    public String getScanCommit() {
-        return scanCommit;
-    }
+  public void setId(Long id) {
+    this.id = id;
+  }
 
-    public void setScanCommit(String scanCommit) {
-        this.scanCommit = scanCommit;
-    }
+  public Long getProjectId() {
+    return projectId;
+  }
 
-    public String getBaselineHeadCommit() {
-        return baselineHeadCommit;
-    }
+  public void setProjectId(Long projectId) {
+    this.projectId = projectId;
+  }
 
-    public void setBaselineHeadCommit(String baselineHeadCommit) {
-        this.baselineHeadCommit = baselineHeadCommit;
-    }
+  public ScanMode getScanMode() {
+    return scanMode;
+  }
 
-    public String getMergeBaseCommit() {
-        return mergeBaseCommit;
-    }
+  public void setScanMode(ScanMode scanMode) {
+    this.scanMode = scanMode;
+  }
 
-    public void setMergeBaseCommit(String mergeBaseCommit) {
-        this.mergeBaseCommit = mergeBaseCommit;
-    }
+  public WorkspaceMode getWorkspaceMode() {
+    return workspaceMode;
+  }
 
-    public Boolean getRepositoryDirty() {
-        return repositoryDirty;
-    }
+  public void setWorkspaceMode(WorkspaceMode workspaceMode) {
+    this.workspaceMode = workspaceMode;
+  }
 
-    public void setRepositoryDirty(Boolean repositoryDirty) {
-        this.repositoryDirty = repositoryDirty;
-    }
+  public String getScanRef() {
+    return scanRef;
+  }
 
-    public ScanRunStatus getStatus() {
-        return status;
-    }
+  public void setScanRef(String scanRef) {
+    this.scanRef = scanRef;
+  }
 
-    public void setStatus(ScanRunStatus status) {
-        this.status = status;
-    }
+  public String getBaselineRef() {
+    return baselineRef;
+  }
 
-    public Integer getTotalFindings() {
-        return totalFindings;
-    }
+  public void setBaselineRef(String baselineRef) {
+    this.baselineRef = baselineRef;
+  }
 
-    public void setTotalFindings(Integer totalFindings) {
-        this.totalFindings = totalFindings;
-    }
+  public String getRuleProfile() {
+    return ruleProfile;
+  }
 
-    public Integer getNewFindings() {
-        return newFindings;
-    }
+  public void setRuleProfile(String ruleProfile) {
+    this.ruleProfile = ruleProfile;
+  }
 
-    public void setNewFindings(Integer newFindings) {
-        this.newFindings = newFindings;
-    }
+  public String getScanCommit() {
+    return scanCommit;
+  }
 
-    public Integer getFixedFindings() {
-        return fixedFindings;
-    }
+  public void setScanCommit(String scanCommit) {
+    this.scanCommit = scanCommit;
+  }
 
-    public void setFixedFindings(Integer fixedFindings) {
-        this.fixedFindings = fixedFindings;
-    }
+  public String getBaselineHeadCommit() {
+    return baselineHeadCommit;
+  }
 
-    public String getErrorMessage() {
-        return errorMessage;
-    }
+  public void setBaselineHeadCommit(String baselineHeadCommit) {
+    this.baselineHeadCommit = baselineHeadCommit;
+  }
 
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
-    }
+  public String getMergeBaseCommit() {
+    return mergeBaseCommit;
+  }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
+  public void setMergeBaseCommit(String mergeBaseCommit) {
+    this.mergeBaseCommit = mergeBaseCommit;
+  }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
+  public Boolean getRepositoryDirty() {
+    return repositoryDirty;
+  }
 
-    public LocalDateTime getStartedAt() {
-        return startedAt;
-    }
+  public void setRepositoryDirty(Boolean repositoryDirty) {
+    this.repositoryDirty = repositoryDirty;
+  }
 
-    public void setStartedAt(LocalDateTime startedAt) {
-        this.startedAt = startedAt;
-    }
+  public ScanRunStatus getStatus() {
+    return status;
+  }
 
-    public LocalDateTime getFinishedAt() {
-        return finishedAt;
-    }
+  public void setStatus(ScanRunStatus status) {
+    this.status = status;
+  }
 
-    public void setFinishedAt(LocalDateTime finishedAt) {
-        this.finishedAt = finishedAt;
-    }
+  public Integer getTotalFindings() {
+    return totalFindings;
+  }
+
+  public void setTotalFindings(Integer totalFindings) {
+    this.totalFindings = totalFindings;
+  }
+
+  public Integer getNewFindings() {
+    return newFindings;
+  }
+
+  public void setNewFindings(Integer newFindings) {
+    this.newFindings = newFindings;
+  }
+
+  public Integer getFixedFindings() {
+    return fixedFindings;
+  }
+
+  public void setFixedFindings(Integer fixedFindings) {
+    this.fixedFindings = fixedFindings;
+  }
+
+  public String getErrorMessage() {
+    return errorMessage;
+  }
+
+  public void setErrorMessage(String errorMessage) {
+    this.errorMessage = errorMessage;
+  }
+
+  public LocalDateTime getCreatedAt() {
+    return createdAt;
+  }
+
+  public void setCreatedAt(LocalDateTime createdAt) {
+    this.createdAt = createdAt;
+  }
+
+  public LocalDateTime getStartedAt() {
+    return startedAt;
+  }
+
+  public void setStartedAt(LocalDateTime startedAt) {
+    this.startedAt = startedAt;
+  }
+
+  public LocalDateTime getFinishedAt() {
+    return finishedAt;
+  }
+
+  public void setFinishedAt(LocalDateTime finishedAt) {
+    this.finishedAt = finishedAt;
+  }
 }

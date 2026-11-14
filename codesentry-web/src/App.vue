@@ -5,4 +5,3 @@ import AppShell from '@/components/layout/AppShell.vue'
 <template>
   <AppShell />
 </template>
-

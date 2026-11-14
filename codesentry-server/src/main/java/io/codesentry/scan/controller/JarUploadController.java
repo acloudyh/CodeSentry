@@ -11,14 +11,18 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/scan-runs")
 public class JarUploadController {
-    private final JarUploadService service;
-    public JarUploadController(JarUploadService service) { this.service = service; }
+  private final JarUploadService service;
 
-    @PostMapping(value = "/jar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public ApiResponse<ScanRun> upload(@RequestParam("file") MultipartFile file,
-                                      @RequestParam(required = false) String projectName,
-                                      @RequestParam(required = false) Integer javaVersion) {
-        return ApiResponse.success(service.upload(file, projectName, javaVersion));
-    }
+  public JarUploadController(JarUploadService service) {
+    this.service = service;
+  }
+
+  @PostMapping(value = "/jar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @ResponseStatus(HttpStatus.ACCEPTED)
+  public ApiResponse<ScanRun> upload(
+      @RequestParam("file") MultipartFile file,
+      @RequestParam(required = false) String projectName,
+      @RequestParam(required = false) Integer javaVersion) {
+    return ApiResponse.success(service.upload(file, projectName, javaVersion));
+  }
 }

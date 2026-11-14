@@ -19,4 +19,3 @@ defineProps<{
     <div class="metric-trace"><i></i><i></i><i></i><i></i><i></i></div>
   </article>
 </template>
-

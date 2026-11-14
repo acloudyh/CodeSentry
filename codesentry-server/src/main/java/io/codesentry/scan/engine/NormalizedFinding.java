@@ -2,130 +2,130 @@ package io.codesentry.scan.engine;
 
 public class NormalizedFinding {
 
-    private String fingerprint;
-    private String sourceFingerprint;
-    private String scanner;
-    private String ruleId;
-    private String category;
-    private FindingSeverity severity;
-    private String title;
-    private String description;
-    private String recommendation;
-    private String cwe;
-    private String filePath;
-    private Integer startLine;
-    private Integer endLine;
-    private String codeSnippet;
+  private String fingerprint;
+  private String sourceFingerprint;
+  private String scanner;
+  private String ruleId;
+  private String category;
+  private FindingSeverity severity;
+  private String title;
+  private String description;
+  private String recommendation;
+  private String cwe;
+  private String filePath;
+  private Integer startLine;
+  private Integer endLine;
+  private String codeSnippet;
 
-    public String getFingerprint() {
-        return fingerprint;
-    }
+  public String getFingerprint() {
+    return fingerprint;
+  }
 
-    public void setFingerprint(String fingerprint) {
-        this.fingerprint = fingerprint;
-    }
+  public void setFingerprint(String fingerprint) {
+    this.fingerprint = fingerprint;
+  }
 
-    public String getSourceFingerprint() {
-        return sourceFingerprint;
-    }
+  public String getSourceFingerprint() {
+    return sourceFingerprint;
+  }
 
-    public void setSourceFingerprint(String sourceFingerprint) {
-        this.sourceFingerprint = sourceFingerprint;
-    }
+  public void setSourceFingerprint(String sourceFingerprint) {
+    this.sourceFingerprint = sourceFingerprint;
+  }
 
-    public String getScanner() {
-        return scanner;
-    }
+  public String getScanner() {
+    return scanner;
+  }
 
-    public void setScanner(String scanner) {
-        this.scanner = scanner;
-    }
+  public void setScanner(String scanner) {
+    this.scanner = scanner;
+  }
 
-    public String getRuleId() {
-        return ruleId;
-    }
+  public String getRuleId() {
+    return ruleId;
+  }
 
-    public void setRuleId(String ruleId) {
-        this.ruleId = ruleId;
-    }
+  public void setRuleId(String ruleId) {
+    this.ruleId = ruleId;
+  }
 
-    public String getCategory() {
-        return category;
-    }
+  public String getCategory() {
+    return category;
+  }
 
-    public void setCategory(String category) {
-        this.category = category;
-    }
+  public void setCategory(String category) {
+    this.category = category;
+  }
 
-    public FindingSeverity getSeverity() {
-        return severity;
-    }
+  public FindingSeverity getSeverity() {
+    return severity;
+  }
 
-    public void setSeverity(FindingSeverity severity) {
-        this.severity = severity;
-    }
+  public void setSeverity(FindingSeverity severity) {
+    this.severity = severity;
+  }
 
-    public String getTitle() {
-        return title;
-    }
+  public String getTitle() {
+    return title;
+  }
 
-    public void setTitle(String title) {
-        this.title = title;
-    }
+  public void setTitle(String title) {
+    this.title = title;
+  }
 
-    public String getDescription() {
-        return description;
-    }
+  public String getDescription() {
+    return description;
+  }
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
+  public void setDescription(String description) {
+    this.description = description;
+  }
 
-    public String getRecommendation() {
-        return recommendation;
-    }
+  public String getRecommendation() {
+    return recommendation;
+  }
 
-    public void setRecommendation(String recommendation) {
-        this.recommendation = recommendation;
-    }
+  public void setRecommendation(String recommendation) {
+    this.recommendation = recommendation;
+  }
 
-    public String getCwe() {
-        return cwe;
-    }
+  public String getCwe() {
+    return cwe;
+  }
 
-    public void setCwe(String cwe) {
-        this.cwe = cwe;
-    }
+  public void setCwe(String cwe) {
+    this.cwe = cwe;
+  }
 
-    public String getFilePath() {
-        return filePath;
-    }
+  public String getFilePath() {
+    return filePath;
+  }
 
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
+  public void setFilePath(String filePath) {
+    this.filePath = filePath;
+  }
 
-    public Integer getStartLine() {
-        return startLine;
-    }
+  public Integer getStartLine() {
+    return startLine;
+  }
 
-    public void setStartLine(Integer startLine) {
-        this.startLine = startLine;
-    }
+  public void setStartLine(Integer startLine) {
+    this.startLine = startLine;
+  }
 
-    public Integer getEndLine() {
-        return endLine;
-    }
+  public Integer getEndLine() {
+    return endLine;
+  }
 
-    public void setEndLine(Integer endLine) {
-        this.endLine = endLine;
-    }
+  public void setEndLine(Integer endLine) {
+    this.endLine = endLine;
+  }
 
-    public String getCodeSnippet() {
-        return codeSnippet;
-    }
+  public String getCodeSnippet() {
+    return codeSnippet;
+  }
 
-    public void setCodeSnippet(String codeSnippet) {
-        this.codeSnippet = codeSnippet;
-    }
+  public void setCodeSnippet(String codeSnippet) {
+    this.codeSnippet = codeSnippet;
+  }
 }

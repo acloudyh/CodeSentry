@@ -1,3 +1,6 @@
 package io.codesentry.scan.model;
 
-public enum NetworkMode { LOCAL, ONLINE }
+public enum NetworkMode {
+  LOCAL,
+  ONLINE
+}

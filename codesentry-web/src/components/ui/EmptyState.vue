@@ -10,4 +10,3 @@ defineProps<{ title: string; description: string; action?: string; to?: string }
     <RouterLink v-if="action && to" :to="to" class="button secondary">{{ action }}</RouterLink>
   </div>
 </template>
-

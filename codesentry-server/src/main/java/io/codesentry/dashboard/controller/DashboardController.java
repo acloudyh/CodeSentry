@@ -11,10 +11,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/dashboard")
 public class DashboardController {
-    private final DashboardMapper dashboard;
-    /** 注入全量统计查询，避免从分页列表推导累计指标。 */
-    public DashboardController(DashboardMapper dashboard) { this.dashboard = dashboard; }
-    /** 读取项目、资产分类和历史累计数，不受最近记录条数限制。 */
-    @GetMapping("/summary")
-    public ApiResponse<DashboardSummary> summary() { return ApiResponse.success(dashboard.summary()); }
+  private final DashboardMapper dashboard;
+
+  /** 注入全量统计查询，避免从分页列表推导累计指标。 */
+  public DashboardController(DashboardMapper dashboard) {
+    this.dashboard = dashboard;
+  }
+
+  /** 读取项目、资产分类和历史累计数，不受最近记录条数限制。 */
+  @GetMapping("/summary")
+  public ApiResponse<DashboardSummary> summary() {
+    return ApiResponse.success(dashboard.summary());
+  }
 }

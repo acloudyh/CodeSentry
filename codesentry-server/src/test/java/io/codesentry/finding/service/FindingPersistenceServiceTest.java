@@ -1,202 +1,213 @@
 package io.codesentry.finding.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import io.codesentry.config.CodeSentryProperties;
-import io.codesentry.finding.dto.TriageFindingRequest;
 import io.codesentry.finding.dto.BatchTriageFindingRequest;
 import io.codesentry.finding.dto.BatchTriageResult;
+import io.codesentry.finding.dto.TriageFindingRequest;
 import io.codesentry.finding.mapper.ScanFindingMapper;
 import io.codesentry.finding.model.FindingView;
 import io.codesentry.finding.model.ScanFinding;
 import io.codesentry.scan.engine.FindingSeverity;
 import io.codesentry.scan.engine.NormalizedFinding;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.time.LocalDateTime;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.when;
-import java.util.List;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 class FindingPersistenceServiceTest {
 
-    @TempDir
-    Path storageRoot;
+  @TempDir Path storageRoot;
 
-    @Test
-    void longScannerTitleIsSafelyLimitedBeforePersistence() {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        NormalizedFinding source = new NormalizedFinding();
-        source.setFingerprint("fp");
-        source.setScanner("Semgrep");
-        source.setRuleId("community.long-title");
-        source.setCategory("security");
-        source.setSeverity(FindingSeverity.MEDIUM);
-        source.setTitle("长".repeat(700));
-        source.setDescription("完整描述保留");
-        source.setFilePath("src/example.jsp");
+  @Test
+  void longScannerTitleIsSafelyLimitedBeforePersistence() {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    NormalizedFinding source = new NormalizedFinding();
+    source.setFingerprint("fp");
+    source.setScanner("Semgrep");
+    source.setRuleId("community.long-title");
+    source.setCategory("security");
+    source.setSeverity(FindingSeverity.MEDIUM);
+    source.setTitle("长".repeat(700));
+    source.setDescription("完整描述保留");
+    source.setFilePath("src/example.jsp");
 
-        new FindingPersistenceService(mapper, new CodeSentryProperties())
-                .save(3L, 30L, source, "NEW");
+    new FindingPersistenceService(mapper, new CodeSentryProperties()).save(3L, 30L, source, "NEW");
 
-        verify(mapper).upsert(argThat((ScanFinding finding) -> finding.getTitle().length() == 512
-                && finding.getTitle().endsWith("…")
-                && "完整描述保留".equals(finding.getDescription())));
-    }
+    verify(mapper)
+        .upsert(
+            argThat(
+                (ScanFinding finding) ->
+                    finding.getTitle().length() == 512
+                        && finding.getTitle().endsWith("…")
+                        && "完整描述保留".equals(finding.getDescription())));
+  }
 
-    @Test
-    void triagePersistsManualConclusionAndReturnsLatestView() {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        FindingPersistenceService service = new FindingPersistenceService(mapper, new CodeSentryProperties());
-        FindingView before = new FindingView();
-        before.setId(18L);
-        before.setProjectId(3L);
-        FindingView after = new FindingView();
-        after.setId(18L);
-        after.setProjectId(3L);
-        after.setTriageStatus("ACCEPTED_RISK");
-        when(mapper.findLatestByFindingId(18L)).thenReturn(before, after);
+  @Test
+  void triagePersistsManualConclusionAndReturnsLatestView() {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    FindingPersistenceService service =
+        new FindingPersistenceService(mapper, new CodeSentryProperties());
+    FindingView before = new FindingView();
+    before.setId(18L);
+    before.setProjectId(3L);
+    FindingView after = new FindingView();
+    after.setId(18L);
+    after.setProjectId(3L);
+    after.setTriageStatus("ACCEPTED_RISK");
+    when(mapper.findLatestByFindingId(18L)).thenReturn(before, after);
 
-        TriageFindingRequest request = new TriageFindingRequest();
-        request.setTriageStatus("ACCEPTED_RISK");
-        request.setReviewer(" 张三 ");
-        request.setComment("业务补偿措施已确认");
-        request.setExpiresAt(LocalDateTime.of(2026, 12, 31, 18, 0));
+    TriageFindingRequest request = new TriageFindingRequest();
+    request.setTriageStatus("ACCEPTED_RISK");
+    request.setReviewer(" 张三 ");
+    request.setComment("业务补偿措施已确认");
+    request.setExpiresAt(LocalDateTime.of(2026, 12, 31, 18, 0));
 
-        FindingView result = service.triage(18L, request);
+    FindingView result = service.triage(18L, request);
 
-        assertEquals("ACCEPTED_RISK", result.getTriageStatus());
-        verify(mapper).upsertTriage(3L, 18L, "ACCEPTED_RISK", "业务补偿措施已确认", "张三",
-                LocalDateTime.of(2026, 12, 31, 18, 0));
-    }
+    assertEquals("ACCEPTED_RISK", result.getTriageStatus());
+    verify(mapper)
+        .upsertTriage(
+            3L, 18L, "ACCEPTED_RISK", "业务补偿措施已确认", "张三", LocalDateTime.of(2026, 12, 31, 18, 0));
+  }
 
-    @Test
-    void batchTriageMatchesNormalizedExactSelectorsAndReportsMisses() {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        FindingPersistenceService service = new FindingPersistenceService(mapper, new CodeSentryProperties());
-        FindingView finding = new FindingView();
-        finding.setId(27L);
-        finding.setProjectId(3L);
-        finding.setScanner("Semgrep");
-        finding.setRuleId("rule-x");
-        finding.setFilePath("src\\main\\Example.java");
-        finding.setStartLine(42);
-        finding.setEndLine(44);
-        when(mapper.findByRunId(7L)).thenReturn(List.of(finding));
+  @Test
+  void batchTriageMatchesNormalizedExactSelectorsAndReportsMisses() {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    FindingPersistenceService service =
+        new FindingPersistenceService(mapper, new CodeSentryProperties());
+    FindingView finding = new FindingView();
+    finding.setId(27L);
+    finding.setProjectId(3L);
+    finding.setScanner("Semgrep");
+    finding.setRuleId("rule-x");
+    finding.setFilePath("src\\main\\Example.java");
+    finding.setStartLine(42);
+    finding.setEndLine(44);
+    when(mapper.findByRunId(7L)).thenReturn(List.of(finding));
 
-        BatchTriageFindingRequest.Selector match = new BatchTriageFindingRequest.Selector();
-        match.setScanner("semgrep");
-        match.setRuleId("rule-x");
-        match.setFilePath("./src/main/Example.java");
-        match.setStartLine(42);
-        match.setEndLine(44);
-        BatchTriageFindingRequest.Selector miss = new BatchTriageFindingRequest.Selector();
-        miss.setScanner("Semgrep");
-        miss.setRuleId("rule-x");
-        miss.setFilePath("src/main/Other.java");
-        miss.setStartLine(9);
+    BatchTriageFindingRequest.Selector match = new BatchTriageFindingRequest.Selector();
+    match.setScanner("semgrep");
+    match.setRuleId("rule-x");
+    match.setFilePath("./src/main/Example.java");
+    match.setStartLine(42);
+    match.setEndLine(44);
+    BatchTriageFindingRequest.Selector miss = new BatchTriageFindingRequest.Selector();
+    miss.setScanner("Semgrep");
+    miss.setRuleId("rule-x");
+    miss.setFilePath("src/main/Other.java");
+    miss.setStartLine(9);
 
-        BatchTriageFindingRequest request = new BatchTriageFindingRequest();
-        request.setTriageStatus("FALSE_POSITIVE");
-        request.setReviewer("  张三 ");
-        request.setComment("固定库");
-        request.setSelectors(List.of(match, miss));
+    BatchTriageFindingRequest request = new BatchTriageFindingRequest();
+    request.setTriageStatus("FALSE_POSITIVE");
+    request.setReviewer("  张三 ");
+    request.setComment("固定库");
+    request.setSelectors(List.of(match, miss));
 
-        BatchTriageResult result = service.batchTriage(7L, request);
+    BatchTriageResult result = service.batchTriage(7L, request);
 
-        assertEquals(2, result.getRequested());
-        assertEquals(1, result.getMatched());
-        assertEquals(1, result.getUnmatched());
-        assertEquals(List.of(27L), result.getMatchedFindingIds());
-        verify(mapper).upsertTriage(3L, 27L, "FALSE_POSITIVE", "固定库", "张三", null);
-    }
+    assertEquals(2, result.getRequested());
+    assertEquals(1, result.getMatched());
+    assertEquals(1, result.getUnmatched());
+    assertEquals(List.of(27L), result.getMatchedFindingIds());
+    verify(mapper).upsertTriage(3L, 27L, "FALSE_POSITIVE", "固定库", "张三", null);
+  }
 
-    @Test
-    void visibleQueriesExcludeOnlyConfirmedFalsePositives() {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        FindingPersistenceService service = new FindingPersistenceService(mapper, new CodeSentryProperties());
-        FindingView confirmed = new FindingView();
-        confirmed.setId(31L);
-        confirmed.setTriageStatus("CONFIRMED");
-        FindingView falsePositive = new FindingView();
-        falsePositive.setId(32L);
-        falsePositive.setTriageStatus("FALSE_POSITIVE");
-        FindingView pending = new FindingView();
-        pending.setId(33L);
-        when(mapper.findByRunId(8L)).thenReturn(List.of(confirmed, falsePositive, pending));
+  @Test
+  void visibleQueriesExcludeOnlyConfirmedFalsePositives() {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    FindingPersistenceService service =
+        new FindingPersistenceService(mapper, new CodeSentryProperties());
+    FindingView confirmed = new FindingView();
+    confirmed.setId(31L);
+    confirmed.setTriageStatus("CONFIRMED");
+    FindingView falsePositive = new FindingView();
+    falsePositive.setId(32L);
+    falsePositive.setTriageStatus("FALSE_POSITIVE");
+    FindingView pending = new FindingView();
+    pending.setId(33L);
+    when(mapper.findByRunId(8L)).thenReturn(List.of(confirmed, falsePositive, pending));
 
-        List<FindingView> visible = service.findVisibleByRunId(8L);
+    List<FindingView> visible = service.findVisibleByRunId(8L);
 
-        assertEquals(List.of(31L, 33L), visible.stream().map(FindingView::getId).collect(java.util.stream.Collectors.toList()));
-    }
+    assertEquals(
+        List.of(31L, 33L),
+        visible.stream().map(FindingView::getId).collect(java.util.stream.Collectors.toList()));
+  }
 
-    @Test
-    void historicalEvalFindingsAreHiddenFromUserAndReviewQueries() {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        FindingView eval = new FindingView();
-        eval.setId(51L); eval.setRuleId("javascript.lang.security.audit.eval-detected.eval-detected");
-        FindingView retained = new FindingView();
-        retained.setId(52L); retained.setRuleId("codesentry.jsp.request-to-file");
-        when(mapper.findByRunId(9L)).thenReturn(List.of(eval, retained));
+  @Test
+  void historicalEvalFindingsAreHiddenFromUserAndReviewQueries() {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    FindingView eval = new FindingView();
+    eval.setId(51L);
+    eval.setRuleId("javascript.lang.security.audit.eval-detected.eval-detected");
+    FindingView retained = new FindingView();
+    retained.setId(52L);
+    retained.setRuleId("codesentry.jsp.request-to-file");
+    when(mapper.findByRunId(9L)).thenReturn(List.of(eval, retained));
 
-        List<FindingView> result = new FindingPersistenceService(mapper, new CodeSentryProperties())
-                .findByRunId(9L);
+    List<FindingView> result =
+        new FindingPersistenceService(mapper, new CodeSentryProperties()).findByRunId(9L);
 
-        assertEquals(List.of(52L), result.stream().map(FindingView::getId)
-                .collect(java.util.stream.Collectors.toList()));
-    }
+    assertEquals(
+        List.of(52L),
+        result.stream().map(FindingView::getId).collect(java.util.stream.Collectors.toList()));
+  }
 
-    @Test
-    void restoresLocalSourceEvidenceForSecretScannerFindings() throws Exception {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        CodeSentryProperties properties = new CodeSentryProperties();
-        properties.getStorage().setRoot(storageRoot.toString());
-        Path source = storageRoot.resolve("snapshots/11/current/config.properties");
-        Files.createDirectories(source.getParent());
-        Files.writeString(source, "mode=prod\nreal.value=local-evidence\ntimeout=5\n");
-        FindingView finding = new FindingView();
-        finding.setId(41L);
-        finding.setScanner("Gitleaks");
-        finding.setFilePath(source.toString());
-        finding.setStartLine(2);
-        finding.setEndLine(2);
-        finding.setCodeSnippet("[REDACTED]");
-        when(mapper.findByRunId(11L)).thenReturn(List.of(finding));
+  @Test
+  void restoresLocalSourceEvidenceForSecretScannerFindings() throws Exception {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    CodeSentryProperties properties = new CodeSentryProperties();
+    properties.getStorage().setRoot(storageRoot.toString());
+    Path source = storageRoot.resolve("snapshots/11/current/config.properties");
+    Files.createDirectories(source.getParent());
+    Files.writeString(source, "mode=prod\nreal.value=local-evidence\ntimeout=5\n");
+    FindingView finding = new FindingView();
+    finding.setId(41L);
+    finding.setScanner("Gitleaks");
+    finding.setFilePath(source.toString());
+    finding.setStartLine(2);
+    finding.setEndLine(2);
+    finding.setCodeSnippet("[REDACTED]");
+    when(mapper.findByRunId(11L)).thenReturn(List.of(finding));
 
-        FindingPersistenceService service = new FindingPersistenceService(mapper, properties);
-        FindingView result = service.findByRunId(11L).get(0);
+    FindingPersistenceService service = new FindingPersistenceService(mapper, properties);
+    FindingView result = service.findByRunId(11L).get(0);
 
-        assertTrue(result.getCodeSnippet().contains("real.value=local-evidence"));
-        org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
-    }
+    assertTrue(result.getCodeSnippet().contains("real.value=local-evidence"));
+    org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
+  }
 
-    @Test
-    void restoresRelativeSecretPathFromTheRunSnapshot() throws Exception {
-        ScanFindingMapper mapper = mock(ScanFindingMapper.class);
-        CodeSentryProperties properties = new CodeSentryProperties();
-        properties.getStorage().setRoot(storageRoot.toString());
-        Path source = storageRoot.resolve("snapshots/12/current/https/service.key");
-        Files.createDirectories(source.getParent());
-        Files.writeString(source, "-----BEGIN TEST KEY-----\nlocal-only-value\n-----END TEST KEY-----\n");
-        FindingView finding = new FindingView();
-        finding.setId(42L);
-        finding.setScanRunId(12L);
-        finding.setScanner("Trivy");
-        finding.setFilePath("https/service.key");
-        finding.setStartLine(1);
-        finding.setEndLine(2);
-        finding.setCodeSnippet("[REDACTED]");
-        when(mapper.findByRunId(12L)).thenReturn(List.of(finding));
+  @Test
+  void restoresRelativeSecretPathFromTheRunSnapshot() throws Exception {
+    ScanFindingMapper mapper = mock(ScanFindingMapper.class);
+    CodeSentryProperties properties = new CodeSentryProperties();
+    properties.getStorage().setRoot(storageRoot.toString());
+    Path source = storageRoot.resolve("snapshots/12/current/https/service.key");
+    Files.createDirectories(source.getParent());
+    Files.writeString(
+        source, "-----BEGIN TEST KEY-----\nlocal-only-value\n-----END TEST KEY-----\n");
+    FindingView finding = new FindingView();
+    finding.setId(42L);
+    finding.setScanRunId(12L);
+    finding.setScanner("Trivy");
+    finding.setFilePath("https/service.key");
+    finding.setStartLine(1);
+    finding.setEndLine(2);
+    finding.setCodeSnippet("[REDACTED]");
+    when(mapper.findByRunId(12L)).thenReturn(List.of(finding));
 
-        FindingView result = new FindingPersistenceService(mapper, properties).findByRunId(12L).get(0);
+    FindingView result = new FindingPersistenceService(mapper, properties).findByRunId(12L).get(0);
 
-        assertTrue(result.getCodeSnippet().contains("local-only-value"));
-        org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
-    }
+    assertTrue(result.getCodeSnippet().contains("local-only-value"));
+    org.junit.jupiter.api.Assertions.assertFalse(result.getCodeSnippet().contains("REDACTED"));
+  }
 }
