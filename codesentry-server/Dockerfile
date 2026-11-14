@@ -1,11 +1,11 @@
-FROM maven:3.9.9-eclipse-temurin-11 AS builder
+FROM maven:3.9.9-eclipse-temurin-21 AS builder
 
 WORKDIR /workspace
 COPY pom.xml ./
 COPY src ./src
 RUN mvn -B -DskipTests package
 
-FROM eclipse-temurin:11-jre-jammy
+FROM eclipse-temurin:21-jre-jammy
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git gnupg python3 python3-pip tar \
@@ -22,7 +22,7 @@ ENV TZ=Asia/Shanghai \
     JAVA_TOOL_OPTIONS="-Duser.timezone=Asia/Shanghai"
 
 WORKDIR /app
-COPY --from=builder /workspace/target/codesentry-server-0.1.0-SNAPSHOT.jar /app/codesentry-server.jar
+COPY --from=builder /workspace/target/codesentry-server-0.2.0-SNAPSHOT.jar /app/codesentry-server.jar
 
 EXPOSE 18080
 ENTRYPOINT ["java", "-jar", "/app/codesentry-server.jar"]

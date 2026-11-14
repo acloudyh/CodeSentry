@@ -1,13 +1,15 @@
 package io.codesentry.ai.controller;
 
-import io.codesentry.ai.dto.AiReviewSummary;
-import io.codesentry.ai.dto.AiReviewConfigurationView;
 import io.codesentry.ai.dto.AiReviewConfigurationRequest;
+import io.codesentry.ai.dto.AiReviewConfigurationView;
+import io.codesentry.ai.dto.AiReviewSummary;
 import io.codesentry.ai.model.AiReviewJob;
 import io.codesentry.ai.model.AiReviewRecord;
-import io.codesentry.ai.service.AiReviewService;
 import io.codesentry.ai.service.AiReviewConfigurationService;
+import io.codesentry.ai.service.AiReviewService;
 import io.codesentry.common.api.ApiResponse;
+import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,85 +18,113 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import javax.validation.Valid;
-
 @RestController
 @RequestMapping("/api/v1/ai-reviews")
 public class AiReviewController {
-    @org.springframework.beans.factory.annotation.Autowired private io.codesentry.ai.service.AiReviewCostControl costs;
-    public static class Approval { public boolean allowPaid; }
-    @GetMapping("/budget-policy") public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Policy> budgetPolicy(){return ApiResponse.success(costs.policy());}
-    @PutMapping("/budget-policy") public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Policy> saveBudgetPolicy(@RequestBody io.codesentry.ai.service.AiReviewCostControl.Policy body){return ApiResponse.success(costs.savePolicy(body));}
-    @PostMapping("/scan-runs/{runId}/preview") public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Plan> preview(@PathVariable Long runId,@RequestBody(required=false) io.codesentry.ai.service.AiReviewCostControl.Options body){return ApiResponse.success(service.preview(runId,body));}
-    @PostMapping("/plans/{planId}/start") public ApiResponse<AiReviewJob> start(@PathVariable String planId,@RequestBody Approval body){return ApiResponse.success(service.startApproved(planId,body.allowPaid));}
-    @GetMapping("/jobs/{jobId}/budget") public ApiResponse<java.util.Map<String,Object>> budget(@PathVariable Long jobId){service.requireJob(jobId);return ApiResponse.success(costs.usage(jobId));}
-    private final AiReviewService service;
-    private final AiReviewConfigurationService configurationService;
+  @org.springframework.beans.factory.annotation.Autowired
+  private io.codesentry.ai.service.AiReviewCostControl costs;
 
-    public AiReviewController(AiReviewService service, AiReviewConfigurationService configurationService) {
-        this.service = service;
-        this.configurationService = configurationService;
-    }
+  public static class Approval {
+    public boolean allowPaid;
+  }
 
-    @PostMapping("/jobs/{jobId}/cancel")
-    public ApiResponse<AiReviewJob> cancel(@PathVariable Long jobId) {
-        return ApiResponse.success(service.cancelJob(jobId));
-    }
+  @GetMapping("/budget-policy")
+  public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Policy> budgetPolicy() {
+    return ApiResponse.success(costs.policy());
+  }
 
-    @GetMapping("/config")
-    public ApiResponse<AiReviewConfigurationView> configuration() {
-        return ApiResponse.success(configurationService.configuration());
-    }
+  @PutMapping("/budget-policy")
+  public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Policy> saveBudgetPolicy(
+      @RequestBody io.codesentry.ai.service.AiReviewCostControl.Policy body) {
+    return ApiResponse.success(costs.savePolicy(body));
+  }
 
-    @PutMapping("/config")
-    public ApiResponse<AiReviewConfigurationView> configure(
-            @Valid @RequestBody AiReviewConfigurationRequest request) {
-        return ApiResponse.success(configurationService.configure(request));
-    }
+  @PostMapping("/scan-runs/{runId}/preview")
+  public ApiResponse<io.codesentry.ai.service.AiReviewCostControl.Plan> preview(
+      @PathVariable Long runId,
+      @RequestBody(required = false) io.codesentry.ai.service.AiReviewCostControl.Options body) {
+    return ApiResponse.success(service.preview(runId, body));
+  }
 
-    @PostMapping("/findings/{findingId}")
-    public ApiResponse<AiReviewSummary> reviewFinding(@PathVariable Long findingId) {
-        return ApiResponse.success(service.reviewFinding(findingId));
-    }
+  @PostMapping("/plans/{planId}/start")
+  public ApiResponse<AiReviewJob> start(@PathVariable String planId, @RequestBody Approval body) {
+    return ApiResponse.success(service.startApproved(planId, body.allowPaid));
+  }
 
-    @GetMapping("/findings/{findingId}")
-    public ApiResponse<AiReviewSummary> findingReview(@PathVariable Long findingId) {
-        return ApiResponse.success(service.latestForFinding(findingId));
-    }
+  @GetMapping("/jobs/{jobId}/budget")
+  public ApiResponse<java.util.Map<String, Object>> budget(@PathVariable Long jobId) {
+    service.requireJob(jobId);
+    return ApiResponse.success(costs.usage(jobId));
+  }
 
-    @PostMapping("/scan-runs/{scanRunId}")
-    public ApiResponse<AiReviewJob> reviewRun(@PathVariable Long scanRunId) {
-        return ApiResponse.success(service.startRunReview(scanRunId));
-    }
+  private final AiReviewService service;
+  private final AiReviewConfigurationService configurationService;
 
-    @GetMapping("/scan-runs/{scanRunId}")
-    public ApiResponse<List<AiReviewSummary>> runReviews(@PathVariable Long scanRunId) {
-        return ApiResponse.success(service.latestForRun(scanRunId));
-    }
+  public AiReviewController(
+      AiReviewService service, AiReviewConfigurationService configurationService) {
+    this.service = service;
+    this.configurationService = configurationService;
+  }
 
-    @PostMapping("/scan-runs/{scanRunId}/retry-failed")
-    public ApiResponse<AiReviewJob> retryFailedRun(@PathVariable Long scanRunId) {
-        return ApiResponse.success(service.retryFailedRunReview(scanRunId));
-    }
+  @PostMapping("/jobs/{jobId}/cancel")
+  public ApiResponse<AiReviewJob> cancel(@PathVariable Long jobId) {
+    return ApiResponse.success(service.cancelJob(jobId));
+  }
 
-    @GetMapping("/scan-runs/{scanRunId}/jobs/latest")
-    public ApiResponse<AiReviewJob> latestJob(@PathVariable Long scanRunId) {
-        return ApiResponse.success(service.latestJobForRun(scanRunId));
-    }
+  @GetMapping("/config")
+  public ApiResponse<AiReviewConfigurationView> configuration() {
+    return ApiResponse.success(configurationService.configuration());
+  }
 
-    @GetMapping("/jobs/{jobId}")
-    public ApiResponse<AiReviewJob> job(@PathVariable Long jobId) {
-        return ApiResponse.success(service.requireJob(jobId));
-    }
+  @PutMapping("/config")
+  public ApiResponse<AiReviewConfigurationView> configure(
+      @Valid @RequestBody AiReviewConfigurationRequest request) {
+    return ApiResponse.success(configurationService.configure(request));
+  }
 
-    @GetMapping("/jobs/{jobId}/records")
-    public ApiResponse<List<AiReviewRecord>> jobRecords(@PathVariable Long jobId) {
-        return ApiResponse.success(service.recordsForJob(jobId));
-    }
+  @PostMapping("/findings/{findingId}")
+  public ApiResponse<AiReviewSummary> reviewFinding(@PathVariable Long findingId) {
+    return ApiResponse.success(service.reviewFinding(findingId));
+  }
 
-    @GetMapping("/jobs/{jobId}/findings")
-    public ApiResponse<List<io.codesentry.finding.model.FindingView>> jobFindings(@PathVariable Long jobId) {
-        return ApiResponse.success(service.findingsForJob(jobId));
-    }
+  @GetMapping("/findings/{findingId}")
+  public ApiResponse<AiReviewSummary> findingReview(@PathVariable Long findingId) {
+    return ApiResponse.success(service.latestForFinding(findingId));
+  }
+
+  @PostMapping("/scan-runs/{scanRunId}")
+  public ApiResponse<AiReviewJob> reviewRun(@PathVariable Long scanRunId) {
+    return ApiResponse.success(service.startRunReview(scanRunId));
+  }
+
+  @GetMapping("/scan-runs/{scanRunId}")
+  public ApiResponse<List<AiReviewSummary>> runReviews(@PathVariable Long scanRunId) {
+    return ApiResponse.success(service.latestForRun(scanRunId));
+  }
+
+  @PostMapping("/scan-runs/{scanRunId}/retry-failed")
+  public ApiResponse<AiReviewJob> retryFailedRun(@PathVariable Long scanRunId) {
+    return ApiResponse.success(service.retryFailedRunReview(scanRunId));
+  }
+
+  @GetMapping("/scan-runs/{scanRunId}/jobs/latest")
+  public ApiResponse<AiReviewJob> latestJob(@PathVariable Long scanRunId) {
+    return ApiResponse.success(service.latestJobForRun(scanRunId));
+  }
+
+  @GetMapping("/jobs/{jobId}")
+  public ApiResponse<AiReviewJob> job(@PathVariable Long jobId) {
+    return ApiResponse.success(service.requireJob(jobId));
+  }
+
+  @GetMapping("/jobs/{jobId}/records")
+  public ApiResponse<List<AiReviewRecord>> jobRecords(@PathVariable Long jobId) {
+    return ApiResponse.success(service.recordsForJob(jobId));
+  }
+
+  @GetMapping("/jobs/{jobId}/findings")
+  public ApiResponse<List<io.codesentry.finding.model.FindingView>> jobFindings(
+      @PathVariable Long jobId) {
+    return ApiResponse.success(service.findingsForJob(jobId));
+  }
 }

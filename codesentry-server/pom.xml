@@ -7,28 +7,30 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.18</version>
+        <version>4.0.9</version>
         <relativePath/>
     </parent>
 
     <groupId>io.codesentry</groupId>
     <artifactId>codesentry-server</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <name>CodeSentry Server</name>
     <description>Local-first source code review and scanning platform</description>
 
     <properties>
-        <java.version>11</java.version>
-        <mybatis.version>2.3.2</mybatis.version>
-        <commons-compress.version>1.27.1</commons-compress.version>
-        <poi.version>5.2.5</poi.version>
+        <java.version>21</java.version>
+        <mybatis.version>4.0.1</mybatis.version>
+        <commons-compress.version>1.28.0</commons-compress.version>
+        <poi.version>5.5.1</poi.version>
         <openhtmltopdf.version>1.0.10</openhtmltopdf.version>
     </properties>
 
     <dependencies>
+        <!-- 使用官方 Jackson 2 兼容模块读取既有归档；MVC 与持久化共享原 JSON 语义。 -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-jackson2</artifactId></dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -42,7 +44,7 @@
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
-            <version>8.0.33</version>
+            <version>9.7.0</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
@@ -78,6 +80,35 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+                <version>2.9.1</version>
+                <executions><execution><phase>package</phase><goals><goal>makeAggregateBom</goal></goals></execution></executions>
+                <configuration><outputFormat>json</outputFormat><includeTestScope>false</includeTestScope></configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.43.0</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat><version>1.24.0</version></googleJavaFormat>
+                        <removeUnusedImports />
+                        <trimTrailingWhitespace />
+                        <endWithNewline />
+                    </java>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution><goals><goal>prepare-agent</goal></goals></execution>
+                    <execution><id>coverage-report</id><phase>verify</phase><goals><goal>report</goal></goals></execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
