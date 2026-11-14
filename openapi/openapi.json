@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "CodeSentry HTTP 错误兼容契约",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "本次先整改 v1 通用错误与追踪协议；旧成功响应不变。本文仅覆盖已评审的通用协议样例，不代表全部业务接口已经满足规范。全量接口清单与剩余差距见 docs/standards/audit.md。"
   },
   "servers": [
@@ -64,6 +64,65 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/v2/report-archives": {
+      "post": {
+        "operationId": "createReportArchive",
+        "summary": "显式冻结资产或项目报告，重复提交复用既有快照",
+        "description": "首次创建与重放均返回相同 201 与 Location；幂等键以 SHA-256 存储并保留至少24小时，不保存请求中的凭据。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已创建或幂等复用既有档案",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "只读 HTML 资源地址"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -251,6 +310,69 @@
           "total": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "ArchiveRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scanRunId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "businessProjectId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "roundId": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "scanRunId"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "businessProjectId"
+                  ]
+                },
+                {
+                  "required": [
+                    "roundId"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "businessProjectId",
+              "roundId"
+            ],
+            "not": {
+              "required": [
+                "scanRunId"
+              ]
+            }
+          }
+        ]
+      },
+      "ArchiveReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reportUrl"
+        ],
+        "properties": {
+          "reportUrl": {
+            "type": "string",
+            "description": "只读 HTML 资源地址；已归档内容固定，下载其他格式保持现有入口"
           }
         }
       }
