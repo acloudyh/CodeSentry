@@ -25,7 +25,7 @@ const navigation = [
 <template>
   <div class="app-frame">
     <aside class="side-rail">
-      <RouterLink to="/" class="brand-lockup" aria-label="CodeSentry 首页">
+      <RouterLink to="/" class="brand-lockup" title="首页">
         <span class="brand-mark"><i></i><b></b></span>
         <span>
           <strong>CODE<span>SENTRY</span></strong>
@@ -60,8 +60,24 @@ const navigation = [
           <h1>{{ pageTitle }}</h1>
         </div>
         <div class="command-actions">
-          <label class="theme-switch"><span>页面主题</span><select :value="currentTheme" aria-label="页面主题" @change="setTheme(($event.target as HTMLSelectElement).value)"><option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.name }}</option></select></label>
-          <div class="time-chip"><span>东八区时间</span><b><time class="datetime-text">{{ formatChinaDate() }}</time></b></div>
+          <label class="theme-switch"
+            ><span>页面主题</span
+            ><select
+              :value="currentTheme"
+              aria-label="页面主题"
+              @change="setTheme(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="theme in themes" :key="theme.id" :value="theme.id">
+                {{ theme.name }}
+              </option>
+            </select></label
+          >
+          <div class="time-chip">
+            <span>东八区时间</span
+            ><b
+              ><time class="datetime-text">{{ formatChinaDate() }}</time></b
+            >
+          </div>
         </div>
       </header>
 
@@ -70,7 +86,9 @@ const navigation = [
           <strong>{{ previewLabel }}</strong> · 此页面仅包含独立验证数据。
           <a v-if="originalUrl" :href="originalUrl">打开原服务，查看原有项目与历史记录</a>
         </div>
-        <div v-if="navigationError" class="error-banner" role="alert">{{ navigationError }} <a :href="route.fullPath">重新加载页面</a></div>
+        <div v-if="navigationError" class="error-banner" role="alert">
+          {{ navigationError }} <a :href="route.fullPath">重新加载页面</a>
+        </div>
         <RouterView v-slot="{ Component }">
           <Transition name="page" mode="out-in">
             <component :is="Component" />

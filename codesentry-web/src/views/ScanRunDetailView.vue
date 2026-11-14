@@ -21,9 +21,12 @@ async function stopScan() {
   try {
     const cancelled = await api.cancelScan(runId.value)
     if (detail.value) detail.value = { ...detail.value, run: cancelled }
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : '停止扫描失败'
+  } finally {
+    stopping.value = false
+    await load()
   }
-  catch (reason) { error.value = reason instanceof Error ? reason.message : '停止扫描失败' }
-  finally { stopping.value = false; await load() }
 }
 let timer: number | undefined
 
@@ -31,15 +34,25 @@ const runId = computed(() => Number(route.params.id))
 const run = computed(() => detail.value?.run)
 const projectName = computed(() => {
   const projectId = run.value?.projectId
-  return projects.value.find((item) => item.id === projectId)?.projectName ?? (projectId ? `项目-${projectId}` : '-')
+  return (
+    projects.value.find((item) => item.id === projectId)?.projectName ??
+    (projectId ? `项目-${projectId}` : '-')
+  )
 })
 const active = computed(() => ['PENDING', 'PREPARING', 'RUNNING'].includes(run.value?.status ?? ''))
 const formatTime = formatChinaTime
-const shortCommit = (value?: string) => value ? value.slice(0, 12) : '-'
-const phaseLabel = (phase: string) => phase === 'baseline' ? '基线快照' : phase === 'availability' ? '可用性检查' : '扫描快照'
+const shortCommit = (value?: string) => (value ? value.slice(0, 12) : '-')
+const phaseLabel = (phase: string) =>
+  phase === 'baseline' ? '基线快照' : phase === 'availability' ? '可用性检查' : '扫描快照'
 const logText = (item: ScanToolRun) => item.outputLog || item.errorMessage || '暂无命令输出。'
-const scanModeLabel = computed(() => run.value?.scanMode === 'FULL' ? '全量扫描' : '增量扫描')
-const workspaceLabel = computed(() => run.value?.workspaceMode === 'JAR_UPLOAD' ? 'JAR 上传' : run.value?.workspaceMode === 'CURRENT' ? '当前工作区' : '分支快照')
+const scanModeLabel = computed(() => (run.value?.scanMode === 'FULL' ? '全量扫描' : '增量扫描'))
+const workspaceLabel = computed(() =>
+  run.value?.workspaceMode === 'JAR_UPLOAD'
+    ? 'JAR 上传'
+    : run.value?.workspaceMode === 'CURRENT'
+      ? '当前工作区'
+      : '分支快照',
+)
 
 async function load() {
   if (stopping.value) return
@@ -76,7 +89,14 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
         <h2>扫描批次 #{{ String(runId).padStart(5, '0') }}</h2>
         <p>查看任务进度、扫描器命令、退出码和执行日志。</p>
       </div>
-      <div class="form-actions"><button v-if="active" class="button danger" :disabled="stopping" @click="stopScan">{{ stopping ? '停止中…' : '停止扫描' }}</button><RouterLink to="/scans" class="button secondary">返回扫描记录</RouterLink></div>
+      <div class="form-actions">
+        <button v-if="active" class="button danger" :disabled="stopping" @click="stopScan">
+          {{ stopping ? '停止中…' : '停止扫描' }}</button><RouterLink
+          to="/scans"
+          class="button secondary"
+          >返回扫描记录</RouterLink
+        >
+      </div>
     </section>
 
     <div v-if="error" class="error-banner">{{ error }}</div>
@@ -98,45 +118,83 @@ onBeforeUnmount(() => timer && window.clearInterval(timer))
         </div>
 
         <div class="panel">
-          <div class="panel-header"><h3>任务信息</h3><small>{{ projectName }}</small></div>
+          <div class="panel-header">
+            <h3>任务信息</h3>
+            <small>{{ projectName }}</small>
+          </div>
           <div class="kv-grid">
-            <span>扫描模式</span><b>{{ scanModeLabel }}</b>
-            <span>扫描方式</span><b>{{ run.networkMode === 'ONLINE' ? '联网扫描' : '本地扫描' }}</b>
-            <template v-if="run.networkMode === 'ONLINE'"><span>修复依据核实</span><b>{{ run.remediationMessage ?? '等待本地扫描完成后联网核实' }}</b></template>
+            <span>扫描模式</span><b>{{ scanModeLabel }}</b> <span>扫描方式</span
+            ><b>{{ run.networkMode === 'ONLINE' ? '联网扫描' : '本地扫描' }}</b>
+            <template v-if="run.networkMode === 'ONLINE'"
+              ><span>修复依据核实</span
+              ><b>{{ run.remediationMessage ?? '等待本地扫描完成后联网核实' }}</b></template
+            >
             <span>工作区</span><b>{{ workspaceLabel }}</b>
-            <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '上传文件' : '扫描分支' }}</span><b>{{ run.scanRef ?? '当前工作区' }}</b>
-            <span>基线分支</span><b>{{ run.baselineRef ?? '无基线' }}</b>
-            <span>扫描规则集</span><b :title="run.ruleProfile">{{ ruleProfileLabel(run.ruleProfile) }}</b>
-            <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '文件 SHA-256' : '扫描提交' }}</span><b class="mono">{{ shortCommit(run.scanCommit) }}</b>
+            <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '上传文件' : '扫描分支' }}</span><b>{{
+              run.scanRef ?? '当前工作区'
+            }}</b>
+            <span>基线分支</span><b>{{ run.baselineRef ?? '无基线' }}</b> <span>扫描规则集</span
+            ><b :title="run.ruleProfile">{{ ruleProfileLabel(run.ruleProfile) }}</b>
+            <span>{{ run.workspaceMode === 'JAR_UPLOAD' ? '文件 SHA-256' : '扫描提交' }}</span><b
+              class="mono"
+              >{{ shortCommit(run.scanCommit) }}</b
+            >
             <span>共同祖先提交</span><b class="mono">{{ shortCommit(run.mergeBaseCommit) }}</b>
-            <span>开始时间</span><b><time class="datetime-text">{{ formatTime(run.startedAt) }}</time></b>
-            <span>结束时间</span><b><time class="datetime-text">{{ formatTime(run.finishedAt) }}</time></b>
+            <span>开始时间</span
+            ><b
+              ><time class="datetime-text">{{ formatTime(run.startedAt) }}</time></b
+            >
+            <span>结束时间</span
+            ><b
+              ><time class="datetime-text">{{ formatTime(run.finishedAt) }}</time></b
+            >
           </div>
         </div>
       </section>
 
       <section class="metric-grid">
-        <div class="mini-stat"><span>总问题</span><b>{{ run.totalFindings }}</b></div>
-        <div class="mini-stat"><span>新增</span><b class="danger-text">{{ run.newFindings }}</b></div>
-        <div class="mini-stat"><span>修复</span><b class="signal-text">{{ run.fixedFindings }}</b></div>
-        <div class="mini-stat"><span>明细实例</span><b>{{ findings.length }}</b></div>
+        <div class="mini-stat">
+          <span>总问题</span><b>{{ run.totalFindings }}</b>
+        </div>
+        <div class="mini-stat">
+          <span>新增</span><b class="danger-text">{{ run.newFindings }}</b>
+        </div>
+        <div class="mini-stat">
+          <span>修复</span><b class="signal-text">{{ run.fixedFindings }}</b>
+        </div>
+        <div class="mini-stat">
+          <span>明细实例</span><b>{{ findings.length }}</b>
+        </div>
       </section>
 
       <section class="panel">
-        <div class="panel-header"><h3>扫描器执行日志</h3><small>{{ detail.toolRuns.length }} 条记录</small></div>
+        <div class="panel-header">
+          <h3>扫描器执行日志</h3>
+          <small>{{ detail.toolRuns.length }} 条记录</small>
+        </div>
         <div class="tool-run-list">
           <article v-for="item in detail.toolRuns" :key="item.id" class="tool-run-card">
             <div class="tool-run-head">
               <div>
                 <strong>{{ scannerLabel(item.toolName) }}</strong>
-                <small>{{ phaseLabel(item.phase) }} · <time class="datetime-text">{{ formatTime(item.startedAt) }}</time> → <time class="datetime-text">{{ formatTime(item.finishedAt) }}</time></small>
+                <small
+                  >{{ phaseLabel(item.phase) }} ·
+                  <time class="datetime-text">{{ formatTime(item.startedAt) }}</time> →
+                  <time class="datetime-text">{{ formatTime(item.finishedAt) }}</time></small
+                >
               </div>
               <StatusBadge :value="item.status" />
             </div>
             <div class="tool-meta">
-              <span>退出码 <b>{{ item.exitCode ?? '-' }}</b></span>
-              <span>报告 <b>{{ item.rawReportPath ?? '-' }}</b></span>
-              <span>目录 <b>{{ item.workingDirectory ?? '-' }}</b></span>
+              <span
+                >退出码 <b>{{ item.exitCode ?? '-' }}</b></span
+              >
+              <span
+                >报告 <b>{{ item.rawReportPath ?? '-' }}</b></span
+              >
+              <span
+                >目录 <b>{{ item.workingDirectory ?? '-' }}</b></span
+              >
             </div>
             <pre v-if="item.commandLine" class="command-line">{{ item.commandLine }}</pre>
             <pre class="log-box">{{ logText(item) }}</pre>

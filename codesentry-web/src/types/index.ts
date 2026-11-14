@@ -2,7 +2,8 @@ export type ApplicationType = 'FRONTEND' | 'BACKEND' | 'FULL_STACK'
 export type SourceType = 'LOCAL' | 'GIT' | 'JAR_UPLOAD'
 export type ScanMode = 'FULL' | 'INCREMENTAL'
 export type WorkspaceMode = 'CURRENT' | 'BRANCH_SNAPSHOT' | 'JAR_UPLOAD'
-export type ScanStatus = 'PENDING' | 'PREPARING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+export type ScanStatus =
+  'PENDING' | 'PREPARING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -147,7 +148,13 @@ export interface AiReviewSummary {
   scanRunId: number
   primaryReview?: AiReviewRecord
   verificationReview?: AiReviewRecord
-  consolidatedVerdict: 'CONFIRMED' | 'FALSE_POSITIVE' | 'CONDITIONAL' | 'INSUFFICIENT_EVIDENCE' | 'NEEDS_HUMAN' | 'AI_ERROR'
+  consolidatedVerdict:
+    | 'CONFIRMED'
+    | 'FALSE_POSITIVE'
+    | 'CONDITIONAL'
+    | 'INSUFFICIENT_EVIDENCE'
+    | 'NEEDS_HUMAN'
+    | 'AI_ERROR'
   confidence: number
   confidenceAvailable: boolean
   disagreement: boolean
@@ -157,8 +164,8 @@ export interface AiReviewSummary {
 }
 
 export interface RemediationReportSummary {
- qualityFindings?: number
- legacyQualityInReport?: number
+  qualityFindings?: number
+  legacyQualityInReport?: number
   networkMode?: 'LOCAL' | 'ONLINE'
   remediationStatus?: string
   remediationMessage?: string
@@ -180,7 +187,8 @@ export interface AiReviewJob {
   scanRunId: number
   provider: string
   model: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED' | 'BUDGET_EXHAUSTED'
+  status:
+    'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED' | 'BUDGET_EXHAUSTED'
   totalFindings: number
   completedFindings: number
   failedFindings: number
@@ -243,7 +251,13 @@ export interface ReportAcceptance {
   verification?: ScanRun
   history: ScanRun[]
   counts: Record<string, number>
-  items: Array<{ finding: FindingView; status: string; triageStatus?: string; comment?: string; reviewer?: string }>
+  items: Array<{
+    finding: FindingView
+    status: string
+    triageStatus?: string
+    comment?: string
+    reviewer?: string
+  }>
 }
 
 export interface RuleLibraryStatus {
@@ -255,26 +269,62 @@ export interface RuleLibraryStatus {
   message: string
 }
 
-export interface PageResult<T> { items: T[]; total: number; page: number; pageSize: number }
+export interface PageResult<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+}
 export interface BusinessProject {
-  id: number; name: string; description?: string; repositoryCount: number; jarCount: number; latestRound?: ProjectScanRound
+  id: number
+  name: string
+  description?: string
+  repositoryCount: number
+  jarCount: number
+  latestRound?: ProjectScanRound
 }
 export interface ProjectScanItem {
-  id: number; assetId: number; assetName: string; sourceType: SourceType; workspaceMode: WorkspaceMode;
-  scanRef?: string; runId?: number; status: ScanStatus; errorMessage?: string; run?: ScanRun
+  id: number
+  assetId: number
+  assetName: string
+  sourceType: SourceType
+  workspaceMode: WorkspaceMode
+  scanRef?: string
+  runId?: number
+  status: ScanStatus
+  errorMessage?: string
+  run?: ScanRun
 }
 export interface ProjectScanRound {
   assetHistory?: boolean
-  unselectedAssets?: Array<{assetId:number;assetName:string}>
-  id: number; businessProjectId: number; projectName: string; fullScope: boolean; assetCount: number;
-  networkMode: 'LOCAL' | 'ONLINE'; ruleProfile: string; retryOf?: number; createdAt: string; status: ScanStatus;
-  completedCount: number; failedCount: number; items: ProjectScanItem[]
+  unselectedAssets?: Array<{ assetId: number; assetName: string }>
+  id: number
+  businessProjectId: number
+  projectName: string
+  fullScope: boolean
+  assetCount: number
+  networkMode: 'LOCAL' | 'ONLINE'
+  ruleProfile: string
+  retryOf?: number
+  createdAt: string
+  status: ScanStatus
+  completedCount: number
+  failedCount: number
+  items: ProjectScanItem[]
 }
 export interface ProjectScanPayload {
-  requestKey: string; refreshRemote?: boolean; networkMode: 'LOCAL' | 'ONLINE'; ruleProfile: string; fullScope: boolean;
+  requestKey: string
+  refreshRemote?: boolean
+  networkMode: 'LOCAL' | 'ONLINE'
+  ruleProfile: string
+  fullScope: boolean
   assets: Array<{ assetId: number; workspaceMode: WorkspaceMode; scanRef?: string }>
 }
-export interface LedgerFinding extends FindingView { assetId: number; assetName: string; reportState: 'INCLUDED' | 'EXCLUDED' | 'PENDING' }
+export interface LedgerFinding extends FindingView {
+  assetId: number
+  assetName: string
+  reportState: 'INCLUDED' | 'EXCLUDED' | 'PENDING'
+}
 
 export interface GitValidationResult {
   valid: boolean
@@ -284,19 +334,63 @@ export interface GitValidationResult {
   branches: string[]
 }
 
-export interface GitCredentialProfile { id: number; name: string; serverUrl: string; username: string; usageCount: number; updatedAt: string }
+export interface GitCredentialProfile {
+  id: number
+  name: string
+  serverUrl: string
+  username: string
+  usageCount: number
+  updatedAt: string
+}
 
 export interface ReviewBudgetPolicy {
- paidEnabled: boolean; pricedModelSignature?: string; pricedModel?: string; pricedProvider?: string; inputPricePerMillion: number; outputPricePerMillion: number
- maxCost: number; dailyCostLimit: number; maxRequests: number; maxInputTokens: number; maxOutputTokens: number; outputTokensPerRequest: number
+  paidEnabled: boolean
+  pricedModelSignature?: string
+  pricedModel?: string
+  pricedProvider?: string
+  inputPricePerMillion: number
+  outputPricePerMillion: number
+  maxCost: number
+  dailyCostLimit: number
+  maxRequests: number
+  maxInputTokens: number
+  maxOutputTokens: number
+  outputTokensPerRequest: number
 }
 export interface ReviewPlan {
- id: string; scanRunId: number; jobId?: number; model: string; provider: string; budget: ReviewBudgetPolicy
- total: number; quality: number; security: number; audit: number; localPrecheck: number; alreadyReviewed: number; reusable: number; modelCandidates: number
- estimatedRequests: number; estimatedInputTokens: number; estimatedOutputTokens: number; estimatedCost: number; expiresAt: string
+  id: string
+  scanRunId: number
+  jobId?: number
+  model: string
+  provider: string
+  budget: ReviewBudgetPolicy
+  total: number
+  quality: number
+  security: number
+  audit: number
+  localPrecheck: number
+  alreadyReviewed: number
+  reusable: number
+  modelCandidates: number
+  estimatedRequests: number
+  estimatedInputTokens: number
+  estimatedOutputTokens: number
+  estimatedCost: number
+  expiresAt: string
 }
 
 export type ReportPackageFormat = 'PDF' | 'WORD' | 'BOTH'
 export interface ReportPackageJob {
- id:string;businessProjectId:number;roundId:number;format:ReportPackageFormat;status:'PENDING'|'RUNNING'|'COMPLETED'|'FAILED';fileName:string;totalFiles:number;completedFiles:number;fileBytes:number;errorMessage?:string;createdAt:string;finishedAt?:string
+  id: string
+  businessProjectId: number
+  roundId: number
+  format: ReportPackageFormat
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  fileName: string
+  totalFiles: number
+  completedFiles: number
+  fileBytes: number
+  errorMessage?: string
+  createdAt: string
+  finishedAt?: string
 }

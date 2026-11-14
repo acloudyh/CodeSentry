@@ -1,6 +1,16 @@
 import { chromium } from 'playwright'
 
-const routes = ['/', '/projects', '/scans/new', '/scans', '/scans/4', '/findings', '/rules', '/reports', '/settings']
+const routes = [
+  '/',
+  '/projects',
+  '/scans/new',
+  '/scans',
+  '/scans/4',
+  '/findings',
+  '/rules',
+  '/reports',
+  '/settings',
+]
 const viewports = [
   { width: 1763, height: 995 },
   { width: 1536, height: 864 },
@@ -34,24 +44,38 @@ for (const viewport of viewports) {
           return {
             tag: element.tagName.toLowerCase(),
             className: String(element.getAttribute('class') ?? ''),
-            text: String(element.textContent ?? '').trim().slice(0, 80),
+            text: String(element.textContent ?? '')
+              .trim()
+              .slice(0, 80),
             right: Math.ceil(rect.right),
             left: Math.floor(rect.left),
           }
         })
         .filter((item) => item.right > width + 1 || item.left < -1)
         .slice(0, 8)
-      const clippedContainers = [...document.body.querySelectorAll('.app-frame, .app-stage, .content-stage, .page-stack, .section-heading, .panel-pad, form')]
+      const clippedContainers = [
+        ...document.body.querySelectorAll(
+          '.app-frame, .app-stage, .content-stage, .page-stack, .section-heading, .panel-pad, form',
+        ),
+      ]
         .map((element) => {
           const style = getComputedStyle(element)
           return {
-            tag: element.tagName.toLowerCase(), className: String(element.getAttribute('class') ?? ''),
-            overflowX: style.overflowX, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth,
+            tag: element.tagName.toLowerCase(),
+            className: String(element.getAttribute('class') ?? ''),
+            overflowX: style.overflowX,
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
           }
         })
-        .filter((item) => ['hidden', 'clip'].includes(item.overflowX) && item.scrollWidth > item.clientWidth + 1)
+        .filter(
+          (item) =>
+            ['hidden', 'clip'].includes(item.overflowX) && item.scrollWidth > item.clientWidth + 1,
+        )
         .slice(0, 8)
-      const clippedControls = [...document.body.querySelectorAll('button, a, input, select, textarea')]
+      const clippedControls = [
+        ...document.body.querySelectorAll('button, a, input, select, textarea'),
+      ]
         .filter((element) => !element.closest('.table-scroll, .log-box'))
         .filter((element) => {
           const rect = element.getBoundingClientRect()
@@ -66,16 +90,29 @@ for (const viewport of viewports) {
             if (['hidden', 'clip'].includes(style.overflowX)) {
               const parentRect = ancestor.getBoundingClientRect()
               if (rect.left < parentRect.left - 1 || rect.right > parentRect.right + 1) {
-                return { tag: element.tagName.toLowerCase(), text: String(element.textContent ?? '').trim().slice(0, 60), ancestor: String(ancestor.getAttribute('class') ?? '') }
+                return {
+                  tag: element.tagName.toLowerCase(),
+                  text: String(element.textContent ?? '')
+                    .trim()
+                    .slice(0, 60),
+                  ancestor: String(ancestor.getAttribute('class') ?? ''),
+                }
               }
             }
             ancestor = ancestor.parentElement
           }
           return null
-        }).filter(Boolean).slice(0, 8)
+        })
+        .filter(Boolean)
+        .slice(0, 8)
       return { width, scrollWidth, offenders, clippedContainers, clippedControls }
     })
-    if (result.scrollWidth > result.width + 1 || result.offenders.length || result.clippedContainers.length || result.clippedControls.length) {
+    if (
+      result.scrollWidth > result.width + 1 ||
+      result.offenders.length ||
+      result.clippedContainers.length ||
+      result.clippedControls.length
+    ) {
       failures.push({ route, viewport, ...result })
     }
   }

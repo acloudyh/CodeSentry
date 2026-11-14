@@ -1,7 +1,7 @@
 {
   "name": "codesentry-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -12,7 +12,14 @@
     "preview": "vite preview",
     "test:ui": "node scripts/ui-smoke.mjs",
     "test:features": "node scripts/feature-smoke.mjs",
-    "test:business-projects": "node scripts/business-project-smoke.mjs"
+    "test:business-projects": "node scripts/business-project-smoke.mjs",
+    "lint": "eslint src vite.config.ts",
+    "format": "prettier --write src vite.config.ts eslint.config.mjs .prettierrc.json",
+    "format:check": "prettier --check src vite.config.ts eslint.config.mjs .prettierrc.json",
+    "typecheck": "vue-tsc --noEmit",
+    "test:unit": "vitest run --coverage",
+    "generate:types": "npm --prefix .. run generate:types",
+    "test:standards": "node scripts/standards-smoke.mjs"
   },
   "dependencies": {
     "pinia": "^4.0.3",
@@ -20,11 +27,32 @@
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@eslint/js": "^9.39.5",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^6.0.8",
+    "@vitest/coverage-v8": "^5.1.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-vue": "^10.12.1",
+    "globals": "^17.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "playwright": "^1.62.1",
+    "prettier": "^3.10.1",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
     "vite": "^8.2.2",
+    "vitest": "^5.1.0",
+    "vue-eslint-parser": "^10.4.2",
     "vue-tsc": "^3.3.11"
+  },
+  "lint-staged": {
+    "*.{ts,vue}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,json,md}": [
+      "prettier --write"
+    ]
   }
 }
