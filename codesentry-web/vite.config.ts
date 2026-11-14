@@ -14,6 +14,13 @@ export default defineConfig(({ command }) => ({
   server: {
     host: '127.0.0.1',
     port: 5173,
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy':
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; frame-src 'self' about:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    },
     https:
       command === 'serve'
         ? {
