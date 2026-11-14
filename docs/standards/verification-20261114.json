@@ -46,11 +46,27 @@
     }
   },
   "manualPending": [
-    "CI 修改需两名评审人",
+    "用户授权跳过双人评审发布；双人评审本身仍未完成",
     "远端分支保护配置尚未应用",
     "共享数据库旧凭据仍需负责人轮换",
     "历史 v1 完整 schema / 分页 / 幂等 / DTO 迁移未完成",
     "按用户要求不增加身份登录，不宣称满足鉴权条款"
   ],
-  "productionDeployed": false
+  "productionDeployed": true,
+  "production": {
+    "deployedAt": "2026-11-14T19:31:00+08:00",
+    "commit": "67bcf14e26dfa7a15bd46e2b33798e309bbe909a",
+    "java": "Temurin 21.0.13+9",
+    "backendImage": "codesentry-server:standards-20261114",
+    "frontendImage": "codesentry-web:standards-20261114",
+    "existingTableRowCountsUnchanged": true,
+    "addedTable": "http_idempotency",
+    "pcRoutesPassed": 9,
+    "pageErrors": 0,
+    "failedApiRequests": 0,
+    "reportTotal": 35,
+    "https": "https://127.0.0.1:5173",
+    "authorization": "用户明确要求跳过双人评审并发布生产；不等同于人工评审完成",
+    "build": "复用原生产镜像的扫描工具层，注入官方 SHA256 验证的 Linux ARM64 Java 21 JRE、已测试后端 JAR 与重新构建的前端；非完整 Dockerfile 重建"
+  }
 }
