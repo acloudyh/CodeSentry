@@ -35,3 +35,11 @@ scripts/*
 
 /outputs/
 !/docs/CodeSentry功能清单.xlsx
+
+# Versioned engineering standards and quality gates
+!/docs/engineering-standards.md
+!/docs/standards/
+!/scripts/check-contract.mjs
+!/scripts/check-standards.mjs
+!/scripts/verify-tracked-secrets.sh
+!/scripts/check-coverage.py
