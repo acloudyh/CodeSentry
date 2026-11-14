@@ -59,7 +59,9 @@ class RepositorySyncIntegrationTest {
             long revision=service.requireById(p.getId()).getRepositoryRevision();
             service.sync(p.getId());assertEquals(revision,service.requireById(p.getId()).getRepositoryRevision());
             release.countDown();await(()->!worker.isRunning(p.getId()));
-            assertNull(service.requireById(p.getId()).getManagedPath());assertEquals("PENDING",service.requireById(p.getId()).getLastSyncStatus());
+            assertNull(service.requireById(p.getId()).getManagedPath());
+            // 调度器可能已认领新来源；不能把合法的 RUNNING 当作旧结果覆盖错误。
+            assertTrue(java.util.Set.of("PENDING","RUNNING").contains(service.requireById(p.getId()).getLastSyncStatus()));
             worker.dispatch();assertTrue(secondStarted.await(5,TimeUnit.SECONDS));secondRelease.countDown();await(()->"COMPLETED".equals(service.requireById(p.getId()).getLastSyncStatus()));
             assertEquals("/cache/new.git",service.requireById(p.getId()).getManagedPath());assertEquals("new source",service.requireById(p.getId()).getProjectName());
             doThrow(new BusinessException(org.springframework.http.HttpStatus.BAD_REQUEST,"fixture network failure")).when(git).refresh(any());
