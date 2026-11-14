@@ -1,0 +1,103 @@
+name: pr-checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  quality:
+    name: Full-stack quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: codesentry_business_test_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s --health-timeout=5s --health-retries=15
+    env:
+      CODESENTRY_DB_USERNAME: root
+      CODESENTRY_DB_PASSWORD: ''
+      CODESENTRY_INTEGRATION_DB_URL: jdbc:mysql://127.0.0.1:3306/codesentry_business_test_ci?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      CODESENTRY_AI_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            codesentry-web/package-lock.json
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21, cache: maven }
+      - name: Install locked tooling
+        run: |
+          npm ci
+          npm --prefix codesentry-web ci
+      - name: Lint and deterministic formatting
+        run: |
+          npm run lint
+          npm run format:check
+          npm run check:standards
+      - name: Conventional Commits
+        run: node scripts/check-commit.mjs --range origin/main
+      - name: Strict TypeScript
+        run: npm --prefix codesentry-web run typecheck
+      - name: Unit and isolated MySQL integration tests
+        run: |
+          mvn -B -f codesentry-server/pom.xml verify
+          npm run test:web
+          python3 scripts/check-coverage.py origin/main
+      - name: Contract compatibility and generated DTO drift
+        run: |
+          node scripts/check-contract.mjs origin/main
+          npm run check:inventory
+          npm run generate:types
+          git diff --exit-code -- codesentry-web/src/types/generated/protocol.d.ts
+      - name: Tracked-source secret scan
+        run: bash scripts/verify-tracked-secrets.sh
+      - name: Dependency vulnerability gates
+        run: |
+          npm audit --audit-level=high --registry=https://registry.npmjs.org
+          npm --prefix codesentry-web audit --audit-level=high --registry=https://registry.npmjs.org
+          docker run --rm -v "$PWD/codesentry-server/target:/scan:ro" aquasec/trivy:0.76.1 sbom --db-repository public.ecr.aws/aquasecurity/trivy-db:2 --db-repository ghcr.io/aquasecurity/trivy-db:2 --exit-code 1 --severity HIGH,CRITICAL /scan/classes/META-INF/sbom/application.cdx.json
+      - name: Scan CodeSentry with its own security rules
+        run: |
+          curl -fsSL --retry 2 --max-time 60 https://semgrep.dev/c/p/default -o /tmp/codesentry-community.yml
+          docker run --rm --network none -v "$PWD:/src:ro" -v /tmp/codesentry-community.yml:/rules/community.yml:ro semgrep/semgrep:1.119.0 semgrep scan --metrics=off --disable-version-check --jobs 2 --timeout 15 --json --config /rules/community.yml --config /src/codesentry-server/src/main/resources/rules/codesentry-owasp-cwe.yml --config /src/codesentry-server/src/main/resources/rules/codesentry-frontend.yml /src/codesentry-server/src/main/java /src/codesentry-web/src > /tmp/codesentry-sast.json
+          python3 scripts/check-sast.py /tmp/codesentry-sast.json
+      - name: Build
+        run: npm --prefix codesentry-web run build
+      - name: PC browser and accessibility checks
+        run: |
+          bash scripts/init-local-tls.sh
+          CODESENTRY_DB_URL="$CODESENTRY_INTEGRATION_DB_URL" CODESENTRY_STORAGE_ROOT=/tmp/codesentry-ci-runtime CODESENTRY_RUNTIME_WORKER_ENABLED=false java -jar codesentry-server/target/codesentry-server-0.2.0-SNAPSHOT.jar > /tmp/codesentry-api.log 2>&1 &
+          cd codesentry-web
+          npx playwright install --with-deps chromium
+          npm run dev -- --port 5175 > /tmp/codesentry-vite.log 2>&1 &
+          for attempt in $(seq 1 30); do curl --cacert ../.codesentry/tls/server.crt -fsS https://127.0.0.1:5175/ >/dev/null && break || sleep 1; done
+          for attempt in $(seq 1 30); do curl --cacert ../.codesentry/tls/server.crt -fsS -H 'Origin: https://127.0.0.1:5175' https://127.0.0.1:5175/api/v1/dashboard/summary >/dev/null && break || sleep 1; done
+          NODE_EXTRA_CA_CERTS=../.codesentry/tls/server.crt CODESENTRY_WEB_URL=https://127.0.0.1:5175 node scripts/proxy-origin-smoke.mjs
+          CODESENTRY_BROWSER_CHANNEL=''  CODESENTRY_WEB_URL=https://127.0.0.1:5175 node scripts/standards-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-evidence
+          path: |
+            codesentry-server/target/surefire-reports/*.xml
+            codesentry-server/target/site/jacoco/
+            codesentry-server/target/classes/META-INF/sbom/application.cdx.json
+            codesentry-web/coverage/
+            codesentry-web/test-results/
+            /tmp/codesentry-sast.json

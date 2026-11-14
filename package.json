@@ -1,0 +1,36 @@
+{
+  "name": "codesentry-quality",
+  "private": true,
+  "version": "0.2.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "contract": "node scripts/check-contract.mjs",
+    "generate:types": "openapi-typescript openapi/openapi.json -o codesentry-web/src/types/generated/protocol.d.ts",
+    "lint": "npm --prefix codesentry-web run lint && node codesentry-web/node_modules/eslint/bin/eslint.js --config codesentry-web/eslint.config.mjs 'scripts/*.mjs' 'codesentry-web/scripts/*.mjs'",
+    "format:check": "npm --prefix codesentry-web run format:check && node codesentry-web/node_modules/prettier/bin/prettier.cjs --config codesentry-web/.prettierrc.json --check 'scripts/*.mjs' 'codesentry-web/scripts/*.mjs' '.github/**/*.{yml,md}' package.json && mvn -q -f codesentry-server/pom.xml spotless:check",
+    "check:standards": "node scripts/check-standards.mjs",
+    "test:web": "npm --prefix codesentry-web run test:unit",
+    "generate:inventory": "node scripts/api-inventory.mjs",
+    "check:inventory": "node scripts/api-inventory.mjs --check"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "~5.9.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.0.0"
+  },
+  "lint-staged": {
+    "codesentry-web/src/**/*.{ts,vue}": [
+      "node scripts/lint-staged-web.mjs"
+    ],
+    "openapi/**/*.json": [
+      "node scripts/check-contract.mjs"
+    ],
+    "codesentry-server/src/**/*.java": [
+      "node scripts/check-java-format.mjs"
+    ]
+  }
+}

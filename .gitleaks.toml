@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "codesentry-hardcoded-db-default"
+description = "运行配置禁止硬编码数据库密码默认值"
+regex = '''CODESENTRY_DB_PASSWORD:([^}\r\n]+)'''
+secretGroup = 1
+path = '''(^|/)application[^/]*\.(yml|yaml|properties)$'''
